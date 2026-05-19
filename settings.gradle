@@ -1,0 +1,3 @@
+rootProject.name = 'sanshuiyuan-backend'
+include 'user-service'
+include 'asset-service'
