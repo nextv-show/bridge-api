@@ -2,6 +2,7 @@ package com.sanshuiyuan.asset.api;
 
 import com.sanshuiyuan.asset.api.dto.CreateOrderRequest;
 import com.sanshuiyuan.asset.application.CreateOrderUseCase;
+import com.sanshuiyuan.asset.application.NotOrderOwnerException;
 import com.sanshuiyuan.asset.domain.Order;
 import com.sanshuiyuan.asset.domain.OrderStatus;
 import com.sanshuiyuan.asset.infra.repository.OrderRepository;
@@ -45,8 +46,13 @@ public class OrderController {
     @Operation(summary = "获取订单详情")
     @GetMapping("/{id}")
     public ResponseEntity<Order> getOrder(@AuthenticationPrincipal Long userId, @PathVariable Long id) {
-        return orderRepository.findByIdAndUserId(id, userId)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+        Order order = orderRepository.findById(id).orElse(null);
+        if (order == null) {
+            return ResponseEntity.notFound().build();
+        }
+        if (!order.getUserId().equals(userId)) {
+            throw new NotOrderOwnerException("Order " + id + " does not belong to user " + userId);
+        }
+        return ResponseEntity.ok(order);
     }
 }

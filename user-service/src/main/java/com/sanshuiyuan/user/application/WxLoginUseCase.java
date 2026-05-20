@@ -96,7 +96,7 @@ public class WxLoginUseCase {
     private AuthResponse buildAuthResponse(User user) {
         String accessToken = jwtIssuer.issueAccessToken(user.getId(), user.getActiveRole());
         String refreshToken = jwtIssuer.issueRefreshToken(user.getId());
-        List<String> roles = userRoleRepository.findByUserId(user.getId())
+        List<String> roles = userRoleRepository.findByIdUserId(user.getId())
                 .stream().map(ur -> ur.getId().getRole().name()).toList();
         UserInfo userInfo = new UserInfo(user.getId(), user.getNickname(), user.getAvatarUrl(),
                 user.getActiveRole().name(), roles);

@@ -25,7 +25,11 @@ wxpay:
   merchant-id: ${WXPAY_MCH_ID:}
   api-key-path: ${WXPAY_API_KEY_PATH:}
   merchant-serial-number: ${WXPAY_MCH_SERIAL:}
-  api-v3-key: ${WXPAY_API_V3_KEY:}
+  # api-v3-key intentionally NOT declared here: in dev/CI the WXPAY_API_V3_KEY env var is absent, so
+  # the property is genuinely missing and SdkWxPayCallbackVerifier (@ConditionalOnProperty
+  # wxpay.api-v3-key) is not created — the fail-closed UnconfiguredWxPayCallbackVerifier is used
+  # instead. Setting WXPAY_API_V3_KEY in prod (relaxed-bound to wxpay.api-v3-key) activates real
+  # verification.
   app-id: ${WXPAY_APP_ID:}
   notify-url: ${WXPAY_NOTIFY_URL:}
 

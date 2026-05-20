@@ -28,20 +28,20 @@ public class RoleService {
     }
 
     public List<Role> getRoles(Long userId) {
-        return userRoleRepository.findByUserId(userId)
+        return userRoleRepository.findByIdUserId(userId)
                 .stream().map(ur -> ur.getId().getRole()).toList();
     }
 
     @Transactional
     public void addRole(Long userId, Role role) {
-        if (!userRoleRepository.existsByUserIdAndRole(userId, role)) {
+        if (!userRoleRepository.existsByIdUserIdAndIdRole(userId, role)) {
             userRoleRepository.save(new UserRole(userId, role));
         }
     }
 
     @Transactional
     public void switchActiveRole(Long userId, Role role) {
-        if (!userRoleRepository.existsByUserIdAndRole(userId, role)) {
+        if (!userRoleRepository.existsByIdUserIdAndIdRole(userId, role)) {
             throw new RuntimeException("User does not have role: " + role.name());
         }
         User user = userRepository.findById(userId)

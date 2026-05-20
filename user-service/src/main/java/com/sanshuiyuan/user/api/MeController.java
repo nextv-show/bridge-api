@@ -31,7 +31,7 @@ public class MeController {
     public ResponseEntity<UserInfo> me(@AuthenticationPrincipal Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
-        List<String> roles = userRoleRepository.findByUserId(userId)
+        List<String> roles = userRoleRepository.findByIdUserId(userId)
                 .stream().map(ur -> ur.getId().getRole().name()).toList();
         UserInfo info = new UserInfo(user.getId(), user.getNickname(), user.getAvatarUrl(),
                 user.getActiveRole().name(), roles);
