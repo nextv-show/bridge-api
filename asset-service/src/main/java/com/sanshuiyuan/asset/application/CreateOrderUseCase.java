@@ -23,7 +23,7 @@ public class CreateOrderUseCase {
     @Transactional
     public Order createOrder(Long userId, Long skuId, Integer qty, String addressJson) {
         Sku sku = skuRepository.findByIdAndStatus(skuId, SkuStatus.ACTIVE)
-                .orElseThrow(() -> new IllegalArgumentException("Invalid or inactive SKU"));
+                .orElseThrow(() -> new SkuUnavailableException("Invalid or inactive SKU"));
 
         Order order = new Order();
         order.setUserId(userId);

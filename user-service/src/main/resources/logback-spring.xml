@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- A.1.3 / NFR 合规：用脱敏 converter 替换 %m，对 unionid / openid 值打码 -->
+    <conversionRule conversionWord="maskedMsg"
+                    converterClass="com.sanshuiyuan.user.infra.logging.SensitiveDataMaskingConverter"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>{"time":"%d","level":"%p","logger":"%c","msg":"%maskedMsg","ex":"%ex"}%n</pattern>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>

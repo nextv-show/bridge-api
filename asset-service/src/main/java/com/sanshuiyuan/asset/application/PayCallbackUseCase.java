@@ -1,10 +1,11 @@
 package com.sanshuiyuan.asset.application;
 
+import com.sanshuiyuan.asset.application.event.OwnerRoleGrantRequested;
 import com.sanshuiyuan.asset.domain.*;
-import com.sanshuiyuan.asset.infra.client.UserServiceClient;
 import com.sanshuiyuan.asset.infra.repository.DeviceAssetRepository;
 import com.sanshuiyuan.asset.infra.repository.OrderRepository;
 import com.sanshuiyuan.asset.infra.repository.SkuRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,18 +18,18 @@ public class PayCallbackUseCase {
     private final OrderRepository orderRepository;
     private final DeviceAssetRepository deviceAssetRepository;
     private final SkuRepository skuRepository;
-    private final UserServiceClient userServiceClient;
+    private final ApplicationEventPublisher eventPublisher;
     private final JdbcTemplate jdbcTemplate;
 
     public PayCallbackUseCase(OrderRepository orderRepository,
                               DeviceAssetRepository deviceAssetRepository,
                               SkuRepository skuRepository,
-                              UserServiceClient userServiceClient,
+                              ApplicationEventPublisher eventPublisher,
                               JdbcTemplate jdbcTemplate) {
         this.orderRepository = orderRepository;
         this.deviceAssetRepository = deviceAssetRepository;
         this.skuRepository = skuRepository;
-        this.userServiceClient = userServiceClient;
+        this.eventPublisher = eventPublisher;
         this.jdbcTemplate = jdbcTemplate;
     }
 
@@ -75,12 +76,8 @@ public class PayCallbackUseCase {
             deviceAssetRepository.save(asset);
         }
 
-        // Add OWNER role to user
-        try {
-            userServiceClient.addOwnerRole(order.getUserId());
-        } catch (Exception e) {
-            // Log error, maybe retry later
-            System.err.println("Failed to add OWNER role for user " + order.getUserId() + ": " + e.getMessage());
-        }
+        // D.2.4: Grant the OWNER role only after this payment transaction commits, asynchronously,
+        // so a user-service outage can never roll back or block the payment main transaction.
+        eventPublisher.publishEvent(new OwnerRoleGrantRequested(order.getUserId()));
     }
 }
