@@ -45,16 +45,21 @@ public class AssetController {
     }
 
     private AssetDto mapToDto(DeviceAsset asset) {
+        boolean pendingMatch = asset.getStage() == Stage.PENDING_MATCH;
+        // FR-5.3 / D.3.3: SN 未绑定（待撮合）时不下发收益字段，DTO 显式置空
+        Long incomeCents = pendingMatch ? null : asset.getCumulativeIncomeCents();
+        Integer roiBp = pendingMatch ? null : asset.getRoiBp();
+        boolean fused = !pendingMatch && asset.getRoiBp() >= 20000;
         return new AssetDto(
                 asset.getId(),
                 asset.getSn(),
                 asset.getModel(),
                 asset.getPurchasedAt(),
                 asset.getStage(),
-                asset.getCumulativeIncomeCents(),
-                asset.getRoiBp(),
-                asset.getStage() == Stage.PENDING_MATCH,
-                asset.getRoiBp() >= 20000
+                incomeCents,
+                roiBp,
+                pendingMatch,
+                fused
         );
     }
 }

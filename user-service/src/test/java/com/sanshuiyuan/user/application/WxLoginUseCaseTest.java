@@ -1,6 +1,7 @@
 package com.sanshuiyuan.user.application;
 
 import com.sanshuiyuan.user.api.dto.AuthResponse;
+import com.sanshuiyuan.user.api.dto.TokenResponse;
 import com.sanshuiyuan.user.domain.HomeLayoutPref;
 import com.sanshuiyuan.user.domain.Role;
 import com.sanshuiyuan.user.domain.User;
@@ -19,9 +20,11 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -131,5 +134,46 @@ class WxLoginUseCaseTest {
         assertThat(created.getOpenidApp()).isEqualTo("openid-app");
         assertThat(created.getOpenidWx()).isNull();
         assertThat(created.getActiveRole()).isEqualTo(Role.CONSUMER);
+    }
+
+    // ---- F.1: refresh 流回归 ----
+
+    @Test
+    void refreshToken_validRefresh_issuesNewTokenPair() {
+        User user = new User();
+        user.setId(7L);
+        user.setActiveRole(Role.OWNER);
+        when(jwtIssuer.parseToken("refresh-jwt"))
+                .thenReturn(Map.of("type", "refresh", "sub", "7"));
+        when(userRepository.findById(7L)).thenReturn(Optional.of(user));
+        when(jwtIssuer.issueAccessToken(7L, Role.OWNER)).thenReturn("new-access");
+        when(jwtIssuer.issueRefreshToken(7L)).thenReturn("new-refresh");
+
+        TokenResponse resp = useCase.refreshToken("refresh-jwt");
+
+        assertThat(resp.getAccessToken()).isEqualTo("new-access");
+        assertThat(resp.getRefreshToken()).isEqualTo("new-refresh");
+    }
+
+    @Test
+    void refreshToken_accessTokenUsedAsRefresh_rejected() {
+        when(jwtIssuer.parseToken("access-jwt"))
+                .thenReturn(Map.of("type", "access", "sub", "7"));
+
+        assertThatThrownBy(() -> useCase.refreshToken("access-jwt"))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Invalid refresh token");
+        verify(userRepository, never()).findById(any());
+    }
+
+    @Test
+    void refreshToken_userNotFound_rejected() {
+        when(jwtIssuer.parseToken("refresh-jwt"))
+                .thenReturn(Map.of("type", "refresh", "sub", "999"));
+        when(userRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> useCase.refreshToken("refresh-jwt"))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("User not found");
     }
 }

@@ -66,10 +66,16 @@ class AssetControllerTest {
         mockMvc.perform(get("/assets/mine").with(principal(7L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2))
+                // FR-5.3: 待撮合行隐藏收益字段
                 .andExpect(jsonPath("$[0].pendingMatch").value(true))
                 .andExpect(jsonPath("$[0].fused").value(false))
+                .andExpect(jsonPath("$[0].cumulativeIncomeCents").isEmpty())
+                .andExpect(jsonPath("$[0].roiBp").isEmpty())
+                // 已熔断行正常下发收益字段
                 .andExpect(jsonPath("$[1].pendingMatch").value(false))
-                .andExpect(jsonPath("$[1].fused").value(true));
+                .andExpect(jsonPath("$[1].fused").value(true))
+                .andExpect(jsonPath("$[1].cumulativeIncomeCents").value(500000))
+                .andExpect(jsonPath("$[1].roiBp").value(20000));
     }
 
     @Test
