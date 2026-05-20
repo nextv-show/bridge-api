@@ -1,12 +1,9 @@
 package com.sanshuiyuan.asset.api;
 
 import com.sanshuiyuan.asset.api.dto.AssetDto;
+import com.sanshuiyuan.asset.application.AssetQueryService;
 import com.sanshuiyuan.asset.domain.DeviceAsset;
 import com.sanshuiyuan.asset.domain.Stage;
-import com.sanshuiyuan.asset.infra.repository.DeviceAssetRepository;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -17,10 +14,10 @@ import java.util.List;
 @RequestMapping("/assets")
 public class AssetController {
 
-    private final DeviceAssetRepository deviceAssetRepository;
+    private final AssetQueryService assetQueryService;
 
-    public AssetController(DeviceAssetRepository deviceAssetRepository) {
-        this.deviceAssetRepository = deviceAssetRepository;
+    public AssetController(AssetQueryService assetQueryService) {
+        this.assetQueryService = assetQueryService;
     }
 
     @GetMapping("/mine")
@@ -28,14 +25,12 @@ public class AssetController {
             @AuthenticationPrincipal Long userId,
             @RequestParam(value = "page", defaultValue = "0") int page,
             @RequestParam(value = "size", defaultValue = "50") int size) {
-        
-        Page<DeviceAsset> assets = deviceAssetRepository.findByUserId(
-                userId, PageRequest.of(page, size, Sort.by("purchasedAt").descending()));
-        
-        List<AssetDto> dtos = assets.getContent().stream()
+
+        List<AssetDto> dtos = assetQueryService.getMyAssets(userId, page, size)
+                .getContent().stream()
                 .map(this::mapToDto)
                 .toList();
-        
+
         return ResponseEntity.ok(dtos);
     }
 
@@ -43,9 +38,8 @@ public class AssetController {
     public ResponseEntity<AssetDto> getAssetBySn(
             @AuthenticationPrincipal Long userId,
             @PathVariable String sn) {
-        
-        return deviceAssetRepository.findBySn(sn)
-                .filter(asset -> asset.getUserId().equals(userId))
+
+        return assetQueryService.getOwnedAsset(userId, sn)
                 .map(asset -> ResponseEntity.ok(mapToDto(asset)))
                 .orElse(ResponseEntity.notFound().build());
     }
