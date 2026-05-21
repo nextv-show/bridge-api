@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
@@ -61,7 +62,7 @@ public class RefundService {
         Refund existing = refundRepo.findByOrderId(orderId).orElse(null);
         if (existing != null) {
             String refundedAt = existing.getSucceededAt() != null
-                    ? existing.getSucceededAt().format(ISO_FMT) : null;
+                    ? existing.getSucceededAt().atZone(ZoneId.systemDefault()).format(ISO_FMT) : null;
             return new RefundResultDto(
                     existing.getRefundNo(),
                     existing.getStatus().name().toLowerCase(),
@@ -82,7 +83,7 @@ public class RefundService {
                     .map(r -> new RefundResultDto(
                             r.getRefundNo(), r.getStatus().name().toLowerCase(),
                             r.getAmountCents(),
-                            r.getSucceededAt() != null ? r.getSucceededAt().format(ISO_FMT) : null))
+                            r.getSucceededAt() != null ? r.getSucceededAt().atZone(ZoneId.systemDefault()).format(ISO_FMT) : null))
                     .orElseThrow(() -> new BizException(ErrorCode.INTERNAL_ERROR));
         }
 
