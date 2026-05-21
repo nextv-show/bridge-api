@@ -8,5 +8,7 @@ CREATE TABLE IF NOT EXISTS admin_users (
   updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
+-- 默认管理员: admin / Admin@2026
+-- BCrypt hash generated with rounds=10
 INSERT INTO admin_users (username, password_hash, role)
-VALUES ('admin', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'SUPER_ADMIN');
+VALUES ('admin', '$2a$10$/7pLY2Tffz1/SKXBxrsomuwR0dOh6OL87socmgIA94gAtDvRhDZbm', 'SUPER_ADMIN');
