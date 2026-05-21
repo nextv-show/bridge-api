@@ -50,18 +50,17 @@ public class KycAdminController {
         return Map.of("status", "REJECT");
     }
 
+    /** 返回脱敏数据 — 真实姓名和身份证号由 h5-service 加密存储 */
     private Map<String, Object> toDto(KycRecord r) {
-        String maskedId = r.getIdNumber().length() > 6
-                ? r.getIdNumber().substring(0, 3) + "****" + r.getIdNumber().substring(r.getIdNumber().length() - 4)
-                : "***";
         return Map.of(
             "id", r.getId(),
-            "userId", r.getUserId(),
-            "realName", r.getRealName(),
-            "idNumber", maskedId,
+            "openid", r.getOpenid(),
+            "realName", r.getRealNameMask() != null ? r.getRealNameMask() : "***",
+            "idNumber", r.getIdCardNoMask(),
+            "channel", r.getChannel() != null ? r.getChannel() : "",
+            "certifyId", r.getCertifyId() != null ? r.getCertifyId() : "",
             "status", r.getStatus().name(),
-            "reviewedBy", r.getReviewedBy() != null ? r.getReviewedBy() : "",
-            "reviewedAt", r.getReviewedAt() != null ? r.getReviewedAt().toString() : "",
+            "verifiedAt", r.getVerifiedAt() != null ? r.getVerifiedAt().toString() : "",
             "createdAt", r.getCreatedAt().toString()
         );
     }

@@ -20,10 +20,11 @@ public class KycReviewService {
     public void approve(Long adminId, Long kycRecordId) {
         var record = kycRepo.findById(kycRecordId)
                 .orElseThrow(() -> new IllegalArgumentException("KYC 记录不存在: " + kycRecordId));
-        if (record.getStatus() != KycRecord.Status.PENDING) {
-            throw new IllegalStateException("KYC 状态不是待审核: " + record.getStatus());
+        if (record.getStatus() != KycRecord.Status.PENDING
+                && record.getStatus() != KycRecord.Status.INIT) {
+            throw new IllegalStateException("KYC 状态不可审核: " + record.getStatus());
         }
-        record.approve(adminId);
+        record.approve();
         kycRepo.save(record);
         auditLog.log(adminId, "KYC_APPROVE", "kyc_record",
                 String.valueOf(kycRecordId), null);
@@ -33,10 +34,11 @@ public class KycReviewService {
     public void reject(Long adminId, Long kycRecordId) {
         var record = kycRepo.findById(kycRecordId)
                 .orElseThrow(() -> new IllegalArgumentException("KYC 记录不存在: " + kycRecordId));
-        if (record.getStatus() != KycRecord.Status.PENDING) {
-            throw new IllegalStateException("KYC 状态不是待审核: " + record.getStatus());
+        if (record.getStatus() != KycRecord.Status.PENDING
+                && record.getStatus() != KycRecord.Status.INIT) {
+            throw new IllegalStateException("KYC 状态不可审核: " + record.getStatus());
         }
-        record.reject(adminId);
+        record.reject();
         kycRepo.save(record);
         auditLog.log(adminId, "KYC_REJECT", "kyc_record",
                 String.valueOf(kycRecordId), null);

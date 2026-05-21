@@ -4,6 +4,11 @@ import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
 
+/**
+ * Admin 只读映射 h5-service 创建的 kyc_records 表。
+ * 真实数据（加密身份证等）由 h5-service 写入；
+ * admin-service 仅做审核状态变更。
+ */
 @Entity
 @Table(name = "kyc_records")
 public class KycRecord {
@@ -11,48 +16,77 @@ public class KycRecord {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "user_id", nullable = false)
-    private Long userId;
+    @Column(name = "openid", nullable = false, length = 64)
+    private String openid;
 
-    @Column(name = "real_name", nullable = false, length = 128)
-    private String realName;
+    /** AES 加密真实姓名（h5-service IdCardCipher 写入） */
+    @Column(name = "real_name")
+    private byte[] realNameEncrypted;
 
-    @Column(name = "id_number", nullable = false, length = 128)
-    private String idNumber;
+    /** AES 加密身份证号（h5-service IdCardCipher 写入） */
+    @Column(name = "id_card_no_enc", nullable = false)
+    private byte[] idCardNoEncrypted;
+
+    /** 脱敏身份证号（展示用） */
+    @Column(name = "id_card_no_mask", nullable = false, length = 32)
+    private String idCardNoMask;
+
+    /** 脱敏姓名（展示用） */
+    @Column(name = "real_name_mask", length = 32)
+    private String realNameMask;
+
+    /** 阿里云认证流水号 */
+    @Column(name = "certify_id", length = 64)
+    private String certifyId;
+
+    @Column(name = "channel", nullable = false, length = 32)
+    private String channel;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private Status status = Status.PENDING;
+    private Status status;
 
-    @Column(name = "reviewed_by")
-    private Long reviewedBy;
-
-    @Column(name = "reviewed_at")
-    private LocalDateTime reviewedAt;
+    @Column(name = "verified_at")
+    private LocalDateTime verifiedAt;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
-    public enum Status { PENDING, PASS, REJECT }
-
-    public Long getId() { return id; }
-    public Long getUserId() { return userId; }
-    public String getRealName() { return realName; }
-    public String getIdNumber() { return idNumber; }
-    public Status getStatus() { return status; }
-    public Long getReviewedBy() { return reviewedBy; }
-    public LocalDateTime getReviewedAt() { return reviewedAt; }
-    public LocalDateTime getCreatedAt() { return createdAt; }
-
-    public void approve(Long reviewerId) {
-        this.status = Status.PASS;
-        this.reviewedBy = reviewerId;
-        this.reviewedAt = LocalDateTime.now();
+    /**
+     * admin 审核状态扩展 — 映射 h5-service 的 enum + 扩展。
+     * h5-service: FAIL, INIT, PASS, SUPERSEDED
+     * admin 扩展: 增加 PENDING/REJECT 用于人工审核
+     */
+    public enum Status {
+        FAIL,       // 阿里云认证失败
+        INIT,       // 已发起未完成
+        PENDING,    // 待人工审核（admin 扩展）
+        PASS,       // 通过
+        REJECT,     // 人工驳回（admin 扩展）
+        SUPERSEDED  // 被新记录取代
     }
 
-    public void reject(Long reviewerId) {
+    public Long getId() { return id; }
+    public String getOpenid() { return openid; }
+    public byte[] getRealNameEncrypted() { return realNameEncrypted; }
+    public byte[] getIdCardNoEncrypted() { return idCardNoEncrypted; }
+    public String getIdCardNoMask() { return idCardNoMask; }
+    public String getRealNameMask() { return realNameMask; }
+    public String getCertifyId() { return certifyId; }
+    public String getChannel() { return channel; }
+    public Status getStatus() { return status; }
+    public LocalDateTime getVerifiedAt() { return verifiedAt; }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+
+    /** 人工审核通过 — 仅 admin 调用 */
+    public void approve() {
+        this.status = Status.PASS;
+        this.verifiedAt = LocalDateTime.now();
+    }
+
+    /** 人工审核驳回 — 仅 admin 调用 */
+    public void reject() {
         this.status = Status.REJECT;
-        this.reviewedBy = reviewerId;
-        this.reviewedAt = LocalDateTime.now();
+        this.verifiedAt = LocalDateTime.now();
     }
 }
