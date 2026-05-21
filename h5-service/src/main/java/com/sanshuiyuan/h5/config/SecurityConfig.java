@@ -7,12 +7,6 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 
-/**
- * h5-service 安全配置。
- * 本期（102）仅承载公开只读营销页接口，无登录态（决策门 G-8：首页不接微信授权）。
- * 因此全部放行；防刷由 {@link RateLimitConfig}（bucket4j 限频）兜底。
- * 103 引入下单/支付/授权后，可在此追加 JWT 过滤链与受保护路径。
- */
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
@@ -23,7 +17,16 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .cors(cors -> {})
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers(
+                    "/api/h5/landing/**",
+                    "/api/h5/pay/callback",
+                    "/api/h5/pay/simulate-callback",
+                    "/api-docs/**",
+                    "/actuator/**"
+                ).permitAll()
+                .anyRequest().permitAll()
+            );
         return http.build();
     }
 }

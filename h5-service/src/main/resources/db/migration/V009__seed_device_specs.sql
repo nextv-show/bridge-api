@@ -1,0 +1,17 @@
+INSERT INTO device_specs(spec_id, model_code, name, price_cents, recommended, monitor_line, features_json, status) VALUES
+('home-std', 'BR-H1', '家庭版·标准型', 460000, 0,
+ '日产水 200L · 适配 3-4 口之家',
+ '["高精度涡轮流量计","内置 NB-IoT 通讯模组","5 年滤芯更换服务"]',
+ 'ACTIVE'),
+('home-pro', 'BR-H2', '家庭版·增强型', 680000, 1,
+ '日产水 400L · 双膜净化',
+ '["RO 反渗透 + 矿化双膜","远程水质实时回传","7x24h 设备健康监测"]',
+ 'ACTIVE'),
+('biz-a', 'BR-C1', '商用 A 型', 860000, 0,
+ '日产水 1.2T · 小型商铺 / 工作室',
+ '["不锈钢工业级管路","4G IoT 模组 + 边缘网关","故障自检 & 远程派单"]',
+ 'ACTIVE'),
+('biz-b', 'BR-C2', '商用 B 型', 1280000, 0,
+ '日产水 3T · 餐饮 / 中型场景',
+ '["多级预过滤 + 紫外杀菌","智能调度算法降耗 18%","专属客户经理对接"]',
+ 'ACTIVE');

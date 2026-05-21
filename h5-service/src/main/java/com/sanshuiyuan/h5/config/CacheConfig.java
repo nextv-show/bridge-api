@@ -17,6 +17,7 @@ import java.util.concurrent.TimeUnit;
 public class CacheConfig {
 
     public static final String LANDING_CONFIG_CACHE = "landingConfig";
+    public static final String DEVICE_SPECS_CACHE = "device-specs";
 
     @Value("${landing.cache.caffeine-ttl-seconds:60}")
     private long ttlSeconds;
@@ -26,7 +27,7 @@ public class CacheConfig {
 
     @Bean
     public CacheManager cacheManager() {
-        CaffeineCacheManager manager = new CaffeineCacheManager(LANDING_CONFIG_CACHE);
+        CaffeineCacheManager manager = new CaffeineCacheManager(LANDING_CONFIG_CACHE, DEVICE_SPECS_CACHE);
         manager.setCaffeine(Caffeine.newBuilder()
                 .expireAfterWrite(ttlSeconds, TimeUnit.SECONDS)
                 .maximumSize(maxSize));

@@ -51,6 +51,21 @@ springdoc:
   api-docs:
     path: /api-docs
 
+# 103: 设备购置 + 支付 + 实名
+h5:
+  aes-master-key: ${H5_AES_MASTER_KEY:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}
+wxpay:
+  app-id: ${WXPAY_APP_ID:stub}
+  mch-id: ${WXPAY_MCH_ID:stub}
+  api-v3-key: ${WXPAY_API_V3_KEY:stub}
+  private-key-path: ${WXPAY_PRIVATE_KEY_PATH:}
+  merchant-serial-number: ${WXPAY_MERCHANT_SERIAL_NUMBER:}
+aliyun:
+  kyc:
+    access-key: ${ALIYUN_KYC_ACCESS_KEY:}
+    secret-key: ${ALIYUN_KYC_SECRET_KEY:}
+    scene-id: ${ALIYUN_KYC_SCENE_ID:0}
+
 ---
 # ───────────────── dev（本地开发） ─────────────────
 spring:
