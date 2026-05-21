@@ -7,7 +7,9 @@ import com.sanshuiyuan.h5.api.dto.HeroDto;
 import com.sanshuiyuan.h5.api.dto.LandingConfigResponse;
 import com.sanshuiyuan.h5.api.dto.SimulatorDto;
 import com.sanshuiyuan.h5.api.dto.TrustBadgeDto;
+import com.sanshuiyuan.h5.application.compliance.ComplianceTextValidator;
 import com.sanshuiyuan.h5.common.BizException;
+import com.sanshuiyuan.h5.common.ComplianceException;
 import com.sanshuiyuan.h5.common.ErrorCode;
 import com.sanshuiyuan.h5.config.CacheConfig;
 import com.sanshuiyuan.h5.domain.ConfigStatus;
@@ -43,6 +45,10 @@ public class LandingConfigService {
     private final ObjectMapper objectMapper;
     private final CacheManager cacheManager;
     private final StringRedisTemplate redis;
+    private final ComplianceTextValidator complianceValidator;
+
+    /** 内存「上一份合规快照」：合规校验失败时回退，避免把违规文案推到 C 端（FR-4.3）。 */
+    private volatile LandingConfigResponse lastGoodSnapshot;
 
     @Value("${landing.cache.redis-key:landing:config:published}")
     private String redisKey;
@@ -55,13 +61,15 @@ public class LandingConfigService {
                                 LandingTrustBadgeRepository badgeRepo,
                                 ObjectMapper objectMapper,
                                 CacheManager cacheManager,
-                                StringRedisTemplate redis) {
+                                StringRedisTemplate redis,
+                                ComplianceTextValidator complianceValidator) {
         this.configRepo = configRepo;
         this.featureRepo = featureRepo;
         this.badgeRepo = badgeRepo;
         this.objectMapper = objectMapper;
         this.cacheManager = cacheManager;
         this.redis = redis;
+        this.complianceValidator = complianceValidator;
     }
 
     /**
@@ -85,16 +93,24 @@ public class LandingConfigService {
         }
 
         LandingConfigResponse assembled = assembleFromDb();
-        // Phase C 在此处插入出口合规校验（校验通过后才回填缓存）。
-        onAssembled(assembled);
+
+        // 出口合规校验（FR-4.3）：组装后、回填缓存前递归扫描所有字符串字段。
+        // 命中违禁词 → WARN 告警 + 回退上一份合规快照（不抛 500 给 C 端，避免首页挂掉）。
+        try {
+            complianceValidator.assertCompliant(assembled);
+        } catch (ComplianceException ce) {
+            log.warn("落地页配置出口合规校验失败 hits={}，回退上一份合规快照（不外泄违禁文案）", ce.hits());
+            if (lastGoodSnapshot != null) {
+                return lastGoodSnapshot;
+            }
+            // 无可用快照：拒绝下发违规配置，按「无生效配置」处理（前端回退内置默认）。
+            throw new BizException(ErrorCode.NO_ACTIVE_CONFIG, "当前配置未通过合规校验且无可用合规快照");
+        }
+
+        lastGoodSnapshot = assembled;
         writeRedis(assembled);
         putL1(l1, assembled);
         return assembled;
-    }
-
-    /** 组装后的钩子：Phase B 为空实现；Phase C 覆盖为出口合规校验 + 快照维护。 */
-    protected void onAssembled(LandingConfigResponse assembled) {
-        // no-op in Phase B
     }
 
     LandingConfigResponse assembleFromDb() {
@@ -134,6 +150,9 @@ public class LandingConfigService {
     }
 
     private LandingConfigResponse readRedis() {
+        if (redis == null) {
+            return null;
+        }
         try {
             String json = redis.opsForValue().get(redisKey);
             if (json == null) {
@@ -147,6 +166,9 @@ public class LandingConfigService {
     }
 
     private void writeRedis(LandingConfigResponse value) {
+        if (redis == null) {
+            return;
+        }
         try {
             redis.opsForValue().set(redisKey, objectMapper.writeValueAsString(value),
                     Duration.ofSeconds(redisTtlSeconds));

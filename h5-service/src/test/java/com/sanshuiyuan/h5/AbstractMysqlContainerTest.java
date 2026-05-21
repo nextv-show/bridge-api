@@ -30,5 +30,10 @@ public abstract class AbstractMysqlContainerTest {
         registry.add("spring.flyway.enabled", () -> "true");
         registry.add("spring.flyway.locations", () -> "classpath:db/migration");
         registry.add("spring.jpa.hibernate.ddl-auto", () -> "validate");
+        // 测试中 L2 Redis 视为不可用：指向一个关闭的端口，readRedis/writeRedis 快速失败并优雅降级，
+        // 让缓存命中断言只反映 L1(Caffeine) 行为，并避免污染本机其它项目占用的 6379 Redis。
+        registry.add("spring.data.redis.host", () -> "127.0.0.1");
+        registry.add("spring.data.redis.port", () -> "6399");
+        registry.add("spring.data.redis.timeout", () -> "150ms");
     }
 }
