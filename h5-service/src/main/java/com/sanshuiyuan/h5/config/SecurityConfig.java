@@ -20,10 +20,11 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(
                     "/api/h5/landing/**",
+                    "/api/h5/specs",
                     "/api/h5/pay/callback",
                     "/api/h5/pay/refund-callback",
                     "/api/h5/pay/simulate-callback",
-                    "/api/h5/kyc/verify",
+                    "/api/h5/kyc/**",
                     "/api-docs/**",
                     "/actuator/**"
                 ).permitAll()
