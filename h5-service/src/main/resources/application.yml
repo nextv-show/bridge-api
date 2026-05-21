@@ -1,0 +1,84 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: h5-service
+  datasource:
+    # 本地 docker-compose.dev.yml 把 MySQL 映射到 3307，用 SPRING_DATASOURCE_URL 覆盖即可。
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/h5_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 500ms
+
+# Redis 为 L2 缓存（读多写少，缺失时优雅降级到 DB），避免缺 Redis 时 actuator health DOWN。
+management:
+  health:
+    redis:
+      enabled: false
+
+# 落地页配置缓存（plan §6）：L1 Caffeine TTL 60s / L2 Redis TTL 300s。
+landing:
+  cache:
+    caffeine-ttl-seconds: 60
+    caffeine-max-size: 4
+    redis-ttl-seconds: 300
+    redis-key: 'landing:config:published'
+
+# 公开接口限频（bucket4j）：同 IP 120 次/分钟。
+rate-limit:
+  landing:
+    max-requests: 120
+    per-minutes: 1
+
+springdoc:
+  api-docs:
+    path: /api-docs
+
+---
+# ───────────────── dev（本地开发） ─────────────────
+spring:
+  config:
+    activate:
+      on-profile: dev
+  jpa:
+    properties:
+      hibernate:
+        format_sql: true
+logging:
+  level:
+    com.sanshuiyuan.h5: DEBUG
+
+---
+# ───────────────── staging（预发） ─────────────────
+spring:
+  config:
+    activate:
+      on-profile: staging
+
+---
+# ───────────────── prod（生产） ─────────────────
+# 生产敏感项（DB/Redis 凭证）一律走环境变量，绝不入 git。
+spring:
+  config:
+    activate:
+      on-profile: prod
+  jpa:
+    hibernate:
+      ddl-auto: validate

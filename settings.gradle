@@ -1,3 +1,4 @@
 rootProject.name = 'sanshuiyuan-backend'
 include 'user-service'
 include 'asset-service'
+include 'h5-service'
