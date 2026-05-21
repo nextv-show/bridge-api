@@ -34,8 +34,8 @@ jobs:
       - name: Stage jars with stable names
         run: |
           mkdir -p staging
-          cp h5-service/build/libs/h5-service-*.jar staging/h5-service.jar
-          cp admin-service/build/libs/admin-service-*.jar staging/admin-service.jar
+          find h5-service/build/libs/ -name "h5-service-*.jar" ! -name "*-plain.jar" -exec cp {} staging/h5-service.jar \;
+          find admin-service/build/libs/ -name "admin-service-*.jar" ! -name "*-plain.jar" -exec cp {} staging/admin-service.jar \;
 
       - name: SCP jars to server
         uses: appleboy/scp-action@v0.1.7
