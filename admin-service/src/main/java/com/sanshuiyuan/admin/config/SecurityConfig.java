@@ -61,6 +61,10 @@ public class SecurityConfig {
                     "/admin/auth/login").permitAll()
                 .anyRequest().authenticated()
             )
+            .exceptionHandling(eh -> eh
+                .authenticationEntryPoint((req, res, ex) -> res.sendError(401, "Unauthorized"))
+                .accessDeniedHandler((req, res, ex) -> res.sendError(403, "Forbidden"))
+            )
             .addFilterBefore(new AdminJwtFilter(jwtSecret),
                 UsernamePasswordAuthenticationFilter.class);
         return http.build();
