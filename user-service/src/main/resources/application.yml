@@ -26,6 +26,9 @@ jwt:
   refresh-token-ttl: 14d
   secret: ${JWT_SECRET:change-me-in-production-at-least-256-bits-long!!}
 
+# service-to-service token：必须与 asset-service 的 user-service.s2s-token 一致
+s2s-token: ${S2S_TOKEN:local-dev-static-token}
+
 wx:
   miniprogram:
     app-id: ${WX_MP_APP_ID:}

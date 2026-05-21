@@ -1,5 +1,7 @@
 CREATE DATABASE IF NOT EXISTS user_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE IF NOT EXISTS asset_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS h5_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 GRANT ALL PRIVILEGES ON user_db.* TO 'sanshuiyuan'@'%';
 GRANT ALL PRIVILEGES ON asset_db.* TO 'sanshuiyuan'@'%';
+GRANT ALL PRIVILEGES ON h5_db.* TO 'sanshuiyuan'@'%';
 FLUSH PRIVILEGES;

@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"rtk git push origin main 2>&1\",\"timeout\":30000,\"description\":\"Push h5 to remote\"}",
+  "error": "Exit code 1\nFAILED: git push\nTo github.com:nextv-show/bridge-api.git\n ! [rejected]        main -> main (fetch first)\nerror: failed to push some refs to 'github.com:nextv-show/bridge-api.git'\nhint: Updates were rejected because the remote contains work that you do not\nhint: have locally. This is usually caused by another repository pushing to\nhint: the same ref. If you want to integrate the remote changes, use\nhint: 'git pull' before pushing again.\nhint: See the 'Note about fast-forwards' in 'git...",
+  "timestamp": "2026-05-21T08:26:24.080Z",
+  "retry_count": 1
+}
