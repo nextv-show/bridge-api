@@ -41,9 +41,7 @@ public class KycVerifyUseCase {
         String idCardMask = MaskingUtils.maskIdCard(result.idCardNo());
 
         // Supersede old PASS records (ASSUMPTION-Q6: one-to-one openid↔identity)
-        List<KycRecord> oldRecords = kycRepo.findAll().stream()
-                .filter(r -> r.getOpenid().equals(openid) && r.getStatus() == KycStatus.PASS)
-                .toList();
+        List<KycRecord> oldRecords = kycRepo.findAllByOpenidAndStatus(openid, KycStatus.PASS);
         oldRecords.forEach(KycRecord::supersede);
         kycRepo.saveAll(oldRecords);
 

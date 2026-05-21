@@ -23,10 +23,11 @@ public class SecurityConfig {
                     "/api/h5/pay/callback",
                     "/api/h5/pay/refund-callback",
                     "/api/h5/pay/simulate-callback",
+                    "/api/h5/kyc/verify",
                     "/api-docs/**",
                     "/actuator/**"
                 ).permitAll()
-                .anyRequest().permitAll()
+                .anyRequest().authenticated()
             );
         return http.build();
     }
