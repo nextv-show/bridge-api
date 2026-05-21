@@ -1,7 +1,9 @@
 package com.sanshuiyuan.h5.checkout.config;
 
 import com.sanshuiyuan.h5.checkout.infra.wxpay.StubWxPayClient;
+import com.sanshuiyuan.h5.checkout.infra.wxpay.StubWxRefundClient;
 import com.sanshuiyuan.h5.checkout.infra.wxpay.WxPayClient;
+import com.sanshuiyuan.h5.checkout.infra.wxpay.WxRefundClient;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -19,5 +21,11 @@ public class WxPayConfig {
     @ConditionalOnMissingBean(WxPayClient.class)
     public WxPayClient stubWxPayClient() {
         return new StubWxPayClient();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(WxRefundClient.class)
+    public WxRefundClient stubWxRefundClient() {
+        return new StubWxRefundClient();
     }
 }

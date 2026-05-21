@@ -35,7 +35,7 @@ public class H5Order {
     private Long amountCents;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 16)
+    @Column(nullable = false, length = 20)
     private OrderStatus status;
 
     @Column(name = "payment_channel", nullable = false, length = 16)
@@ -89,6 +89,18 @@ public class H5Order {
     public void close() {
         this.status = OrderStatus.CLOSED;
         this.closedAt = LocalDateTime.now();
+    }
+
+    public void markRefunding() {
+        this.status = OrderStatus.REFUNDING;
+    }
+
+    public void markRefunded() {
+        this.status = OrderStatus.REFUNDED;
+    }
+
+    public void revertToPaid() {
+        this.status = OrderStatus.PAID;
     }
 
     public void setWxPrepayId(String wxPrepayId) { this.wxPrepayId = wxPrepayId; }

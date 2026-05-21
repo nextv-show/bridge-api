@@ -21,6 +21,7 @@ public class SecurityConfig {
                 .requestMatchers(
                     "/api/h5/landing/**",
                     "/api/h5/pay/callback",
+                    "/api/h5/pay/refund-callback",
                     "/api/h5/pay/simulate-callback",
                     "/api-docs/**",
                     "/actuator/**"

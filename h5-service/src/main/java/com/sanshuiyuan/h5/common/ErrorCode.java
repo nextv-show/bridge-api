@@ -16,7 +16,9 @@ public enum ErrorCode {
     SPEC_NOT_FOUND(HttpStatus.NOT_FOUND, "SPEC_NOT_FOUND", "规格不存在"),
     ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "ORDER_NOT_FOUND", "订单不存在"),
     ORDER_STATUS_CONFLICT(HttpStatus.CONFLICT, "ORDER_STATUS_CONFLICT", "订单状态不允许此操作"),
-    FORBIDDEN(HttpStatus.FORBIDDEN, "FORBIDDEN", "无权操作此订单");
+    FORBIDDEN(HttpStatus.FORBIDDEN, "FORBIDDEN", "无权操作此订单"),
+    COOLDOWN_EXPIRED(HttpStatus.CONFLICT, "COOLDOWN_EXPIRED", "冷静期已结束，无法申请退款"),
+    ORDER_NOT_REFUNDABLE(HttpStatus.CONFLICT, "ORDER_NOT_REFUNDABLE", "当前订单状态不允许退款");
 
     private final HttpStatus httpStatus;
     private final String code;
