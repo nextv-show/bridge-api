@@ -169,11 +169,7 @@ jobs:
             SERVICE="bridge-admin-service"
             NEW_JAR="app-${{ github.sha }}.jar"
 
-            # 清理旧 Flyway schema history（解决 checksum mismatch）
-            if [ -f "$ENV_FILE" ]; then
-              source "$ENV_FILE"
-              mysql -u "${DB_USERNAME:-root}" -p"${DB_PASSWORD}" -e "DROP TABLE IF EXISTS h5_db.admin_flyway_schema_history" 2>/dev/null || true
-            fi
+            # Flyway schema history 已于 2026-05-22 手动清理，后续由 Flyway 自动管理
 
             # 首次自动生成示例配置文件
             sudo mkdir -p "$APP_DIR" "$REL_DIR"
