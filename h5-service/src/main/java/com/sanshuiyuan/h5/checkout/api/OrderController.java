@@ -3,6 +3,7 @@ package com.sanshuiyuan.h5.checkout.api;
 import com.sanshuiyuan.h5.checkout.api.dto.OrderCreateRequest;
 import com.sanshuiyuan.h5.checkout.api.dto.OrderCreateResponse;
 import com.sanshuiyuan.h5.checkout.application.CreateOrderUseCase;
+import com.sanshuiyuan.h5.auth.CurrentOpenid;
 import com.sanshuiyuan.h5.common.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -24,8 +25,7 @@ public class OrderController {
 
     @PostMapping("/create")
     public ApiResponse<OrderCreateResponse> create(@Valid @RequestBody OrderCreateRequest req) {
-        // TODO: extract openid from JWT once auth is wired
-        String openid = "stub-openid";
+        String openid = CurrentOpenid.require();
         return ApiResponse.ok(createOrderUseCase.execute(openid, req.specId(), req.payment()));
     }
 }

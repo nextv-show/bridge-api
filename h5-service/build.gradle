@@ -7,4 +7,5 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
     implementation 'com.bucket4j:bucket4j-core:8.10.1'   // 公开接口限频
     implementation 'com.github.wechatpay-apiv3:wechatpay-java:0.2.14'  // 微信支付 V3 SDK
+    implementation 'com.aliyun:cloudauth20190307:2.7.2'  // 阿里云金融级实人认证 V2 SDK
 }

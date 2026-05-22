@@ -12,4 +12,6 @@ public interface KycRecordRepository extends JpaRepository<KycRecord, Long> {
     Optional<KycRecord> findFirstByOpenidAndStatusOrderByVerifiedAtDesc(String openid, KycStatus status);
 
     List<KycRecord> findAllByOpenidAndStatus(String openid, KycStatus status);
+
+    Optional<KycRecord> findFirstByCertifyIdAndOpenidAndStatus(String certifyId, String openid, KycStatus status);
 }

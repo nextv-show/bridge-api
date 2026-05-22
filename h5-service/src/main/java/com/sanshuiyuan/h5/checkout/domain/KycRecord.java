@@ -69,6 +69,28 @@ public class KycRecord {
         return r;
     }
 
+    /** 发起认证时落 INIT 记录：绑定前端采集的实名信息到 certifyId，活体通过后再 promote。 */
+    public static KycRecord createInit(String openid, byte[] realName, byte[] idCardNoEnc,
+                                       String realNameMask, String idCardNoMask,
+                                       String certifyId, String channel) {
+        KycRecord r = new KycRecord();
+        r.openid = openid;
+        r.realName = realName;
+        r.idCardNoEnc = idCardNoEnc;
+        r.realNameMask = realNameMask;
+        r.idCardNoMask = idCardNoMask;
+        r.certifyId = certifyId;
+        r.channel = channel;
+        r.status = KycStatus.INIT;
+        return r;
+    }
+
+    /** 活体通过后置为 PASS。 */
+    public void promoteToPass() {
+        this.status = KycStatus.PASS;
+        this.verifiedAt = LocalDateTime.now();
+    }
+
     public void supersede() {
         this.status = KycStatus.SUPERSEDED;
     }

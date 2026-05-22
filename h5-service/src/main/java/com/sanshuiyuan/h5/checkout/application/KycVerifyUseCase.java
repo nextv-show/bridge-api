@@ -4,54 +4,54 @@ import com.sanshuiyuan.h5.checkout.api.dto.KycVerifyResponse;
 import com.sanshuiyuan.h5.checkout.domain.KycRecord;
 import com.sanshuiyuan.h5.checkout.domain.KycStatus;
 import com.sanshuiyuan.h5.checkout.infra.aliyun.AliyunKycClient;
-import com.sanshuiyuan.h5.checkout.infra.crypto.IdCardCipher;
-import com.sanshuiyuan.h5.checkout.infra.crypto.MaskingUtils;
 import com.sanshuiyuan.h5.checkout.infra.repository.KycRecordRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class KycVerifyUseCase {
 
+    private static final Logger log = LoggerFactory.getLogger(KycVerifyUseCase.class);
+
     private final KycRecordRepository kycRepo;
     private final AliyunKycClient kycClient;
-    private final IdCardCipher cipher;
 
-    public KycVerifyUseCase(KycRecordRepository kycRepo, AliyunKycClient kycClient, IdCardCipher cipher) {
+    public KycVerifyUseCase(KycRecordRepository kycRepo, AliyunKycClient kycClient) {
         this.kycRepo = kycRepo;
         this.kycClient = kycClient;
-        this.cipher = cipher;
     }
 
     @Transactional
     public KycVerifyResponse execute(String certifyId, String openid) {
-        // Query authoritative result from Aliyun (don't trust frontend)
+        // 以阿里云活体检测结果为权威（不信任前端）。
         AliyunKycClient.KycVerifyResult result = kycClient.queryResult(certifyId);
-
         if (!result.passed()) {
             return new KycVerifyResponse("FAIL", "", "");
         }
 
-        // Encrypt sensitive data
-        byte[] idCardEnc = cipher.encrypt(result.idCardNo());
-        byte[] realNameEnc = cipher.encrypt(result.realName());
-        String realNameMask = MaskingUtils.maskRealName(result.realName());
-        String idCardMask = MaskingUtils.maskIdCard(result.idCardNo());
+        // 取本次发起时落的 INIT 记录（已加密绑定前端采集的姓名+身份证号）。
+        Optional<KycRecord> initOpt =
+                kycRepo.findFirstByCertifyIdAndOpenidAndStatus(certifyId, openid, KycStatus.INIT);
+        if (initOpt.isEmpty()) {
+            // 无对应 INIT 记录（异常路径，如重复回调/越权）。活体虽过但缺实名绑定，拒绝置 PASS。
+            log.warn("活体通过但未找到 INIT 记录 certifyId={}", certifyId);
+            return new KycVerifyResponse("FAIL", "", "");
+        }
+        KycRecord record = initOpt.get();
 
-        // Supersede old PASS records (ASSUMPTION-Q6: one-to-one openid↔identity)
+        // 作废该用户旧的 PASS 记录（ASSUMPTION-Q6：一 openid 对应一实名）。
         List<KycRecord> oldRecords = kycRepo.findAllByOpenidAndStatus(openid, KycStatus.PASS);
         oldRecords.forEach(KycRecord::supersede);
         kycRepo.saveAll(oldRecords);
 
-        // Create new PASS record
-        KycRecord record = KycRecord.create(
-                openid, realNameEnc, idCardEnc, realNameMask, idCardMask,
-                certifyId, "ALIYUN_FINANCE"
-        );
+        record.promoteToPass();
         kycRepo.save(record);
 
-        return new KycVerifyResponse("PASS", realNameMask, idCardMask);
+        return new KycVerifyResponse("PASS", record.getRealNameMask(), record.getIdCardNoMask());
     }
 }

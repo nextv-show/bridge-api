@@ -62,6 +62,13 @@ public class PayCallbackUseCase {
             return "SUCCESS";
         }
 
+        // 仅当微信交易状态为 SUCCESS 才置为已支付；其它状态（如 CLOSED/PAYERROR）ack 但不改单。
+        if (result.tradeState() != null && !"SUCCESS".equals(result.tradeState())) {
+            log.warn("Order {} 回调 tradeState={} 非 SUCCESS，幂等返回不改单",
+                    order.getOrderNo(), result.tradeState());
+            return "SUCCESS";
+        }
+
         // Write SN (ASSUMPTION-Q3: placeholder SN) + cooldown_end_at
         String placeholderSn = "SN-PENDING-" + order.getOrderNo();
         LocalDateTime cooldownEnd = LocalDateTime.now().plusHours(24);

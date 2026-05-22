@@ -13,3 +13,8 @@ build/
 
 # Logs
 *.log
+
+# env（含密钥，勿提交；模板见 .env.example）
+.env
+.env.local
+*.env

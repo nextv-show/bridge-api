@@ -8,6 +8,12 @@ import org.springframework.http.HttpStatus;
 public enum ErrorCode {
 
     NO_ACTIVE_CONFIG(HttpStatus.SERVICE_UNAVAILABLE, "NO_ACTIVE_CONFIG", "暂无生效的落地页配置"),
+    UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "未登录或登录已失效"),
+    WX_AUTH_FAILED(HttpStatus.BAD_GATEWAY, "WX_AUTH_FAILED", "微信授权失败"),
+    KYC_INIT_FAILED(HttpStatus.BAD_GATEWAY, "KYC_INIT_FAILED", "实名认证初始化失败"),
+    KYC_QUERY_FAILED(HttpStatus.BAD_GATEWAY, "KYC_QUERY_FAILED", "实名认证结果查询失败"),
+    PAY_PREPAY_FAILED(HttpStatus.BAD_GATEWAY, "PAY_PREPAY_FAILED", "发起微信支付失败"),
+    REFUND_FAILED(HttpStatus.BAD_GATEWAY, "REFUND_FAILED", "发起退款失败"),
     VALIDATION_FAILED(HttpStatus.UNPROCESSABLE_ENTITY, "VALIDATION_FAILED", "请求参数校验失败"),
     COMPLIANCE_VIOLATION(HttpStatus.UNPROCESSABLE_ENTITY, "COMPLIANCE_VIOLATION", "文案合规校验未通过"),
     RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMITED", "请求过于频繁，请稍后再试"),

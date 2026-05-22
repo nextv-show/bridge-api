@@ -54,17 +54,28 @@ springdoc:
 # 103: 设备购置 + 支付 + 实名
 h5:
   aes-master-key: ${H5_AES_MASTER_KEY:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}
+  # H5 会话 JWT（与 admin JWT 独立）。HS256 需 >=32 字节密钥；生产务必用环境变量覆盖。
+  jwt-secret: ${H5_JWT_SECRET:dev-h5-jwt-secret-please-override-in-prod-0001}
+  jwt-ttl-hours: ${H5_JWT_TTL_HOURS:72}
+  # H5 公网 HTTPS 根地址，用于拼接实名认证回跳 ReturnUrl（如 https://h5.example.com）。
+  public-base-url: ${H5_PUBLIC_BASE_URL:http://localhost:5173}
 wxpay:
   app-id: ${WXPAY_APP_ID:stub}
+  app-secret: ${WX_APP_SECRET:}            # 公众号 appSecret，网页授权 code→openid 用
   mch-id: ${WXPAY_MCH_ID:stub}
   api-v3-key: ${WXPAY_API_V3_KEY:stub}
   private-key-path: ${WXPAY_PRIVATE_KEY_PATH:}
   merchant-serial-number: ${WXPAY_MERCHANT_SERIAL_NUMBER:}
+  notify-url: ${WXPAY_NOTIFY_URL:}         # 支付结果异步通知公网地址，如 https://api.example.com/api/h5/pay/callback
+  refund-notify-url: ${WXPAY_REFUND_NOTIFY_URL:}  # 退款结果异步通知公网地址
 aliyun:
   kyc:
     access-key: ${ALIYUN_KYC_ACCESS_KEY:}
     secret-key: ${ALIYUN_KYC_SECRET_KEY:}
-    scene-id: ${ALIYUN_KYC_SCENE_ID:0}
+    scene-id: ${ALIYUN_KYC_SCENE_ID:1000018706}        # 三水元 H5 场景实人认证
+    endpoint: ${ALIYUN_KYC_ENDPOINT:cloudauth.aliyuncs.com}  # 全局接入地址
+    product-code: ${ALIYUN_KYC_PRODUCT_CODE:LR_FR}     # 活体检测方案（唯一取值 LR_FR）
+    model: ${ALIYUN_KYC_MODEL:MOVE_ACTION}             # 活体类型：远近移动+眨眼（推荐）
 
 ---
 # ───────────────── dev（本地开发） ─────────────────
