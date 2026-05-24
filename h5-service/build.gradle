@@ -1,6 +1,10 @@
 // h5-service — 微信 H5 营销闭环后端（102 首次创建脚手架，103/104/105 复用）。
 // 公共依赖（web/jpa/security/validation/actuator/cache/caffeine/nimbus-jwt/mysql/test/testcontainers）
 // 由 root build.gradle 的 subprojects {} 注入；此处仅声明本模块特有依赖。
+bootJar {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
 dependencies {
     implementation 'org.flywaydb:flyway-mysql'
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0'
