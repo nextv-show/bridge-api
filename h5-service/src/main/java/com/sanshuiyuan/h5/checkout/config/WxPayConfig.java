@@ -49,7 +49,10 @@ public class WxPayConfig {
         return v != null && !v.isBlank() && !"stub".equals(v);
     }
 
-    /** 懒构建并复用（含平台证书自动下载），三个 SDK Bean 共享同一 Config。 */
+    /**
+     * 懒构建并复用（含平台证书自动下载）。build() 会联网拉取微信平台证书；
+     * 若失败抛 RuntimeException，由调用方 @Bean 方法 catch 并降级 stub。
+     */
     private synchronized RSAAutoCertificateConfig coreConfig() {
         if (cachedConfig == null) {
             cachedConfig = new RSAAutoCertificateConfig.Builder()
@@ -68,9 +71,15 @@ public class WxPayConfig {
             log.warn("微信支付未配置，回退 StubWxPayClient");
             return new StubWxPayClient();
         }
-        JsapiServiceExtension jsapi = new JsapiServiceExtension.Builder().config(coreConfig()).build();
-        log.info("启用微信支付 V3 JSAPI（SdkWxPayClient）mchId={}", mchId);
-        return new SdkWxPayClient(jsapi, appId, mchId, notifyUrl);
+        try {
+            JsapiServiceExtension jsapi = new JsapiServiceExtension.Builder().config(coreConfig()).build();
+            log.info("启用微信支付 V3 JSAPI（SdkWxPayClient）mchId={}", mchId);
+            return new SdkWxPayClient(jsapi, appId, mchId, notifyUrl);
+        } catch (Exception e) {
+            log.error("微信支付 SDK 初始化失败，回退 StubWxPayClient（凭证或网络问题）: {}", e.getMessage());
+            cachedConfig = null;
+            return new StubWxPayClient();
+        }
     }
 
     @Bean
@@ -78,10 +87,15 @@ public class WxPayConfig {
         if (!isConfigured()) {
             return new StubWxRefundClient();
         }
-        var sdkRefund = new com.wechat.pay.java.service.refund.RefundService.Builder()
-                .config(coreConfig()).build();
-        NotificationParser parser = new NotificationParser(coreConfig());
-        return new SdkWxRefundClient(sdkRefund, parser, refundNotifyUrl);
+        try {
+            var sdkRefund = new com.wechat.pay.java.service.refund.RefundService.Builder()
+                    .config(coreConfig()).build();
+            NotificationParser parser = new NotificationParser(coreConfig());
+            return new SdkWxRefundClient(sdkRefund, parser, refundNotifyUrl);
+        } catch (Exception e) {
+            log.error("微信退款 SDK 初始化失败，回退 StubWxRefundClient: {}", e.getMessage());
+            return new StubWxRefundClient();
+        }
     }
 
     @Bean
@@ -89,6 +103,11 @@ public class WxPayConfig {
         if (!isConfigured()) {
             return new UnconfiguredWxPayCallbackVerifier();
         }
-        return new SdkWxPayCallbackVerifier(new NotificationParser(coreConfig()));
+        try {
+            return new SdkWxPayCallbackVerifier(new NotificationParser(coreConfig()));
+        } catch (Exception e) {
+            log.error("微信支付验签器初始化失败，回退 UnconfiguredWxPayCallbackVerifier: {}", e.getMessage());
+            return new UnconfiguredWxPayCallbackVerifier();
+        }
     }
 }
