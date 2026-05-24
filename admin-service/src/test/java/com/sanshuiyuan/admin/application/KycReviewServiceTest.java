@@ -31,9 +31,7 @@ class KycReviewServiceTest {
     private KycRecord createPendingRecord(Long id) {
         KycRecord r = new KycRecord();
         setField(r, "id", id);
-        setField(r, "userId", 10L);
-        setField(r, "realName", "张三");
-        setField(r, "idNumber", "110101199001011234");
+        setField(r, "openid", "test_openid");
         setField(r, "status", KycRecord.Status.PENDING);
         setField(r, "createdAt", LocalDateTime.now());
         return r;
@@ -42,8 +40,7 @@ class KycReviewServiceTest {
     private KycRecord createReviewedRecord(Long id, KycRecord.Status status) {
         KycRecord r = createPendingRecord(id);
         setField(r, "status", status);
-        setField(r, "reviewedBy", 99L);
-        setField(r, "reviewedAt", LocalDateTime.now());
+        setField(r, "verifiedAt", LocalDateTime.now());
         return r;
     }
 
@@ -65,8 +62,7 @@ class KycReviewServiceTest {
         service.approve(100L, 1L);
 
         assertEquals(KycRecord.Status.PASS, record.getStatus());
-        assertEquals(100L, record.getReviewedBy());
-        assertNotNull(record.getReviewedAt());
+        assertNotNull(record.getVerifiedAt());
         verify(kycRepo).save(record);
         verify(auditLog).log(100L, "KYC_APPROVE", "kyc_record", "1", null);
     }
@@ -79,8 +75,7 @@ class KycReviewServiceTest {
         service.reject(100L, 1L);
 
         assertEquals(KycRecord.Status.REJECT, record.getStatus());
-        assertEquals(100L, record.getReviewedBy());
-        assertNotNull(record.getReviewedAt());
+        assertNotNull(record.getVerifiedAt());
         verify(kycRepo).save(record);
         verify(auditLog).log(100L, "KYC_REJECT", "kyc_record", "1", null);
     }
