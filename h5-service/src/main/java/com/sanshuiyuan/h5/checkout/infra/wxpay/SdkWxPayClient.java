@@ -63,7 +63,8 @@ public class SdkWxPayClient implements WxPayClient {
                     resp.getSignType(),
                     resp.getPaySign());
         } catch (Exception e) {
-            log.error("微信 JSAPI 统一下单失败 outTradeNo={}", outTradeNo, e);
+            log.error("微信 JSAPI 统一下单失败 outTradeNo={} errType={} errMsg={}",
+                    outTradeNo, e.getClass().getSimpleName(), e.getMessage(), e);
             throw new BizException(ErrorCode.PAY_PREPAY_FAILED, "发起微信支付失败");
         }
     }

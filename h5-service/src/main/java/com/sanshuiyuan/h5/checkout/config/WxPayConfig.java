@@ -44,10 +44,12 @@ public class WxPayConfig {
     private Config cachedConfig;
 
     private boolean isConfigured() {
-        return notBlankNotStub(mchId)
+        return notBlankNotStub(appId)
+                && notBlankNotStub(mchId)
                 && notBlankNotStub(apiV3Key)
                 && privateKeyPath != null && !privateKeyPath.isBlank()
-                && merchantSerialNumber != null && !merchantSerialNumber.isBlank();
+                && merchantSerialNumber != null && !merchantSerialNumber.isBlank()
+                && notifyUrl != null && !notifyUrl.isBlank();
     }
 
     private static boolean notBlankNotStub(String v) {

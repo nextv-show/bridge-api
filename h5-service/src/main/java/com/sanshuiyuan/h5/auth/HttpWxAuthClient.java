@@ -1,6 +1,7 @@
 package com.sanshuiyuan.h5.auth;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sanshuiyuan.h5.common.BizException;
 import com.sanshuiyuan.h5.common.ErrorCode;
 import org.slf4j.Logger;
@@ -19,6 +20,7 @@ public class HttpWxAuthClient implements WxAuthClient {
     private final String appId;
     private final String appSecret;
     private final RestClient restClient;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public HttpWxAuthClient(String appId, String appSecret) {
         this.appId = appId;
@@ -28,20 +30,28 @@ public class HttpWxAuthClient implements WxAuthClient {
 
     @Override
     public String code2openid(String code) {
-        JsonNode body;
+        // 微信 OAuth API 返回 Content-Type: text/plain，用 String 接收再手动解析
+        String raw;
         try {
-            body = restClient.get()
+            raw = restClient.get()
                     .uri(OAUTH_URL + "?appid={appid}&secret={secret}&code={code}&grant_type=authorization_code",
                             appId, appSecret, code)
                     .retrieve()
-                    .body(JsonNode.class);
+                    .body(String.class);
         } catch (Exception e) {
             log.error("微信网页授权请求失败", e);
             throw new BizException(ErrorCode.WX_AUTH_FAILED, "微信授权服务暂不可用");
         }
-        if (body == null || body.hasNonNull("errcode") && body.get("errcode").asInt() != 0) {
-            int errcode = body == null ? -1 : body.path("errcode").asInt(-1);
-            log.warn("微信网页授权返回错误 errcode={}", errcode);
+        JsonNode body;
+        try {
+            body = objectMapper.readTree(raw);
+        } catch (Exception e) {
+            log.error("微信网页授权响应解析失败 body={}", raw);
+            throw new BizException(ErrorCode.WX_AUTH_FAILED, "微信授权服务响应异常");
+        }
+        if (body.hasNonNull("errcode") && body.get("errcode").asInt() != 0) {
+            int errcode = body.path("errcode").asInt(-1);
+            log.warn("微信网页授权返回错误 errcode={} errmsg={}", errcode, body.path("errmsg").asText());
             throw new BizException(ErrorCode.WX_AUTH_FAILED, "微信授权失败，请重新进入");
         }
         String openid = body.path("openid").asText(null);
