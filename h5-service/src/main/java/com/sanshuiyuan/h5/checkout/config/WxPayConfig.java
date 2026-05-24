@@ -9,7 +9,10 @@ import com.sanshuiyuan.h5.checkout.infra.wxpay.UnconfiguredWxPayCallbackVerifier
 import com.sanshuiyuan.h5.checkout.infra.wxpay.WxPayCallbackVerifier;
 import com.sanshuiyuan.h5.checkout.infra.wxpay.WxPayClient;
 import com.sanshuiyuan.h5.checkout.infra.wxpay.WxRefundClient;
+import com.wechat.pay.java.core.Config;
 import com.wechat.pay.java.core.RSAAutoCertificateConfig;
+import com.wechat.pay.java.core.RSAPublicKeyConfig;
+import com.wechat.pay.java.core.notification.NotificationConfig;
 import com.wechat.pay.java.core.notification.NotificationParser;
 import com.wechat.pay.java.service.payments.jsapi.JsapiServiceExtension;
 import org.slf4j.Logger;
@@ -35,8 +38,10 @@ public class WxPayConfig {
     @Value("${wxpay.merchant-serial-number:}") private String merchantSerialNumber;
     @Value("${wxpay.notify-url:}") private String notifyUrl;
     @Value("${wxpay.refund-notify-url:}") private String refundNotifyUrl;
+    @Value("${wxpay.public-key-path:}") private String publicKeyPath;
+    @Value("${wxpay.public-key-id:}") private String publicKeyId;
 
-    private RSAAutoCertificateConfig cachedConfig;
+    private Config cachedConfig;
 
     private boolean isConfigured() {
         return notBlankNotStub(mchId)
@@ -50,17 +55,32 @@ public class WxPayConfig {
     }
 
     /**
-     * 懒构建并复用（含平台证书自动下载）。build() 会联网拉取微信平台证书；
-     * 若失败抛 RuntimeException，由调用方 @Bean 方法 catch 并降级 stub。
+     * 懒构建并复用。优先使用"微信支付公钥"模式（新商户必须）；
+     * 若未配置 publicKeyPath/publicKeyId，回退旧"平台证书自动下载"模式。
      */
-    private synchronized RSAAutoCertificateConfig coreConfig() {
+    private synchronized Config coreConfig() {
         if (cachedConfig == null) {
-            cachedConfig = new RSAAutoCertificateConfig.Builder()
-                    .merchantId(mchId)
-                    .privateKeyFromPath(privateKeyPath)
-                    .merchantSerialNumber(merchantSerialNumber)
-                    .apiV3Key(apiV3Key)
-                    .build();
+            boolean usePublicKey = publicKeyPath != null && !publicKeyPath.isBlank()
+                    && publicKeyId != null && !publicKeyId.isBlank();
+            if (usePublicKey) {
+                log.info("微信支付使用公钥模式（RSAPublicKeyConfig）publicKeyId={}", publicKeyId);
+                cachedConfig = new RSAPublicKeyConfig.Builder()
+                        .merchantId(mchId)
+                        .privateKeyFromPath(privateKeyPath)
+                        .merchantSerialNumber(merchantSerialNumber)
+                        .apiV3Key(apiV3Key)
+                        .publicKeyFromPath(publicKeyPath)
+                        .publicKeyId(publicKeyId)
+                        .build();
+            } else {
+                log.info("微信支付使用平台证书模式（RSAAutoCertificateConfig）");
+                cachedConfig = new RSAAutoCertificateConfig.Builder()
+                        .merchantId(mchId)
+                        .privateKeyFromPath(privateKeyPath)
+                        .merchantSerialNumber(merchantSerialNumber)
+                        .apiV3Key(apiV3Key)
+                        .build();
+            }
         }
         return cachedConfig;
     }
@@ -90,7 +110,7 @@ public class WxPayConfig {
         try {
             var sdkRefund = new com.wechat.pay.java.service.refund.RefundService.Builder()
                     .config(coreConfig()).build();
-            NotificationParser parser = new NotificationParser(coreConfig());
+            NotificationParser parser = new NotificationParser((NotificationConfig) coreConfig());
             return new SdkWxRefundClient(sdkRefund, parser, refundNotifyUrl);
         } catch (Exception e) {
             log.error("微信退款 SDK 初始化失败，回退 StubWxRefundClient: {}", e.getMessage());
@@ -104,7 +124,7 @@ public class WxPayConfig {
             return new UnconfiguredWxPayCallbackVerifier();
         }
         try {
-            return new SdkWxPayCallbackVerifier(new NotificationParser(coreConfig()));
+            return new SdkWxPayCallbackVerifier(new NotificationParser((NotificationConfig) coreConfig()));
         } catch (Exception e) {
             log.error("微信支付验签器初始化失败，回退 UnconfiguredWxPayCallbackVerifier: {}", e.getMessage());
             return new UnconfiguredWxPayCallbackVerifier();
