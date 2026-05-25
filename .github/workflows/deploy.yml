@@ -222,13 +222,6 @@ jobs:
             sudo mv -f "$INCOMING" "$REL_DIR/$NEW_JAR"
             sudo ln -sfn "$REL_DIR/$NEW_JAR" "$APP_DIR/app.jar"
 
-            # Flyway repair: clear failed migration rows so Flyway can retry
-            source "$ENV_FILE" 2>/dev/null || true
-            mysql -u"${DB_USERNAME:-root}" -p"${DB_PASSWORD:-Sanshuiyuan2026!}" h5_db \
-              -e "DELETE FROM flyway_schema_history WHERE success = 0;" 2>/dev/null \
-              && echo "[deploy] flyway repair: cleared failed migration rows" \
-              || echo "[deploy] flyway repair: skipped (no failed rows or mysql not available)"
-
             echo "[deploy] restarting service: $SERVICE"
             sudo systemctl restart "$SERVICE"
 
