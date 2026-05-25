@@ -37,12 +37,13 @@ class AdminUserServiceTest {
     @Mock private SkuRepository skuRepo;
     @Mock private AuditLogService auditLog;
     @Mock private UserDirectoryClient userDirectoryClient;
+    @Mock private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
     private AdminUserService service;
 
     @BeforeEach
     void setUp() {
         service = new AdminUserService(userRepo, orderRepo, deviceRepo, skuRepo, auditLog,
-                userDirectoryClient);
+                userDirectoryClient, jdbcTemplate);
     }
 
     private User user(Long id, String status, String kyc) {
@@ -260,22 +261,15 @@ class AdminUserServiceTest {
         assertEquals(1L, result.get("inserted"));
         assertEquals(1L, result.get("updated"));
 
-        // 捕获保存的实体
-        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
-        verify(userRepo, times(2)).save(captor.capture());
-        List<User> saved = captor.getAllValues();
-
-        User insertedUser = saved.stream().filter(u -> Long.valueOf(501L).equals(u.getId()))
-                .findFirst().orElseThrow();
-        assertEquals("oWxMp_501", insertedUser.getOpenid());
-        assertEquals("WECHAT_MP", insertedUser.getChannel());
-        assertEquals("ACTIVE", insertedUser.getStatus());
-        assertEquals("NONE", insertedUser.getKycStatus());
-        assertEquals("NORMAL", insertedUser.getTier());
-        assertEquals("", insertedUser.getTags());
-        assertEquals("新用户", insertedUser.getNickname());
-        assertEquals(LocalDateTime.of(2026, 1, 2, 10, 30), insertedUser.getCreatedAt());
-        assertEquals(LocalDateTime.of(2026, 1, 2, 10, 30), insertedUser.getLastActiveAt());
+        // 新用户走原生 INSERT，显式保留来源 id 501（位置参数逐一匹配）；
+        // 仅 update 路径用 userRepo.save
+        verify(userRepo, times(1)).save(any(User.class));
+        LocalDateTime srcCreated = LocalDateTime.of(2026, 1, 2, 10, 30);
+        verify(jdbcTemplate).update(
+                contains("INSERT INTO users"),
+                eq(501L), eq("oWxMp_501"), eq("新用户"), eq("https://avatar/501.png"),
+                eq("WECHAT_MP"), eq("NORMAL"), eq(""), eq("ACTIVE"), eq("NONE"),
+                eq(srcCreated), eq(srcCreated));
 
         // 已存在用户：admin 托管字段保留，仅 nickname/avatar/openid 更新
         assertEquals("FROZEN", existing.getStatus());

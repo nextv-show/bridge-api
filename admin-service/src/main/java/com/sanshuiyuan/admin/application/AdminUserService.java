@@ -19,6 +19,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -47,19 +48,22 @@ public class AdminUserService {
     private final SkuRepository skuRepo;
     private final AuditLogService auditLog;
     private final UserDirectoryClient userDirectoryClient;
+    private final JdbcTemplate jdbcTemplate;
 
     public AdminUserService(UserRepository userRepo,
                             OrderRepository orderRepo,
                             DeviceAssetRepository deviceRepo,
                             SkuRepository skuRepo,
                             AuditLogService auditLog,
-                            UserDirectoryClient userDirectoryClient) {
+                            UserDirectoryClient userDirectoryClient,
+                            JdbcTemplate jdbcTemplate) {
         this.userRepo = userRepo;
         this.orderRepo = orderRepo;
         this.deviceRepo = deviceRepo;
         this.skuRepo = skuRepo;
         this.auditLog = auditLog;
         this.userDirectoryClient = userDirectoryClient;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     /* ========== 列表 ========== */
@@ -315,21 +319,16 @@ public class AdminUserService {
                     userRepo.save(u);
                     updated++;
                 } else {
-                    User u = new User();
-                    u.setId(src.id());
-                    u.setOpenid(resolveOpenid(src));
-                    u.setNickname(src.nickname());
-                    u.setAvatarUrl(src.avatarUrl());
-                    u.setChannel(resolveChannel(src));
-                    u.setStatus("ACTIVE");
-                    u.setKycStatus("NONE");
-                    u.setTier("NORMAL");
-                    u.setTags("");
+                    // 必须保留来源 user_db 的主键 id，使 admin users.id == 真实 user_id，
+                    // 订单/设备聚合（按 user_id）才能对齐。User 实体为 IDENTITY 自增，
+                    // JPA save 会忽略手工 id，故走原生 INSERT 显式写入 id。
                     LocalDateTime createdAt = parseCreatedAt(src.createdAt());
-                    u.setCreatedAt(createdAt);
-                    u.setLastActiveAt(createdAt);
-                    u.setUpdatedAt(LocalDateTime.now());
-                    userRepo.save(u);
+                    jdbcTemplate.update(
+                        "INSERT INTO users (id, openid, nickname, avatar_url, channel, tier, tags, "
+                            + "status, kyc_status, created_at, last_active_at, updated_at) "
+                            + "VALUES (?,?,?,?,?,?,?,?,?,?,?,NOW())",
+                        src.id(), resolveOpenid(src), src.nickname(), src.avatarUrl(),
+                        resolveChannel(src), "NORMAL", "", "ACTIVE", "NONE", createdAt, createdAt);
                     inserted++;
                 }
             }
