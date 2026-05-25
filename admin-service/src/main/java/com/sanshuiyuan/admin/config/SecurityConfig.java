@@ -149,6 +149,10 @@ public class SecurityConfig {
                         Long.valueOf(claims.getSubject()),
                         null,
                         List.of(new SimpleGrantedAuthority("ROLE_" + role)));
+                    Object username = claims.getClaim("username");
+                    if (username != null) {
+                        auth.setDetails(username);
+                    }
                     SecurityContextHolder.getContext().setAuthentication(auth);
                 }
             }

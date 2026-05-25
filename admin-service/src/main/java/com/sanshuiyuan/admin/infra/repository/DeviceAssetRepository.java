@@ -5,7 +5,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 
 public interface DeviceAssetRepository extends JpaRepository<DeviceAsset, Long> {
@@ -19,4 +21,10 @@ public interface DeviceAssetRepository extends JpaRepository<DeviceAsset, Long> 
 
     @Query("SELECT COUNT(d) FROM DeviceAsset d")
     long countTotal();
+
+    /** 按 userId 批量统计设备数。返回 [userId, count]。 */
+    @Query("SELECT d.userId, COUNT(d) FROM DeviceAsset d WHERE d.userId IN :ids GROUP BY d.userId")
+    List<Object[]> countByUserIds(@Param("ids") Collection<Long> ids);
+
+    List<DeviceAsset> findByUserIdOrderByPurchasedAtDesc(Long userId);
 }
