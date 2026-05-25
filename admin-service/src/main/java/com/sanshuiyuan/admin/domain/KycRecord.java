@@ -52,6 +52,10 @@ public class KycRecord {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
+    /** 人工驳回原因（admin 扩展，仅 REJECT 时写入） */
+    @Column(name = "reject_reason", length = 200)
+    private String rejectReason;
+
     /**
      * admin 审核状态扩展 — 映射 h5-service 的 enum + 扩展。
      * h5-service: FAIL, INIT, PASS, SUPERSEDED
@@ -77,6 +81,7 @@ public class KycRecord {
     public Status getStatus() { return status; }
     public LocalDateTime getVerifiedAt() { return verifiedAt; }
     public LocalDateTime getCreatedAt() { return createdAt; }
+    public String getRejectReason() { return rejectReason; }
 
     /** 人工审核通过 — 仅 admin 调用 */
     public void approve() {
@@ -85,8 +90,9 @@ public class KycRecord {
     }
 
     /** 人工审核驳回 — 仅 admin 调用 */
-    public void reject() {
+    public void reject(String reason) {
         this.status = Status.REJECT;
         this.verifiedAt = LocalDateTime.now();
+        this.rejectReason = reason;
     }
 }

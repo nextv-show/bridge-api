@@ -72,12 +72,20 @@ class KycReviewServiceTest {
         KycRecord record = createPendingRecord(1L);
         when(kycRepo.findById(1L)).thenReturn(Optional.of(record));
 
-        service.reject(100L, 1L);
+        service.reject(100L, 1L, "证件照模糊");
 
         assertEquals(KycRecord.Status.REJECT, record.getStatus());
         assertNotNull(record.getVerifiedAt());
+        assertEquals("证件照模糊", record.getRejectReason());
         verify(kycRepo).save(record);
-        verify(auditLog).log(100L, "KYC_REJECT", "kyc_record", "1", null);
+        verify(auditLog).log(100L, "KYC_REJECT", "kyc_record", "1", "{\"reason\":\"证件照模糊\"}");
+    }
+
+    @Test
+    void reject_blankReason_throwsIllegalArgument() {
+        assertThrows(IllegalArgumentException.class, () -> service.reject(100L, 1L, "  "));
+        verify(kycRepo, never()).findById(anyLong());
+        verify(kycRepo, never()).save(any());
     }
 
     @Test
@@ -96,7 +104,7 @@ class KycReviewServiceTest {
         KycRecord record = createReviewedRecord(1L, KycRecord.Status.REJECT);
         when(kycRepo.findById(1L)).thenReturn(Optional.of(record));
 
-        assertThrows(IllegalStateException.class, () -> service.reject(100L, 1L));
+        assertThrows(IllegalStateException.class, () -> service.reject(100L, 1L, "证件信息不符"));
 
         verify(kycRepo, never()).save(any());
     }
@@ -124,6 +132,6 @@ class KycReviewServiceTest {
     void reject_recordNotFound_throwsIllegalArgument() {
         when(kycRepo.findById(999L)).thenReturn(Optional.empty());
 
-        assertThrows(IllegalArgumentException.class, () -> service.reject(100L, 999L));
+        assertThrows(IllegalArgumentException.class, () -> service.reject(100L, 999L, "证件信息不符"));
     }
 }

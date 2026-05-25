@@ -10,4 +10,6 @@ public interface KycRecordRepository extends JpaRepository<KycRecord, Long> {
     Page<KycRecord> findByStatus(KycRecord.Status status, Pageable pageable);
 
     Page<KycRecord> findAllByOrderByCreatedAtDesc(Pageable pageable);
+
+    long countByStatus(KycRecord.Status status);
 }
