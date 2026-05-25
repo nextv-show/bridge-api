@@ -52,14 +52,17 @@ public class DeviceAdminController {
     }
 
     private Map<String, Object> toDto(DeviceAsset d) {
-        return Map.of(
-            "id", d.getId(),
-            "userId", d.getUserId(),
-            "orderId", d.getOrderId(),
-            "sn", d.getSn() != null ? d.getSn() : "",
-            "model", d.getModel(),
-            "stage", d.getStage().name(),
-            "purchasedAt", d.getPurchasedAt().toString()
-        );
+        Map<String, Object> dto = new java.util.LinkedHashMap<>();
+        dto.put("id", d.getId());
+        dto.put("userId", d.getUserId());
+        dto.put("orderId", d.getOrderId());
+        dto.put("sn", d.getSn() != null ? d.getSn() : "");
+        dto.put("model", d.getModel());
+        dto.put("stage", d.getStage().name());
+        dto.put("purchasedAt", d.getPurchasedAt().toString());
+        dto.put("income", d.getCumulativeIncomeCents() != null ? d.getCumulativeIncomeCents() : 0);
+        dto.put("roi", d.getRoiBp() != null ? d.getRoiBp() : 0);
+        dto.put("loc", null); // location not available in current entity
+        return dto;
     }
 }

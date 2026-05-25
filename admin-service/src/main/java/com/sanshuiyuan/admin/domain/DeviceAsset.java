@@ -48,6 +48,7 @@ public class DeviceAsset {
     public Stage getStage() { return stage; }
     public LocalDateTime getPurchasedAt() { return purchasedAt; }
     public Long getCumulativeIncomeCents() { return cumulativeIncomeCents; }
+    public Integer getRoiBp() { return roiBp; }
 
     public void setSn(String sn) { this.sn = sn; }
 }
