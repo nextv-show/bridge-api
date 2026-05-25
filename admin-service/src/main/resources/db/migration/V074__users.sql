@@ -51,8 +51,9 @@ VALUES
   (14809, 'oWxMp_5b9c44', '黄*俊', NULL, 'M',   40, '177****8830', '黄*俊', 'ANDROID',   'NORMAL', 'RISK',            '长沙 · 岳麓', 'BANNED', '涉嫌恶意刷单 · 风控团队封禁', NULL, '2026-04-28 18:30:00', 'risk_team', 'NONE', NULL, '已封禁',                     '2026-04-28 18:25:00', '2024-11-03 12:40:00'),
   (14808, 'oWxMp_9001ab', '林*晴', NULL, 'F', 27, '131****2255', '林*晴', 'WECHAT_MP', 'NEW',    '',                '青岛 · 市南', 'ACTIVE', NULL, NULL, NULL, NULL, 'NONE',    NULL,                  NULL,                       '2026-05-10 09:01:00', '2026-04-15 11:11:00');
 
--- ===== 种子订单表（admin 面板去规范化，IF NOT EXISTS 防重复）=====
-CREATE TABLE IF NOT EXISTS orders (
+-- ===== 种子订单表（admin 面板去规范化，先 DROP 再建防列不匹配）=====
+DROP TABLE IF EXISTS orders;
+CREATE TABLE orders (
   id                BIGINT PRIMARY KEY AUTO_INCREMENT,
   user_id           BIGINT NOT NULL,
   sku_id            BIGINT NOT NULL DEFAULT 1,
@@ -66,8 +67,9 @@ CREATE TABLE IF NOT EXISTS orders (
   KEY idx_user_id (user_id)
 );
 
--- ===== 种子设备资产表（admin 面板去规范化，IF NOT EXISTS 防重复）=====
-CREATE TABLE IF NOT EXISTS device_assets (
+-- ===== 种子设备资产表（admin 面板去规范化，先 DROP 再建防列不匹配）=====
+DROP TABLE IF EXISTS device_assets;
+CREATE TABLE device_assets (
   id                       BIGINT PRIMARY KEY AUTO_INCREMENT,
   user_id                  BIGINT NOT NULL,
   order_id                 BIGINT NOT NULL,
