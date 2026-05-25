@@ -29,7 +29,7 @@ VALUES (
   ),
   JSON_OBJECT(
     'disclaimer', '本平台为水机产品销售平台，服务返利来自设备运营场景下的真实分润，不构成投资建议或理财产品。',
-    'icpNumber', '津ICP备2024014900号-2'
+    'icpNumber', '粤 ICP 备 2024XXXXXX 号 · 增值电信业务许可证'
   ),
   'system-seed',
   NOW()
