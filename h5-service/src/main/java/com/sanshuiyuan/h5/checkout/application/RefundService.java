@@ -10,8 +10,10 @@ import com.sanshuiyuan.h5.checkout.infra.repository.RefundRepository;
 import com.sanshuiyuan.h5.checkout.infra.wxpay.WxRefundClient;
 import com.sanshuiyuan.h5.common.BizException;
 import com.sanshuiyuan.h5.common.ErrorCode;
+import com.sanshuiyuan.h5.wxmsg.event.RefundSucceededEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,13 +33,16 @@ public class RefundService {
     private final H5OrderRepository orderRepo;
     private final RefundRepository refundRepo;
     private final WxRefundClient wxRefundClient;
+    private final ApplicationEventPublisher eventPublisher;
 
     public RefundService(H5OrderRepository orderRepo,
                          RefundRepository refundRepo,
-                         WxRefundClient wxRefundClient) {
+                         WxRefundClient wxRefundClient,
+                         ApplicationEventPublisher eventPublisher) {
         this.orderRepo = orderRepo;
         this.refundRepo = refundRepo;
         this.wxRefundClient = wxRefundClient;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -136,6 +141,10 @@ public class RefundService {
                 orderRepo.findById(refund.getOrderId()).ifPresent(order -> {
                     order.markRefunded();
                     orderRepo.save(order);
+                    // Spec 106: 发布退款成功事件，事务提交后推送模板消息
+                    eventPublisher.publishEvent(new RefundSucceededEvent(
+                            order.getId(), order.getOpenid(), order.getOrderNo(),
+                            refund.getAmountCents()));
                 });
             } else {
                 refund.markFailed();

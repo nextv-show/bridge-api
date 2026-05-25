@@ -13,4 +13,6 @@ public interface DeviceSpecRepository extends JpaRepository<DeviceSpec, Long> {
     Optional<DeviceSpec> findBySpecId(String specId);
 
     Optional<DeviceSpec> findBySpecIdAndStatus(String specId, DeviceSpec.SpecStatus status);
+
+    Optional<DeviceSpec> findByModelCode(String modelCode);
 }
