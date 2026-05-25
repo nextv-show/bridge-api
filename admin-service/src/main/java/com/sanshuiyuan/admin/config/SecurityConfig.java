@@ -122,6 +122,17 @@ public class SecurityConfig {
             this.jwtSecret = jwtSecret;
         }
 
+        /**
+         * Run on ERROR dispatches too. By default OncePerRequestFilter skips them,
+         * which left the SecurityContext empty on the /error forward — so unmapped
+         * paths surfaced as 401 (entry point) instead of 404, silently logging the
+         * client out. Authenticating the error dispatch lets the real 404 through.
+         */
+        @Override
+        protected boolean shouldNotFilterErrorDispatch() {
+            return false;
+        }
+
         @Override
         protected void doFilterInternal(HttpServletRequest request,
                                         HttpServletResponse response,
