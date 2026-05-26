@@ -1,6 +1,9 @@
 package com.sanshuiyuan.h5.auth;
 
 import com.sanshuiyuan.h5.common.ApiResponse;
+import com.sanshuiyuan.h5.infra.client.UserServiceClient;
+import com.sanshuiyuan.h5.referral.InvalidRefIdException;
+import com.sanshuiyuan.h5.referral.RefIdCodec;
 import com.sanshuiyuan.h5.referral.ReferralBindingService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.NotBlank;
@@ -23,12 +26,17 @@ public class WxLoginController {
     private final WxAuthClient wxAuthClient;
     private final H5JwtService jwtService;
     private final ReferralBindingService referralBindingService;
+    private final UserServiceClient userServiceClient;
+    private final RefIdCodec refIdCodec;
 
     public WxLoginController(WxAuthClient wxAuthClient, H5JwtService jwtService,
-                             ReferralBindingService referralBindingService) {
+                             ReferralBindingService referralBindingService,
+                             UserServiceClient userServiceClient, RefIdCodec refIdCodec) {
         this.wxAuthClient = wxAuthClient;
         this.jwtService = jwtService;
         this.referralBindingService = referralBindingService;
+        this.userServiceClient = userServiceClient;
+        this.refIdCodec = refIdCodec;
     }
 
     @PostMapping("/wx-login")
@@ -37,7 +45,22 @@ public class WxLoginController {
         // 定位/创建本人；首次注册时用 refId 建立 L1/L2 关系链（解码失败/自我邀请/已注册均降级，绝不阻断登录）。
         referralBindingService.onWxLogin(openid, req.refId());
         String token = jwtService.generate(openid);
+        // spec 012: 并入统一用户体系。inviterId 由 RefIdCodec 解密后下传（解码失败按自然流量）。
+        // H5 网页授权仅得 openid，unionid 暂为 null（user-service 按 openid 查/建）。
+        userServiceClient.syncH5(openid, null, decodeInviterIdQuietly(req.refId()));
         return ApiResponse.ok(new WxLoginResponse(token));
+    }
+
+    /** 解密 refId 为推广者 user_id；空/解码失败均返回 null（按自然流量，绝不阻断登录）。 */
+    private Long decodeInviterIdQuietly(String refId) {
+        if (refId == null || refId.isBlank()) {
+            return null;
+        }
+        try {
+            return refIdCodec.decode(refId);
+        } catch (InvalidRefIdException e) {
+            return null;
+        }
     }
 
     /**
