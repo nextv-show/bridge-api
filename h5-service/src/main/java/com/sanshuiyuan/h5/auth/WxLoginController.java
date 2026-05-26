@@ -1,6 +1,7 @@
 package com.sanshuiyuan.h5.auth;
 
 import com.sanshuiyuan.h5.common.ApiResponse;
+import com.sanshuiyuan.h5.referral.ReferralBindingService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -21,15 +22,20 @@ public class WxLoginController {
 
     private final WxAuthClient wxAuthClient;
     private final H5JwtService jwtService;
+    private final ReferralBindingService referralBindingService;
 
-    public WxLoginController(WxAuthClient wxAuthClient, H5JwtService jwtService) {
+    public WxLoginController(WxAuthClient wxAuthClient, H5JwtService jwtService,
+                             ReferralBindingService referralBindingService) {
         this.wxAuthClient = wxAuthClient;
         this.jwtService = jwtService;
+        this.referralBindingService = referralBindingService;
     }
 
     @PostMapping("/wx-login")
     public ApiResponse<WxLoginResponse> wxLogin(@Valid @RequestBody WxLoginRequest req) {
         String openid = wxAuthClient.code2openid(req.code());
+        // 定位/创建本人；首次注册时用 refId 建立 L1/L2 关系链（解码失败/自我邀请/已注册均降级，绝不阻断登录）。
+        referralBindingService.onWxLogin(openid, req.refId());
         String token = jwtService.generate(openid);
         return ApiResponse.ok(new WxLoginResponse(token));
     }
