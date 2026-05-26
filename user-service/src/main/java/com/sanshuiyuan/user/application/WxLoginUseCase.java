@@ -81,6 +81,15 @@ public class WxLoginUseCase {
                 .orElseGet(() -> createUser(unionid, openidWx, openidApp, inviterId, grandInviterId));
     }
 
+    /**
+     * 供 sync-h5 内部接口创建用户（spec 012）。H5 openid 落入 openid_wx，openid_app 为空。
+     * 复用统一的建号流程（CONSUMER 角色 + 首页布局偏好 + 关系链一次性写入）。
+     */
+    public User createUserForSync(String unionid, String openidWx,
+                                  Long inviterId, Long grandInviterId) {
+        return createUser(unionid, openidWx, null, inviterId, grandInviterId);
+    }
+
     private User createUser(String unionid, String openidWx, String openidApp,
                             Long inviterId, Long grandInviterId) {
         User user = new User();
