@@ -12,7 +12,6 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -92,5 +91,61 @@ class ReferralBindingServiceTest {
 
         assertThat(result.getInviterId()).isEqualTo(100L);
         assertThat(result.getGrandInviterId()).isNull();
+    }
+
+    // ---- T8b.3: 降级与防护 ----
+
+    @Test
+    void firstRegister_forgedRefId_fallsBackToNaturalTraffic() {
+        when(userRepo.findByOpenid("newbie")).thenReturn(Optional.empty());
+        stubAutoIncrementSave();
+
+        // 篡改签名：合法 payload + 伪造 sig，应解码失败 → 自然流量（不报错、不绑定）。
+        String forged = codec.encode(100L).split("\\.")[0] + ".AAAA";
+        H5User result = service.onWxLogin("newbie", forged);
+
+        assertThat(result.getInviterId()).isNull();
+        assertThat(result.getGrandInviterId()).isNull();
+        verify(userRepo, never()).findById(any());
+    }
+
+    @Test
+    void firstRegister_blankRefId_naturalTraffic() {
+        when(userRepo.findByOpenid("newbie")).thenReturn(Optional.empty());
+        stubAutoIncrementSave();
+
+        H5User result = service.onWxLogin("newbie", null);
+
+        assertThat(result.getInviterId()).isNull();
+        assertThat(result.getGrandInviterId()).isNull();
+        verify(userRepo, never()).findById(any());
+    }
+
+    @Test
+    void firstRegister_selfInvite_isIgnored() {
+        // 新用户自增 id 将是 1001（stubAutoIncrementSave 从 1000 起 incrementAndGet）。
+        when(userRepo.findByOpenid("selfie")).thenReturn(Optional.empty());
+        stubAutoIncrementSave();
+
+        H5User result = service.onWxLogin("selfie", codec.encode(1001L));
+
+        assertThat(result.getId()).isEqualTo(1001L);
+        assertThat(result.getInviterId()).isNull();   // 自我邀请被忽略
+        assertThat(result.getGrandInviterId()).isNull();
+        verify(userRepo, never()).findById(any());
+    }
+
+    @Test
+    void existingUser_carryingRefId_chainUntouched() {
+        // 已注册用户携带 refId 再次登录：返回原记录，关系链不变，且不写库。
+        H5User existing = userWithChain(777L, 100L, 50L);
+        when(userRepo.findByOpenid("veteran")).thenReturn(Optional.of(existing));
+
+        H5User result = service.onWxLogin("veteran", codec.encode(999L));
+
+        assertThat(result.getInviterId()).isEqualTo(100L);
+        assertThat(result.getGrandInviterId()).isEqualTo(50L);
+        verify(userRepo, never()).save(any());
+        verify(userRepo, never()).findById(any());
     }
 }

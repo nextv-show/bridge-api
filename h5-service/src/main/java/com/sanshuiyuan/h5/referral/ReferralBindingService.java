@@ -56,6 +56,10 @@ public class ReferralBindingService {
         if (inviterId == null) {
             return; // 自然流量：无 refId / 解码失败。
         }
+        if (inviterId.equals(newUser.getId())) {
+            // 自我邀请：refId 解出自身 user_id，忽略（不绑定，按自然流量）。
+            return;
+        }
         H5User inviter = userRepo.findById(inviterId).orElse(null);
         if (inviter == null) {
             return; // 邀请人不存在：按自然流量处理。
