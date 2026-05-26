@@ -1,7 +1,10 @@
 package com.sanshuiyuan.h5.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sanshuiyuan.h5.auth.H5JwtFilter;
 import com.sanshuiyuan.h5.auth.H5JwtService;
+import com.sanshuiyuan.h5.common.ApiResponse;
+import com.sanshuiyuan.h5.common.ErrorCode;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -16,7 +19,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http, H5JwtService jwtService) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http, H5JwtService jwtService, ObjectMapper objectMapper) throws Exception {
         http
             .csrf(csrf -> csrf.disable())
             .cors(cors -> {})
@@ -41,7 +44,12 @@ public class SecurityConfig {
                 .anyRequest().authenticated()
             )
             .exceptionHandling(eh -> eh
-                .authenticationEntryPoint((req, res, ex) -> res.sendError(401, "Unauthorized")))
+                .authenticationEntryPoint((req, res, ex) -> {
+                    // 返回 JSON 体而非空响应，避免前端 res.json() 因空 body 抛 "Unexpected end of JSON input"
+                    res.setStatus(ErrorCode.UNAUTHORIZED.httpStatus().value());
+                    res.setContentType("application/json;charset=UTF-8");
+                    objectMapper.writeValue(res.getWriter(), ApiResponse.error(ErrorCode.UNAUTHORIZED));
+                }))
             .addFilterBefore(new H5JwtFilter(jwtService), UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
