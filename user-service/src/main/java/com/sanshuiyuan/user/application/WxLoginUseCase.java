@@ -71,16 +71,26 @@ public class WxLoginUseCase {
     }
 
     private User findOrCreateByUnionid(String unionid, String openidWx, String openidApp) {
-        return userRepository.findByUnionid(unionid)
-                .orElseGet(() -> createUser(unionid, openidWx, openidApp));
+        return findOrCreateByUnionid(unionid, openidWx, openidApp, null, null);
     }
 
-    private User createUser(String unionid, String openidWx, String openidApp) {
+    /** 支持关系链参数的创建/查找（供内部 sync 接口调用，见 spec 012）。 */
+    public User findOrCreateByUnionid(String unionid, String openidWx, String openidApp,
+                                       Long inviterId, Long grandInviterId) {
+        return userRepository.findByUnionid(unionid)
+                .orElseGet(() -> createUser(unionid, openidWx, openidApp, inviterId, grandInviterId));
+    }
+
+    private User createUser(String unionid, String openidWx, String openidApp,
+                            Long inviterId, Long grandInviterId) {
         User user = new User();
         user.setUnionid(unionid);
         user.setOpenidWx(openidWx);
         user.setOpenidApp(openidApp);
         user.setActiveRole(Role.CONSUMER);
+        // 关系链：仅首次注册写入，已注册用户不可改（合规铁律 P0）
+        user.setInviterId(inviterId);
+        user.setGrandInviterId(grandInviterId);
         user = userRepository.save(user);
 
         userRoleRepository.save(new UserRole(user.getId(), Role.CONSUMER));
@@ -100,6 +110,8 @@ public class WxLoginUseCase {
                 .stream().map(ur -> ur.getId().getRole().name()).toList();
         UserInfo userInfo = new UserInfo(user.getId(), user.getNickname(), user.getAvatarUrl(),
                 user.getActiveRole().name(), roles);
+        userInfo.setInviterId(user.getInviterId());
+        userInfo.setGrandInviterId(user.getGrandInviterId());
         return new AuthResponse(accessToken, refreshToken, userInfo);
     }
 }
