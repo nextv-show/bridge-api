@@ -11,6 +11,7 @@ import com.sanshuiyuan.h5.checkout.infra.repository.H5OrderRepository;
 import com.sanshuiyuan.h5.checkout.infra.repository.KycRecordRepository;
 import com.sanshuiyuan.h5.common.BizException;
 import com.sanshuiyuan.h5.common.ErrorCode;
+import com.sanshuiyuan.h5.referral.H5UserRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -22,12 +23,14 @@ public class CreateOrderUseCase {
     private final H5OrderRepository orderRepo;
     private final DeviceSpecRepository specRepo;
     private final KycRecordRepository kycRepo;
+    private final H5UserRepository userRepo;
 
     public CreateOrderUseCase(H5OrderRepository orderRepo, DeviceSpecRepository specRepo,
-                               KycRecordRepository kycRepo) {
+                               KycRecordRepository kycRepo, H5UserRepository userRepo) {
         this.orderRepo = orderRepo;
         this.specRepo = specRepo;
         this.kycRepo = kycRepo;
+        this.userRepo = userRepo;
     }
 
     public OrderCreateResponse execute(String openid, String specId, String paymentChannel) {
@@ -53,6 +56,12 @@ public class CreateOrderUseCase {
         String orderNo = "H5" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 4).toUpperCase();
         H5Order order = H5Order.create(orderNo, openid, specId, spec.getModelCode(),
                 spec.getPriceCents(), paymentChannel);
+
+        // 下单时刻快照当前用户的 L1/L2 关系链（仅一次性写入，绝不向上递归追溯）。
+        // 自然流量用户（无 h5_users 记录或未绑定关系链）快照列保持 null。
+        userRepo.findByOpenid(openid).ifPresent(u ->
+                order.snapshotReferral(u.getInviterId(), u.getGrandInviterId()));
+
         orderRepo.save(order);
 
         return new OrderCreateResponse(order.getId(), order.getOrderNo(), order.getAmountCents(),

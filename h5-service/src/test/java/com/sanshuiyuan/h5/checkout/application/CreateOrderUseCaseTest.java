@@ -10,6 +10,8 @@ import com.sanshuiyuan.h5.checkout.infra.repository.H5OrderRepository;
 import com.sanshuiyuan.h5.checkout.infra.repository.KycRecordRepository;
 import com.sanshuiyuan.h5.common.BizException;
 import com.sanshuiyuan.h5.common.ErrorCode;
+import com.sanshuiyuan.h5.referral.H5User;
+import com.sanshuiyuan.h5.referral.H5UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -32,9 +34,10 @@ class CreateOrderUseCaseTest {
     @Mock H5OrderRepository orderRepo;
     @Mock DeviceSpecRepository specRepo;
     @Mock KycRecordRepository kycRepo;
+    @Mock H5UserRepository userRepo;
 
     private CreateOrderUseCase createUseCase() {
-        return new CreateOrderUseCase(orderRepo, specRepo, kycRepo);
+        return new CreateOrderUseCase(orderRepo, specRepo, kycRepo, userRepo);
     }
 
     private DeviceSpec activeSpec() {
@@ -100,6 +103,53 @@ class CreateOrderUseCaseTest {
         H5Order saved = captor.getValue();
         assertThat(saved.getAmountCents()).isEqualTo(680000L);
         assertThat(saved.getSpecId()).isEqualTo("home-pro");
+    }
+
+    @Test
+    void execute_snapshotsReferralChainOntoOrder() {
+        when(kycRepo.findFirstByOpenidAndStatusOrderByVerifiedAtDesc("openid1", KycStatus.PASS))
+                .thenReturn(Optional.of(passKycRecord()));
+        when(specRepo.findBySpecIdAndStatus("home-pro", DeviceSpec.SpecStatus.ACTIVE))
+                .thenReturn(Optional.of(activeSpec()));
+        when(orderRepo.findFirstByOpenidAndSpecIdAndStatusAndCreatedAtAfterOrderByCreatedAtDesc(
+                anyString(), anyString(), any(), any(LocalDateTime.class)))
+                .thenReturn(Optional.empty());
+        when(orderRepo.save(any(H5Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        H5User bound = H5User.create("openid1");
+        bound.bindReferral(100L, 50L); // L1=100, L2=50
+        when(userRepo.findByOpenid("openid1")).thenReturn(Optional.of(bound));
+
+        CreateOrderUseCase uc = createUseCase();
+        uc.execute("openid1", "home-pro", "WX_JSAPI");
+
+        ArgumentCaptor<H5Order> captor = ArgumentCaptor.forClass(H5Order.class);
+        verify(orderRepo).save(captor.capture());
+        H5Order saved = captor.getValue();
+        assertThat(saved.getInviterId()).isEqualTo(100L);
+        assertThat(saved.getGrandInviterId()).isEqualTo(50L);
+    }
+
+    @Test
+    void execute_naturalTraffic_noReferralSnapshot() {
+        when(kycRepo.findFirstByOpenidAndStatusOrderByVerifiedAtDesc("openid1", KycStatus.PASS))
+                .thenReturn(Optional.of(passKycRecord()));
+        when(specRepo.findBySpecIdAndStatus("home-pro", DeviceSpec.SpecStatus.ACTIVE))
+                .thenReturn(Optional.of(activeSpec()));
+        when(orderRepo.findFirstByOpenidAndSpecIdAndStatusAndCreatedAtAfterOrderByCreatedAtDesc(
+                anyString(), anyString(), any(), any(LocalDateTime.class)))
+                .thenReturn(Optional.empty());
+        when(orderRepo.save(any(H5Order.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(userRepo.findByOpenid("openid1")).thenReturn(Optional.empty());
+
+        CreateOrderUseCase uc = createUseCase();
+        uc.execute("openid1", "home-pro", "WX_JSAPI");
+
+        ArgumentCaptor<H5Order> captor = ArgumentCaptor.forClass(H5Order.class);
+        verify(orderRepo).save(captor.capture());
+        H5Order saved = captor.getValue();
+        assertThat(saved.getInviterId()).isNull();
+        assertThat(saved.getGrandInviterId()).isNull();
     }
 
     @Test
