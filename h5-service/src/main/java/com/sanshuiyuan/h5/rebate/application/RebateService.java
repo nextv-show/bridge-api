@@ -121,4 +121,10 @@ public class RebateService {
         }
         return cancelled;
     }
+
+    /** 当前用户作为受益人的全部返利（按冻结时间倒序）。供 /pending 列表。 */
+    @Transactional(readOnly = true)
+    public List<PendingRebate> listForBeneficiary(Long beneficiaryId) {
+        return repo.findByBeneficiaryIdOrderByFrozenAtDesc(beneficiaryId);
+    }
 }
