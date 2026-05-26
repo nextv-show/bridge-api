@@ -1,5 +1,7 @@
--- V007: Expand skus table for full product management module
--- Aligns with the admin prototype design (商品管理)
+-- V077: Expand skus table (h5_db) for the full product management module.
+-- admin-service validates the Sku entity against h5_db.skus (app.env overrides
+-- the datasource to h5_db), so the columns must be added here, not in
+-- asset-service (which is not deployed by the backend CD pipeline).
 
 -- 1. Add new columns
 ALTER TABLE skus
