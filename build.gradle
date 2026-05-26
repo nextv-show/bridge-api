@@ -62,7 +62,7 @@ subprojects {
             systemProperty 'api.version', dockerApi
         }
         doFirst {
-            logger.lifecycle("[test] DOCKER_HOST=${environment.get('DOCKER_HOST')} DOCKER_API_VERSION=${environment.get('DOCKER_API_VERSION')}")
+            logger.lifecycle("[test] DOCKER_HOST=${System.getenv('DOCKER_HOST')} DOCKER_API_VERSION=${System.getenv('DOCKER_API_VERSION')}")
         }
     }
 }
