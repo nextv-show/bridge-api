@@ -42,8 +42,8 @@ public class WxLoginController {
     @PostMapping("/wx-login")
     public ApiResponse<WxLoginResponse> wxLogin(@Valid @RequestBody WxLoginRequest req) {
         String openid = wxAuthClient.code2openid(req.code());
-        // 定位/创建本人；首次注册时用 refId 建立 L1/L2 关系链（解码失败/自我邀请/已注册均降级，绝不阻断登录）。
-        referralBindingService.onWxLogin(openid, req.refId());
+        // 仅定位/创建本人；L1/L2 关系链改由用户落地页显式确认后经 confirm-binding 绑定（spec 014）。
+        referralBindingService.onWxLogin(openid);
         String token = jwtService.generate(openid);
         // spec 012: 并入统一用户体系。inviterId 由 RefIdCodec 解密后下传（解码失败按自然流量）。
         // H5 网页授权仅得 openid，unionid 暂为 null（user-service 按 openid 查/建）。
