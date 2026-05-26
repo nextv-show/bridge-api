@@ -9,12 +9,15 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 public interface DeviceAssetRepository extends JpaRepository<DeviceAsset, Long> {
 
     Page<DeviceAsset> findBySnIsNullAndStage(DeviceAsset.Stage stage, Pageable pageable);
 
     boolean existsBySn(String sn);
+
+    Optional<DeviceAsset> findFirstByOrderId(Long orderId);
 
     @Query("SELECT COUNT(d) FROM DeviceAsset d WHERE d.sn IS NOT NULL")
     long countBound();
