@@ -42,6 +42,12 @@ public class WalletService {
         return rechargeRepo.save(WalletRecharge.create(userId, amountCents, points, liters, payChannel));
     }
 
+    @Transactional(readOnly = true)
+    public WalletRecharge getOwnedRecharge(Long userId, Long rechargeId) {
+        return rechargeRepo.findByIdAndUserId(rechargeId, userId)
+                .orElseThrow(() -> new IllegalArgumentException("充值单不存在"));
+    }
+
     /**
      * 标记充值已支付并入账钱包。幂等：仅当处于 PENDING_PAY 时执行入账。
      * 生产环境由微信支付回调触发；dev 由 WalletSimulateController 触发。
@@ -56,10 +62,30 @@ public class WalletService {
         if (r.getStatus() != RechargeStatus.PENDING_PAY) {
             throw new IllegalStateException("充值单状态不可支付：" + r.getStatus());
         }
+        return creditPaid(r, txnId);
+    }
+
+    /**
+     * 微信支付回调入账：按 rechargeId 定位（回调无 userId，从充值单取）。幂等。
+     */
+    @Transactional
+    public WalletRecharge markPaidByRecharge(Long rechargeId, String txnId) {
+        WalletRecharge r = rechargeRepo.findById(rechargeId)
+                .orElseThrow(() -> new IllegalArgumentException("充值单不存在"));
+        if (r.getStatus() == RechargeStatus.PAID) {
+            return r; // 幂等
+        }
+        if (r.getStatus() != RechargeStatus.PENDING_PAY) {
+            throw new IllegalStateException("充值单状态不可支付：" + r.getStatus());
+        }
+        return creditPaid(r, txnId);
+    }
+
+    private WalletRecharge creditPaid(WalletRecharge r, String txnId) {
         r.markPaid(txnId != null ? txnId : "SIMULATE-" + UUID.randomUUID().toString().substring(0, 16));
         rechargeRepo.save(r);
 
-        ConsumerWallet wallet = getOrCreate(userId);
+        ConsumerWallet wallet = getOrCreate(r.getUserId());
         wallet.credit(r.getAmountCents(), r.getPointsGranted(), r.getLitersGranted());
         walletRepo.save(wallet);
         return r;

@@ -5,7 +5,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Recover;
 import org.springframework.retry.annotation.Retryable;
@@ -51,5 +53,21 @@ public class UserServiceClient {
     public void addOwnerRoleRecover(RestClientException ex, Long userId) {
         // TODO: 接入告警渠道（飞书/钉钉）；当前落 ERROR 日志，后续可由对账补偿
         log.error("ALERT: addOwnerRole exhausted retries for user {}: {}", userId, ex.getMessage());
+    }
+
+    /** 按 userId 取微信 openid（小程序 JSAPI 支付 payer）。失败返回 null，由上层兜底。 */
+    public String getOpenid(Long userId) {
+        String url = baseUrl + "/internal/users/" + userId;
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-S2S-Token", s2sToken);
+        HttpEntity<Void> request = new HttpEntity<>(headers);
+        try {
+            ResponseEntity<Map> resp = restTemplate.exchange(url, HttpMethod.GET, request, Map.class);
+            Object openid = resp.getBody() != null ? resp.getBody().get("openidWx") : null;
+            return openid != null ? openid.toString() : null;
+        } catch (RestClientException e) {
+            log.warn("getOpenid failed for user {}: {}", userId, e.getMessage());
+            return null;
+        }
     }
 }
