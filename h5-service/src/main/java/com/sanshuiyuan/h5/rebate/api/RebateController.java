@@ -3,6 +3,7 @@ package com.sanshuiyuan.h5.rebate.api;
 import com.sanshuiyuan.h5.auth.CurrentOpenid;
 import com.sanshuiyuan.h5.common.ApiResponse;
 import com.sanshuiyuan.h5.rebate.api.dto.PendingRebateItem;
+import com.sanshuiyuan.h5.rebate.api.dto.RebateSummary;
 import com.sanshuiyuan.h5.rebate.application.RebateService;
 import com.sanshuiyuan.h5.referral.H5User;
 import com.sanshuiyuan.h5.referral.H5UserRepository;
@@ -43,6 +44,15 @@ public class RebateController {
                         .map(PendingRebateItem::from)
                         .toList())
                 .orElseGet(List::of));
+    }
+
+    @Operation(summary = "我的返利摘要",
+            description = "已确认总额（仅 CONFIRMED 计入）、冻结中笔数、已取消笔数。冷静期中金额不计入总额。")
+    @GetMapping("/summary")
+    public ApiResponse<RebateSummary> summary() {
+        return ApiResponse.ok(currentBeneficiaryId()
+                .map(rebateService::summarize)
+                .orElseGet(RebateSummary::empty));
     }
 
     /** 解析当前登录用户的受益人 id（= 其 H5 user_id）。未注册 H5 身份则视为无返利。 */

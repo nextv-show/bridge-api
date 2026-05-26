@@ -4,6 +4,7 @@ import com.sanshuiyuan.h5.rebate.domain.CancelReason;
 import com.sanshuiyuan.h5.rebate.domain.PendingRebate;
 import com.sanshuiyuan.h5.rebate.domain.RebateLevel;
 import com.sanshuiyuan.h5.rebate.domain.RebateStatus;
+import com.sanshuiyuan.h5.rebate.api.dto.RebateSummary;
 import com.sanshuiyuan.h5.rebate.infra.repository.PendingRebateRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -126,5 +127,21 @@ public class RebateService {
     @Transactional(readOnly = true)
     public List<PendingRebate> listForBeneficiary(Long beneficiaryId) {
         return repo.findByBeneficiaryIdOrderByFrozenAtDesc(beneficiaryId);
+    }
+
+    /**
+     * 返利摘要：已确认总额（仅 CONFIRMED 计入）、冻结中笔数、已取消笔数。供 /summary。
+     * 合规：FROZEN 金额绝不计入总额。
+     */
+    @Transactional(readOnly = true)
+    public RebateSummary summarize(Long beneficiaryId) {
+        List<PendingRebate> all = repo.findByBeneficiaryIdOrderByFrozenAtDesc(beneficiaryId);
+        long confirmedTotal = all.stream()
+                .filter(r -> r.getStatus() == RebateStatus.CONFIRMED)
+                .mapToLong(PendingRebate::getAmountCents)
+                .sum();
+        long frozenCount = all.stream().filter(r -> r.getStatus() == RebateStatus.FROZEN).count();
+        long cancelledCount = all.stream().filter(r -> r.getStatus() == RebateStatus.CANCELLED).count();
+        return new RebateSummary(confirmedTotal, frozenCount, cancelledCount);
     }
 }
