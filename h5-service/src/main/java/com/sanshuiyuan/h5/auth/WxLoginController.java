@@ -34,7 +34,12 @@ public class WxLoginController {
         return ApiResponse.ok(new WxLoginResponse(token));
     }
 
-    public record WxLoginRequest(@NotBlank String code) {}
+    /**
+     * @param code  微信网页授权 code（必填）。
+     * @param refId 推广 ref_id（可选，推广者 user_id 的 HMAC 签名形式）。仅在首次注册时用于建立 L1/L2 关系链；
+     *              已注册用户携带亦不改变关系链。解码失败按自然流量处理，不阻断登录（绑定逻辑见 008b）。
+     */
+    public record WxLoginRequest(@NotBlank String code, String refId) {}
 
     public record WxLoginResponse(String token) {}
 }
