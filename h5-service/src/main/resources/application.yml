@@ -59,6 +59,9 @@ h5:
   jwt-ttl-hours: ${H5_JWT_TTL_HOURS:72}
   # H5 公网 HTTPS 根地址，用于拼接实名认证回跳 ReturnUrl（如 https://h5.example.com）。
   public-base-url: ${H5_PUBLIC_BASE_URL:http://localhost:5173}
+  referral:
+    # ref_id HMAC-SHA256 签名密钥（防篡改、不可猜测他人 user_id）。生产务必用环境变量覆盖。
+    ref-id-secret: ${H5_REFERRAL_REF_ID_SECRET:dev-h5-referral-secret-please-override-in-prod-0001}
 wxpay:
   app-id: ${WXPAY_APP_ID:stub}
   app-secret: ${WX_APP_SECRET:}            # 公众号 appSecret，网页授权 code→openid 用
