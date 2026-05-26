@@ -10,6 +10,7 @@ import com.sanshuiyuan.h5.checkout.infra.repository.RefundRepository;
 import com.sanshuiyuan.h5.checkout.infra.wxpay.WxRefundClient;
 import com.sanshuiyuan.h5.common.BizException;
 import com.sanshuiyuan.h5.common.ErrorCode;
+import com.sanshuiyuan.h5.rebate.application.RebateService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -37,9 +38,10 @@ class RefundServiceTest {
     @Mock RefundRepository refundRepo;
     @Mock WxRefundClient wxRefundClient;
     @Mock ApplicationEventPublisher eventPublisher;
+    @Mock RebateService rebateService;
 
     private RefundService createService() {
-        return new RefundService(orderRepo, refundRepo, wxRefundClient, eventPublisher);
+        return new RefundService(orderRepo, refundRepo, wxRefundClient, eventPublisher, rebateService);
     }
 
     // ─── helpers ───

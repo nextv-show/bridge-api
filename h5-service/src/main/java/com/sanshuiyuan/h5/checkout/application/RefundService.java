@@ -10,6 +10,7 @@ import com.sanshuiyuan.h5.checkout.infra.repository.RefundRepository;
 import com.sanshuiyuan.h5.checkout.infra.wxpay.WxRefundClient;
 import com.sanshuiyuan.h5.common.BizException;
 import com.sanshuiyuan.h5.common.ErrorCode;
+import com.sanshuiyuan.h5.rebate.application.RebateService;
 import com.sanshuiyuan.h5.wxmsg.event.RefundSucceededEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,15 +35,18 @@ public class RefundService {
     private final RefundRepository refundRepo;
     private final WxRefundClient wxRefundClient;
     private final ApplicationEventPublisher eventPublisher;
+    private final RebateService rebateService;
 
     public RefundService(H5OrderRepository orderRepo,
                          RefundRepository refundRepo,
                          WxRefundClient wxRefundClient,
-                         ApplicationEventPublisher eventPublisher) {
+                         ApplicationEventPublisher eventPublisher,
+                         RebateService rebateService) {
         this.orderRepo = orderRepo;
         this.refundRepo = refundRepo;
         this.wxRefundClient = wxRefundClient;
         this.eventPublisher = eventPublisher;
+        this.rebateService = rebateService;
     }
 
     @Transactional
@@ -141,6 +145,9 @@ public class RefundService {
                 orderRepo.findById(refund.getOrderId()).ifPresent(order -> {
                     order.markRefunded();
                     orderRepo.save(order);
+                    // 011: 退款成功（合同解除）→ 取消该订单全部返利。
+                    // 冷静期内取消 FROZEN(REFUND_COOLDOWN)，冷静期后取消 CONFIRMED(REFUND_POST_COOLDOWN)。
+                    rebateService.cancelForRefund(order.getId());
                     // Spec 106: 发布退款成功事件，事务提交后推送模板消息
                     eventPublisher.publishEvent(new RefundSucceededEvent(
                             order.getId(), order.getOpenid(), order.getOrderNo(),

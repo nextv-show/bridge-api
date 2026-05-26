@@ -62,6 +62,11 @@ h5:
   referral:
     # ref_id HMAC-SHA256 签名密钥（防篡改、不可猜测他人 user_id）。生产务必用环境变量覆盖。
     ref-id-secret: ${H5_REFERRAL_REF_ID_SECRET:dev-h5-referral-secret-please-override-in-prod-0001}
+  # 011 冷静期返利冻结：金额为占位值（分账算法待运营确认），冷静期与订单退款一致（24h）。
+  rebate:
+    l1-amount-cents: ${H5_REBATE_L1_AMOUNT_CENTS:0}   # L1 直接邀请人返利占位金额（分）
+    l2-amount-cents: ${H5_REBATE_L2_AMOUNT_CENTS:0}   # L2 间接邀请人返利占位金额（分）
+    cooldown-hours: ${H5_REBATE_COOLDOWN_HOURS:24}    # FROZEN 满此时长解冻为 CONFIRMED
 wxpay:
   app-id: ${WXPAY_APP_ID:stub}
   app-secret: ${WX_APP_SECRET:}            # 公众号 appSecret，网页授权 code→openid 用

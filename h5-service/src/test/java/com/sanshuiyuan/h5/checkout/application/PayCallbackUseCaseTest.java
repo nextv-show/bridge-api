@@ -7,6 +7,7 @@ import com.sanshuiyuan.h5.checkout.infra.repository.DeviceSpecRepository;
 import com.sanshuiyuan.h5.checkout.infra.repository.H5OrderRepository;
 import com.sanshuiyuan.h5.checkout.infra.repository.PaymentInboxRepository;
 import com.sanshuiyuan.h5.checkout.infra.wxpay.WxPayCallbackVerifier;
+import com.sanshuiyuan.h5.rebate.application.RebateService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -31,9 +32,10 @@ class PayCallbackUseCaseTest {
     @Mock H5OrderRepository orderRepo;
     @Mock DeviceSpecRepository specRepo;
     @Mock ApplicationEventPublisher eventPublisher;
+    @Mock RebateService rebateService;
 
     private PayCallbackUseCase createUseCase() {
-        return new PayCallbackUseCase(verifier, inboxRepo, orderRepo, specRepo, eventPublisher);
+        return new PayCallbackUseCase(verifier, inboxRepo, orderRepo, specRepo, eventPublisher, rebateService);
     }
 
     private void setField(Object target, String field, Object value) {
@@ -81,6 +83,9 @@ class PayCallbackUseCaseTest {
         assertThat(saved.getWxTransactionId()).isEqualTo("wx-txn-001");
         assertThat(saved.getSn()).startsWith("SN-PENDING-");
         assertThat(saved.getCooldownEndAt()).isNotNull();
+
+        // 011: 支付成功须触发返利冻结（自然流量订单 inviter/grand 为 null，仍调用一次）
+        verify(rebateService).freezeForOrder(1L, null, null);
     }
 
     @Test
