@@ -43,6 +43,24 @@ public class InternalUserController {
     }
 
     /**
+     * S2S：按 userId 取微信标识（供 asset-service 发起小程序 JSAPI 支付时定位 payer openid）。
+     * openidWx 在小程序登录时写入（jscode2session 的 openid）。/internal/** 已由 S2sTokenFilter 鉴权。
+     */
+    @GetMapping("/{id}")
+    public ResponseEntity<Map<String, Object>> getUser(@PathVariable("id") Long userId) {
+        return userRepository.findById(userId)
+                .<ResponseEntity<Map<String, Object>>>map(u -> {
+                    Map<String, Object> body = new LinkedHashMap<>();
+                    body.put("id", u.getId());
+                    body.put("nickname", u.getNickname());
+                    body.put("openidWx", u.getOpenidWx());
+                    body.put("openidApp", u.getOpenidApp());
+                    return ResponseEntity.ok(body);
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
      * H5 登录成功后并号（spec 012）。/internal/** 已由 S2sTokenFilter 鉴权，不对外暴露。
      * inviterId 由 H5 端 RefIdCodec 解密后传入，仅首次创建写入关系链。
      */

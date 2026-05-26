@@ -32,6 +32,9 @@ wxpay:
   # verification.
   app-id: ${WXPAY_APP_ID:}
   notify-url: ${WXPAY_NOTIFY_URL:}
+  # 小程序支付：payer appid 为小程序 appid（非公众号 app-id）；水费充值回调独立地址
+  mp-app-id: ${WX_MP_APP_ID:}
+  wallet-notify-url: ${WXPAY_WALLET_NOTIFY_URL:}
 
 user-service:
   base-url: http://localhost:8081

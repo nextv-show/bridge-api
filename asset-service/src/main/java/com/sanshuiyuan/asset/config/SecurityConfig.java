@@ -29,7 +29,7 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/actuator/health", "/api-docs/**", "/swagger-ui/**", "/wxpay/callback").permitAll()
+                .requestMatchers("/actuator/health", "/api-docs/**", "/swagger-ui/**", "/wxpay/callback", "/wxpay/wallet-callback").permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(new JwtBearerFilter(), UsernamePasswordAuthenticationFilter.class);
