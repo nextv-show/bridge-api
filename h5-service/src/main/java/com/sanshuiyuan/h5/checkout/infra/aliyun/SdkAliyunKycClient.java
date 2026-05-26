@@ -59,12 +59,14 @@ public class SdkAliyunKycClient implements AliyunKycClient {
         try {
             InitFaceVerifyResponseBody body = client.initFaceVerify(req).getBody();
             if (body == null || body.getResultObject() == null) {
+                log.warn("InitFaceVerify 无 resultObject code={} message={}",
+                        body == null ? null : body.getCode(), body == null ? null : body.getMessage());
                 throw new BizException(ErrorCode.KYC_INIT_FAILED, "实名认证初始化无返回");
             }
             String certifyId = body.getResultObject().getCertifyId();
             String certifyUrl = body.getResultObject().getCertifyUrl();
             if (certifyId == null || certifyUrl == null) {
-                log.warn("InitFaceVerify 返回缺字段 code={}", body.getCode());
+                log.warn("InitFaceVerify 返回缺字段 code={} message={}", body.getCode(), body.getMessage());
                 throw new BizException(ErrorCode.KYC_INIT_FAILED, "实名认证初始化失败");
             }
             return new KycInitResult(certifyId, null, certifyUrl);
