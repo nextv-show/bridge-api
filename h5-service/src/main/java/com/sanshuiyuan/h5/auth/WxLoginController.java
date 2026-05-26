@@ -42,8 +42,9 @@ public class WxLoginController {
     @PostMapping("/wx-login")
     public ApiResponse<WxLoginResponse> wxLogin(@Valid @RequestBody WxLoginRequest req) {
         String openid = wxAuthClient.code2openid(req.code());
-        // 定位/创建本人；首次注册时用 refId 建立 L1/L2 关系链（解码失败/自我邀请/已注册均降级，绝不阻断登录）。
-        referralBindingService.onWxLogin(openid, req.refId());
+        // 仅定位/创建本人 + 写入微信昵称/头像资料快照（014）；L1/L2 关系链改由用户落地页显式确认后经
+        // confirm-binding 绑定。
+        referralBindingService.onWxLogin(openid, req.nickname(), req.avatarUrl());
         String token = jwtService.generate(openid);
         // spec 012: 并入统一用户体系。inviterId 由 RefIdCodec 解密后下传（解码失败按自然流量）。
         // H5 网页授权仅得 openid，unionid 暂为 null（user-service 按 openid 查/建）。
@@ -64,11 +65,13 @@ public class WxLoginController {
     }
 
     /**
-     * @param code  微信网页授权 code（必填）。
-     * @param refId 推广 ref_id（可选，推广者 user_id 的 HMAC 签名形式）。仅在首次注册时用于建立 L1/L2 关系链；
-     *              已注册用户携带亦不改变关系链。解码失败按自然流量处理，不阻断登录（绑定逻辑见 008b）。
+     * @param code      微信网页授权 code（必填）。
+     * @param refId     推广 ref_id（可选，推广者 user_id 的 HMAC 签名形式）。绑定改由 confirm-binding 显式触发；
+     *                  此处仅用于统一用户体系同步（syncH5），解码失败按自然流量，不阻断登录。
+     * @param nickname  微信昵称（可选）。前端经微信授权获取后回传，登录时写入资料快照（014）。
+     * @param avatarUrl 微信头像 URL（可选）。前端经微信授权获取后回传，登录时写入资料快照（014）。
      */
-    public record WxLoginRequest(@NotBlank String code, String refId) {}
+    public record WxLoginRequest(@NotBlank String code, String refId, String nickname, String avatarUrl) {}
 
     public record WxLoginResponse(String token) {}
 }

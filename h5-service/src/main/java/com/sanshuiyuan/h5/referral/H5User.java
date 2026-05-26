@@ -36,6 +36,14 @@ public class H5User {
     @Column(nullable = false, unique = true, length = 64)
     private String openid;
 
+    /** 微信昵称快照（014），登录时写入。仅用于邀请确认页脱敏展示，与关系链无关。 */
+    @Column(length = 64)
+    private String nickname;
+
+    /** 微信头像 URL 快照（014），登录时写入。仅用于邀请确认页展示，与关系链无关。 */
+    @Column(name = "avatar_url", length = 512)
+    private String avatarUrl;
+
     /** L1 邀请人 H5 user_id（自然流量为 null）。仅首次注册写入，已注册用户不可改。 */
     @Column(name = "inviter_id")
     private Long inviterId;
@@ -69,6 +77,25 @@ public class H5User {
         this.grandInviterId = grandInviterId;
     }
 
+    /**
+     * 刷新微信资料快照（昵称/头像）。仅在传入值非空且确有变化时更新，
+     * 避免登录未携带资料时把既有快照清空。
+     *
+     * @return 是否发生变更（用于调用方决定是否落库）。
+     */
+    public boolean updateProfile(String nickname, String avatarUrl) {
+        boolean changed = false;
+        if (nickname != null && !nickname.isBlank() && !nickname.equals(this.nickname)) {
+            this.nickname = nickname;
+            changed = true;
+        }
+        if (avatarUrl != null && !avatarUrl.isBlank() && !avatarUrl.equals(this.avatarUrl)) {
+            this.avatarUrl = avatarUrl;
+            changed = true;
+        }
+        return changed;
+    }
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
@@ -82,6 +109,8 @@ public class H5User {
 
     public Long getId() { return id; }
     public String getOpenid() { return openid; }
+    public String getNickname() { return nickname; }
+    public String getAvatarUrl() { return avatarUrl; }
     public Long getInviterId() { return inviterId; }
     public Long getGrandInviterId() { return grandInviterId; }
     public LocalDateTime getCreatedAt() { return createdAt; }

@@ -1,17 +1,20 @@
 package com.sanshuiyuan.h5.referral;
 
+import com.sanshuiyuan.h5.common.BizException;
+import com.sanshuiyuan.h5.common.ErrorCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * H5 关系链绑定服务（008b）。在微信网页授权登录时定位/创建本人，并在<b>首次注册</b>时建立 L1/L2 关系链。
+ * H5 关系链绑定服务（008b / 014）。微信网页授权登录时仅定位/创建本人；L1/L2 关系链改由用户在落地页
+ * <b>显式确认</b>后经 {@link #confirmBinding(String, String)} 一次性写入（spec 014 邀请确认）。
  *
  * <p><b>合规铁律</b>：
  * <ul>
- *   <li>关系链<b>仅首次注册写入</b>；已注册用户再次携带 ref_id 登录，绝不触碰其 {@code inviter_id}/{@code grand_inviter_id}；</li>
- *   <li>ref_id 解码失败按<b>自然流量</b>处理，绝不阻断登录注册；</li>
+ *   <li>关系链<b>仅首次绑定写入</b>；已绑定用户再次确认幂等返回，绝不触碰其 {@code inviter_id}/{@code grand_inviter_id}；</li>
+ *   <li>ref_id 解码失败按<b>自然流量</b>处理，绝不阻断登录；</li>
  *   <li>L2（{@code grandInviterId}）仅取「邀请人的 inviter_id」一次性快照，<b>不向上递归</b>（L3+ 物理隔离）。</li>
  * </ul>
  */
@@ -29,45 +32,54 @@ public class ReferralBindingService {
     }
 
     /**
-     * 微信登录时定位本人（按 openid）；不存在则视为<b>首次注册</b>，创建用户并尝试用 {@code refId} 绑定 L1/L2。
-     * 已存在用户直接返回，关系链字段保持不变。
+     * 微信登录时定位本人（按 openid）；不存在则视为首次登录，<b>仅创建用户、不绑定关系链</b>，
+     * 并写入微信昵称/头像资料快照（014）。关系链绑定改由用户显式确认后经
+     * {@link #confirmBinding(String, String)} 触发。
      *
      * @return 当前 H5 用户（已落库）。
      */
     @Transactional
-    public H5User onWxLogin(String openid, String refId) {
-        var existing = userRepo.findByOpenid(openid);
-        if (existing.isPresent()) {
-            // 已注册用户：登录分支绝不触碰关系链（仅首次注册可写入）。
-            return existing.get();
+    public H5User onWxLogin(String openid, String nickname, String avatarUrl) {
+        H5User user = userRepo.findByOpenid(openid)
+                .orElseGet(() -> userRepo.save(H5User.create(openid)));
+        // 刷新资料快照（仅资料，绝不触碰关系链）；无变更则不落库。
+        if (user.updateProfile(nickname, avatarUrl)) {
+            userRepo.save(user);
         }
-
-        // 首次注册：先落库取得自身 id（自我邀请判定依赖该 id）。
-        H5User user = userRepo.save(H5User.create(openid));
-        bindReferralOnRegister(user, refId);
         return user;
     }
 
     /**
-     * 首次注册时的关系链绑定：解码 refId → 查邀请人 → 写入 L1/L2。任一降级条件命中则按自然流量（不绑定、不报错）。
+     * 用户在落地页<b>显式确认</b>邀请后绑定 L1/L2 关系链（spec 014）。仅首次绑定可写、幂等。
+     *
+     * <p>解码 refId → 查邀请人 → 写入 L1/L2；任一降级条件（解码失败/邀请人不存在/自我邀请/已绑定）
+     * 命中则不绑定、不报错。
+     *
+     * @return {@code true} 表示本次新建立了绑定；{@code false} 表示已绑定（幂等）或降级未绑定。
      */
-    private void bindReferralOnRegister(H5User newUser, String refId) {
+    @Transactional
+    public boolean confirmBinding(String openid, String refId) {
+        H5User user = userRepo.findByOpenid(openid)
+                .orElseThrow(() -> new BizException(ErrorCode.UNAUTHORIZED));
+        if (user.getInviterId() != null) {
+            return false; // 已绑定：幂等，绝不覆盖既有关系链。
+        }
         Long inviterId = resolveInviterId(refId);
         if (inviterId == null) {
-            return; // 自然流量：无 refId / 解码失败。
+            return false; // 自然流量：无 refId / 解码失败。
         }
-        if (inviterId.equals(newUser.getId())) {
-            // 自我邀请：refId 解出自身 user_id，忽略（不绑定，按自然流量）。
-            return;
+        if (inviterId.equals(user.getId())) {
+            return false; // 自我邀请：refId 解出自身 user_id，忽略。
         }
         H5User inviter = userRepo.findById(inviterId).orElse(null);
         if (inviter == null) {
-            return; // 邀请人不存在：按自然流量处理。
+            return false; // 邀请人不存在：按自然流量处理。
         }
         // L2 仅取邀请人的 inviter_id（一次性快照），严禁继续向上追溯（L3+ 物理隔离）。
         Long grandInviterId = inviter.getInviterId();
-        newUser.bindReferral(inviterId, grandInviterId);
-        userRepo.save(newUser);
+        user.bindReferral(inviterId, grandInviterId);
+        userRepo.save(user);
+        return true;
     }
 
     /**

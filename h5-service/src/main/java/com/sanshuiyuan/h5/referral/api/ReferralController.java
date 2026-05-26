@@ -6,13 +6,20 @@ import com.sanshuiyuan.h5.common.BizException;
 import com.sanshuiyuan.h5.common.ErrorCode;
 import com.sanshuiyuan.h5.referral.H5User;
 import com.sanshuiyuan.h5.referral.H5UserRepository;
+import com.sanshuiyuan.h5.referral.InvalidRefIdException;
 import com.sanshuiyuan.h5.referral.RefIdCodec;
+import com.sanshuiyuan.h5.referral.ReferralBindingService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Map;
 
 /**
  * 推广关系链查询接口（009 T9.5）。<b>需登录态</b>（区别于公开的 /api/h5/wx/**）。
@@ -27,13 +34,16 @@ public class ReferralController {
 
     private final H5UserRepository userRepo;
     private final RefIdCodec refIdCodec;
+    private final ReferralBindingService referralBindingService;
     private final String linkBase;
 
     public ReferralController(H5UserRepository userRepo,
                               RefIdCodec refIdCodec,
+                              ReferralBindingService referralBindingService,
                               @Value("${h5.public-base-url:}") String publicBaseUrl) {
         this.userRepo = userRepo;
         this.refIdCodec = refIdCodec;
+        this.referralBindingService = referralBindingService;
         this.linkBase = publicBaseUrl == null ? "" : publicBaseUrl.replaceAll("/+$", "");
     }
 
@@ -48,4 +58,65 @@ public class ReferralController {
         String shareUrl = linkBase.isBlank() ? ("/?ref_id=" + refId) : (linkBase + "/?ref_id=" + refId);
         return ApiResponse.ok(new MyRefIdResponse(refId, shareUrl));
     }
+
+    @Operation(summary = "按 ref_id 解析推荐人脱敏资料",
+            description = "邀请确认页公开调用（无需登录）。仅返回脱敏昵称+头像，零可定位 PII；"
+                    + "ref_id 解码失败或推荐人不存在时静默返回 null（不报错、不泄露细节）。")
+    @GetMapping("/resolve-inviter")
+    public ApiResponse<ResolveInviterResponse> resolveInviter(@RequestParam("ref_id") String refId) {
+        final long inviterId;
+        try {
+            inviterId = refIdCodec.decode(refId);
+        } catch (InvalidRefIdException e) {
+            return ApiResponse.ok(null); // 解码失败：静默，不暴露细节。
+        }
+        H5User inviter = userRepo.findById(inviterId).orElse(null);
+        if (inviter == null) {
+            return ApiResponse.ok(null); // 推荐人不存在：静默。
+        }
+        return ApiResponse.ok(new ResolveInviterResponse(
+                maskNickname(inviter.getNickname()), inviter.getAvatarUrl()));
+    }
+
+    @Operation(summary = "确认邀请并绑定关系链",
+            description = "用户在落地页显式确认邀请后调用（登录态）。仅首次绑定可写、幂等；"
+                    + "解码失败/自我邀请/已绑定均不报错。返回 {bound: true/false}。")
+    @PostMapping("/confirm-binding")
+    public ApiResponse<Map<String, Boolean>> confirmBinding(@RequestBody ConfirmBindingRequest req) {
+        String openid = CurrentOpenid.require();
+        boolean bound = referralBindingService.confirmBinding(openid, req.refId());
+        return ApiResponse.ok(Map.of("bound", bound));
+    }
+
+    /**
+     * 昵称脱敏：首字 + {@code *} + 尾字；2 字及以下仅「首字 + *」。空昵称返回空串。
+     * 以 code point 计数，正确处理中文/含 emoji 的昵称。
+     */
+    static String maskNickname(String nickname) {
+        if (nickname == null || nickname.isBlank()) {
+            return "";
+        }
+        int cpCount = nickname.codePointCount(0, nickname.length());
+        String first = nickname.substring(0, nickname.offsetByCodePoints(0, 1));
+        if (cpCount <= 2) {
+            return first + "*";
+        }
+        String last = nickname.substring(nickname.offsetByCodePoints(0, cpCount - 1));
+        return first + "*" + last;
+    }
+
+    /**
+     * 邀请确认页推荐人脱敏资料（014）。
+     *
+     * @param nicknameMasked 脱敏昵称（首字*尾字）
+     * @param avatarUrl      头像 URL（微信头像，非可定位 PII）
+     */
+    public record ResolveInviterResponse(String nicknameMasked, String avatarUrl) {}
+
+    /**
+     * 确认邀请请求体（014）。
+     *
+     * @param refId 推广 ref_id（推广者 user_id 的 HMAC 签名形式）。
+     */
+    public record ConfirmBindingRequest(String refId) {}
 }
