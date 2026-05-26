@@ -39,11 +39,12 @@ class ReferralRepositoryL3GuardTest {
 
     @Test
     void h5UserRepository_exposesOnlyOpenidAndIdLookups() {
-        // 正向断言：H5UserRepository 仅暴露按 openid 的单点查询（继承自 JpaRepository 的 findById 等不计入声明方法）。
+        // 正向断言：H5UserRepository 仅暴露按 openid 的单点查询与按 inviter_id 的 L1 单层正向查询
+        // （继承自 JpaRepository 的 findById 等不计入声明方法）。getDeclaredMethods 顺序不保证，故用 InAnyOrder。
         List<String> declared = Arrays.stream(H5UserRepository.class.getDeclaredMethods())
                 .map(Method::getName)
                 .toList();
-        assertThat(declared).containsExactly("findByOpenid");
+        assertThat(declared).containsExactlyInAnyOrder("findByOpenid", "findByInviterId");
     }
 
     private void assertNoGrandInviterQueryCondition(Class<?> repository) {
