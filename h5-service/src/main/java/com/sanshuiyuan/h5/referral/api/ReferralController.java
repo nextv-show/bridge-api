@@ -8,13 +8,18 @@ import com.sanshuiyuan.h5.referral.H5User;
 import com.sanshuiyuan.h5.referral.H5UserRepository;
 import com.sanshuiyuan.h5.referral.InvalidRefIdException;
 import com.sanshuiyuan.h5.referral.RefIdCodec;
+import com.sanshuiyuan.h5.referral.ReferralBindingService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Map;
 
 /**
  * 推广关系链查询接口（009 T9.5）。<b>需登录态</b>（区别于公开的 /api/h5/wx/**）。
@@ -29,13 +34,16 @@ public class ReferralController {
 
     private final H5UserRepository userRepo;
     private final RefIdCodec refIdCodec;
+    private final ReferralBindingService referralBindingService;
     private final String linkBase;
 
     public ReferralController(H5UserRepository userRepo,
                               RefIdCodec refIdCodec,
+                              ReferralBindingService referralBindingService,
                               @Value("${h5.public-base-url:}") String publicBaseUrl) {
         this.userRepo = userRepo;
         this.refIdCodec = refIdCodec;
+        this.referralBindingService = referralBindingService;
         this.linkBase = publicBaseUrl == null ? "" : publicBaseUrl.replaceAll("/+$", "");
     }
 
@@ -70,6 +78,16 @@ public class ReferralController {
                 maskNickname(inviter.getNickname()), inviter.getAvatarUrl()));
     }
 
+    @Operation(summary = "确认邀请并绑定关系链",
+            description = "用户在落地页显式确认邀请后调用（登录态）。仅首次绑定可写、幂等；"
+                    + "解码失败/自我邀请/已绑定均不报错。返回 {bound: true/false}。")
+    @PostMapping("/confirm-binding")
+    public ApiResponse<Map<String, Boolean>> confirmBinding(@RequestBody ConfirmBindingRequest req) {
+        String openid = CurrentOpenid.require();
+        boolean bound = referralBindingService.confirmBinding(openid, req.refId());
+        return ApiResponse.ok(Map.of("bound", bound));
+    }
+
     /**
      * 昵称脱敏：首字 + {@code *} + 尾字；2 字及以下仅「首字 + *」。空昵称返回空串。
      * 以 code point 计数，正确处理中文/含 emoji 的昵称。
@@ -94,4 +112,11 @@ public class ReferralController {
      * @param avatarUrl      头像 URL（微信头像，非可定位 PII）
      */
     public record ResolveInviterResponse(String nicknameMasked, String avatarUrl) {}
+
+    /**
+     * 确认邀请请求体（014）。
+     *
+     * @param refId 推广 ref_id（推广者 user_id 的 HMAC 签名形式）。
+     */
+    public record ConfirmBindingRequest(String refId) {}
 }
