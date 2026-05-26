@@ -7,6 +7,7 @@ import com.sanshuiyuan.h5.checkout.infra.repository.DeviceSpecRepository;
 import com.sanshuiyuan.h5.checkout.infra.repository.H5OrderRepository;
 import com.sanshuiyuan.h5.checkout.infra.repository.PaymentInboxRepository;
 import com.sanshuiyuan.h5.checkout.infra.wxpay.WxPayCallbackVerifier;
+import com.sanshuiyuan.h5.rebate.application.RebateService;
 import com.sanshuiyuan.h5.wxmsg.event.OrderPaidEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,15 +32,18 @@ public class PayCallbackUseCase {
     private final H5OrderRepository orderRepo;
     private final DeviceSpecRepository specRepo;
     private final ApplicationEventPublisher eventPublisher;
+    private final RebateService rebateService;
 
     public PayCallbackUseCase(WxPayCallbackVerifier verifier, PaymentInboxRepository inboxRepo,
                                H5OrderRepository orderRepo, DeviceSpecRepository specRepo,
-                               ApplicationEventPublisher eventPublisher) {
+                               ApplicationEventPublisher eventPublisher,
+                               RebateService rebateService) {
         this.verifier = verifier;
         this.inboxRepo = inboxRepo;
         this.orderRepo = orderRepo;
         this.specRepo = specRepo;
         this.eventPublisher = eventPublisher;
+        this.rebateService = rebateService;
     }
 
     @Transactional
@@ -86,6 +90,10 @@ public class PayCallbackUseCase {
         LocalDateTime cooldownEnd = LocalDateTime.now().plusHours(24);
         order.markPaid(result.transactionId(), placeholderSn, cooldownEnd);
         orderRepo.save(order);
+
+        // 011: 按订单快照的 L1/L2 受益人冻结返利（FROZEN）。仅 L1/L2，绝不递归 L3+；
+        // 自然流量订单（无邀请人快照）不产生记录。与支付落库同一事务，金额暂为配置占位值。
+        rebateService.freezeForOrder(order.getId(), order.getInviterId(), order.getGrandInviterId());
 
         // Spec 106: 发布支付成功事件，事务提交后由 OrderPaidEventListener 异步推送模板消息
         String modelName = specRepo.findByModelCode(order.getModelCode())
