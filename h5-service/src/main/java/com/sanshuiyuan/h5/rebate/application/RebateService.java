@@ -1,5 +1,6 @@
 package com.sanshuiyuan.h5.rebate.application;
 
+import com.sanshuiyuan.h5.rebate.domain.CancelReason;
 import com.sanshuiyuan.h5.rebate.domain.PendingRebate;
 import com.sanshuiyuan.h5.rebate.domain.RebateLevel;
 import com.sanshuiyuan.h5.rebate.domain.RebateStatus;
@@ -81,5 +82,43 @@ public class RebateService {
             log.info("返利解冻确认 {} 条（冷静期 {}h 已满）", due.size(), props.getCooldownHours());
         }
         return due.size();
+    }
+
+    /**
+     * 退款取消：实体商品买卖合同解除（退款成功）时，取消该订单下的全部返利。
+     * 按返利当前状态决定取消原因——
+     * <ul>
+     *   <li>FROZEN（冷静期内退款）→ CANCELLED(REFUND_COOLDOWN)；</li>
+     *   <li>CONFIRMED（冷静期后退款）→ CANCELLED(REFUND_POST_COOLDOWN)；</li>
+     *   <li>已 CANCELLED → 幂等跳过。</li>
+     * </ul>
+     *
+     * @return 本次取消的记录数
+     */
+    @Transactional
+    public int cancelForRefund(Long orderId) {
+        List<PendingRebate> rebates = repo.findByOrderId(orderId);
+        int cancelled = 0;
+        for (PendingRebate r : rebates) {
+            switch (r.getStatus()) {
+                case FROZEN -> {
+                    r.cancel(CancelReason.REFUND_COOLDOWN);
+                    repo.save(r);
+                    cancelled++;
+                }
+                case CONFIRMED -> {
+                    r.cancel(CancelReason.REFUND_POST_COOLDOWN);
+                    repo.save(r);
+                    cancelled++;
+                }
+                case CANCELLED -> {
+                    // 幂等：重复退款回调不重复取消。
+                }
+            }
+        }
+        if (cancelled > 0) {
+            log.info("退款取消返利 orderId={} 共 {} 条", orderId, cancelled);
+        }
+        return cancelled;
     }
 }
