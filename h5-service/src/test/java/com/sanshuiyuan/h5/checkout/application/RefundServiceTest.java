@@ -15,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.lang.reflect.Field;
 import java.time.LocalDateTime;
@@ -35,9 +36,10 @@ class RefundServiceTest {
     @Mock H5OrderRepository orderRepo;
     @Mock RefundRepository refundRepo;
     @Mock WxRefundClient wxRefundClient;
+    @Mock ApplicationEventPublisher eventPublisher;
 
     private RefundService createService() {
-        return new RefundService(orderRepo, refundRepo, wxRefundClient);
+        return new RefundService(orderRepo, refundRepo, wxRefundClient, eventPublisher);
     }
 
     // ─── helpers ───

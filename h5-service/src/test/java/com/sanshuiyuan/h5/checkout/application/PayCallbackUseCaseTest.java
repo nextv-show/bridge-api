@@ -3,6 +3,7 @@ package com.sanshuiyuan.h5.checkout.application;
 import com.sanshuiyuan.h5.checkout.domain.H5Order;
 import com.sanshuiyuan.h5.checkout.domain.OrderStatus;
 import com.sanshuiyuan.h5.checkout.domain.PaymentInbox;
+import com.sanshuiyuan.h5.checkout.infra.repository.DeviceSpecRepository;
 import com.sanshuiyuan.h5.checkout.infra.repository.H5OrderRepository;
 import com.sanshuiyuan.h5.checkout.infra.repository.PaymentInboxRepository;
 import com.sanshuiyuan.h5.checkout.infra.wxpay.WxPayCallbackVerifier;
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.util.Optional;
@@ -27,9 +29,11 @@ class PayCallbackUseCaseTest {
     @Mock WxPayCallbackVerifier verifier;
     @Mock PaymentInboxRepository inboxRepo;
     @Mock H5OrderRepository orderRepo;
+    @Mock DeviceSpecRepository specRepo;
+    @Mock ApplicationEventPublisher eventPublisher;
 
     private PayCallbackUseCase createUseCase() {
-        return new PayCallbackUseCase(verifier, inboxRepo, orderRepo);
+        return new PayCallbackUseCase(verifier, inboxRepo, orderRepo, specRepo, eventPublisher);
     }
 
     private void setField(Object target, String field, Object value) {
