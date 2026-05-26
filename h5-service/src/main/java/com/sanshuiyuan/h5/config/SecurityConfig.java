@@ -32,8 +32,10 @@ public class SecurityConfig {
                     "/api/h5/landing/**",
                     "/api/h5/specs",
                     "/api/h5/auth/**",
-                    // 微信 JS-SDK 签名 / 分享文案：公开只读（009）。注意 /api/h5/referral/** 仍需登录态。
+                    // 微信 JS-SDK 签名 / 分享文案：公开只读（009）。注意 /api/h5/referral/** 其余仍需登录态。
                     "/api/h5/wx/**",
+                    // 邀请确认页解析推荐人脱敏资料：公开只读（014），仅脱敏昵称+头像，零可定位 PII。
+                    "/api/h5/referral/resolve-inviter",
                     "/api/h5/pay/callback",
                     "/api/h5/pay/refund-callback",
                     "/api/h5/pay/simulate-callback",
