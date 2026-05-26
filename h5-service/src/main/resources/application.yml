@@ -80,6 +80,11 @@ wx:
     refund-success: ${WX_TPL_REFUND_SUCCESS:} # 退款成功通知模板 ID，空则降级不推送
   subscribe:
     cache-ttl-seconds: 3600                   # 用户关注状态 Redis 缓存时长（1h）
+  # Spec 009: 微信 JS-SDK 分享卡片文案（后端下发，前端不硬编码）。合规铁律：严禁金融化话术。
+  share:
+    title: ${WX_SHARE_TITLE:三水元 · AI 健康饮水}
+    desc: ${WX_SHARE_DESC:开启 AI 健康饮水档案}
+    img-url: ${WX_SHARE_IMG_URL:}             # 分享缩略图绝对 URL，空则前端兜底品牌 logo
 
 aliyun:
   kyc:
