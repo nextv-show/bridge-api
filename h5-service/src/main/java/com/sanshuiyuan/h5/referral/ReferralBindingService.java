@@ -32,15 +32,21 @@ public class ReferralBindingService {
     }
 
     /**
-     * 微信登录时定位本人（按 openid）；不存在则视为首次登录，<b>仅创建用户、不绑定关系链</b>。
-     * 关系链绑定改由用户显式确认后经 {@link #confirmBinding(String, String)} 触发（spec 014）。
+     * 微信登录时定位本人（按 openid）；不存在则视为首次登录，<b>仅创建用户、不绑定关系链</b>，
+     * 并写入微信昵称/头像资料快照（014）。关系链绑定改由用户显式确认后经
+     * {@link #confirmBinding(String, String)} 触发。
      *
      * @return 当前 H5 用户（已落库）。
      */
     @Transactional
-    public H5User onWxLogin(String openid) {
-        return userRepo.findByOpenid(openid)
+    public H5User onWxLogin(String openid, String nickname, String avatarUrl) {
+        H5User user = userRepo.findByOpenid(openid)
                 .orElseGet(() -> userRepo.save(H5User.create(openid)));
+        // 刷新资料快照（仅资料，绝不触碰关系链）；无变更则不落库。
+        if (user.updateProfile(nickname, avatarUrl)) {
+            userRepo.save(user);
+        }
+        return user;
     }
 
     /**

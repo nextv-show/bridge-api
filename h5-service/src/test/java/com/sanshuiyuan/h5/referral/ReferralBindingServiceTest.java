@@ -80,23 +80,26 @@ class ReferralBindingServiceTest {
         when(userRepo.findByOpenid("newbie")).thenReturn(Optional.empty());
         stubAutoIncrementSave();
 
-        H5User result = service.onWxLogin("newbie");
+        H5User result = service.onWxLogin("newbie", "小明", "https://wx.qq.com/a.png");
 
         assertThat(result.getInviterId()).isNull();
         assertThat(result.getGrandInviterId()).isNull();
+        assertThat(result.getNickname()).isEqualTo("小明");        // 资料快照写入
+        assertThat(result.getAvatarUrl()).isEqualTo("https://wx.qq.com/a.png");
         verify(userRepo, never()).findById(any());
     }
 
     @Test
-    void onWxLogin_existingUser_returnedUntouched() {
+    void onWxLogin_existingUser_chainUntouched_profileRefreshed() {
         H5User existing = userWithChain(777L, 100L, 50L);
         when(userRepo.findByOpenid("veteran")).thenReturn(Optional.of(existing));
+        when(userRepo.save(any(H5User.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        H5User result = service.onWxLogin("veteran");
+        H5User result = service.onWxLogin("veteran", "老王", "https://wx.qq.com/b.png");
 
-        assertThat(result.getInviterId()).isEqualTo(100L);
+        assertThat(result.getInviterId()).isEqualTo(100L);   // 关系链不变
         assertThat(result.getGrandInviterId()).isEqualTo(50L);
-        verify(userRepo, never()).save(any());
+        assertThat(result.getNickname()).isEqualTo("老王");   // 资料快照刷新
         verify(userRepo, never()).findById(any());
     }
 
