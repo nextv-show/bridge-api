@@ -2,13 +2,16 @@ package com.sanshuiyuan.h5.rebate.application;
 
 import com.sanshuiyuan.h5.rebate.domain.PendingRebate;
 import com.sanshuiyuan.h5.rebate.domain.RebateLevel;
+import com.sanshuiyuan.h5.rebate.domain.RebateStatus;
 import com.sanshuiyuan.h5.rebate.infra.repository.PendingRebateRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -58,5 +61,25 @@ public class RebateService {
             log.info("返利冻结 orderId={} level=L2 beneficiary={}", orderId, grandInviterId);
         }
         // 严禁 L3+：订单快照本就不含更上层 id，此处不做任何向上递归。
+    }
+
+    /**
+     * 解冻：将冷静期已满（frozen_at + cooldownHours <= now）的 FROZEN 返利确认为 CONFIRMED。
+     * 由定时任务周期调用；状态流转由 {@link PendingRebate#confirm()} 守卫。
+     *
+     * @return 本次确认的记录数
+     */
+    @Transactional
+    public int confirmExpired() {
+        LocalDateTime threshold = LocalDateTime.now().minusHours(props.getCooldownHours());
+        List<PendingRebate> due = repo.findByStatusAndFrozenAtBefore(RebateStatus.FROZEN, threshold);
+        for (PendingRebate r : due) {
+            r.confirm();
+            repo.save(r);
+        }
+        if (!due.isEmpty()) {
+            log.info("返利解冻确认 {} 条（冷静期 {}h 已满）", due.size(), props.getCooldownHours());
+        }
+        return due.size();
     }
 }
