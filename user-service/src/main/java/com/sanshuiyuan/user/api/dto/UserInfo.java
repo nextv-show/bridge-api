@@ -8,6 +8,10 @@ public class UserInfo {
     private String avatarUrl;
     private String activeRole;
     private List<String> roles;
+    /** L1 邀请人 user_id（只读输出，自然流量为 null）。关系链仅首次注册写入，无任何 API 可改（008b）。 */
+    private Long inviterId;
+    /** L2 间接邀请人 user_id（只读输出，可 null）。仅单条快照展示，严禁向上递归（L3+ 物理隔离）。 */
+    private Long grandInviterId;
 
     public UserInfo() {}
 
@@ -33,4 +37,10 @@ public class UserInfo {
 
     public List<String> getRoles() { return roles; }
     public void setRoles(List<String> roles) { this.roles = roles; }
+
+    public Long getInviterId() { return inviterId; }
+    public void setInviterId(Long inviterId) { this.inviterId = inviterId; }
+
+    public Long getGrandInviterId() { return grandInviterId; }
+    public void setGrandInviterId(Long grandInviterId) { this.grandInviterId = grandInviterId; }
 }
