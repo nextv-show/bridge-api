@@ -7,8 +7,10 @@ import com.sanshuiyuan.h5.common.ErrorCode;
 import com.sanshuiyuan.h5.referral.H5User;
 import com.sanshuiyuan.h5.referral.H5UserRepository;
 import com.sanshuiyuan.h5.referral.InvalidRefIdException;
+import com.sanshuiyuan.h5.referral.NicknameMasker;
 import com.sanshuiyuan.h5.referral.RefIdCodec;
 import com.sanshuiyuan.h5.referral.ReferralBindingService;
+import com.sanshuiyuan.h5.referral.ReferralQueryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Value;
@@ -35,15 +37,18 @@ public class ReferralController {
     private final H5UserRepository userRepo;
     private final RefIdCodec refIdCodec;
     private final ReferralBindingService referralBindingService;
+    private final ReferralQueryService referralQueryService;
     private final String linkBase;
 
     public ReferralController(H5UserRepository userRepo,
                               RefIdCodec refIdCodec,
                               ReferralBindingService referralBindingService,
+                              ReferralQueryService referralQueryService,
                               @Value("${h5.public-base-url:}") String publicBaseUrl) {
         this.userRepo = userRepo;
         this.refIdCodec = refIdCodec;
         this.referralBindingService = referralBindingService;
+        this.referralQueryService = referralQueryService;
         this.linkBase = publicBaseUrl == null ? "" : publicBaseUrl.replaceAll("/+$", "");
     }
 
@@ -75,7 +80,18 @@ public class ReferralController {
             return ApiResponse.ok(null); // 推荐人不存在：静默。
         }
         return ApiResponse.ok(new ResolveInviterResponse(
-                maskNickname(inviter.getNickname()), inviter.getAvatarUrl()));
+                NicknameMasker.mask(inviter.getNickname()), inviter.getAvatarUrl()));
+    }
+
+    @Operation(summary = "我的推荐人列表与汇总",
+            description = "登录态。返回当前用户直接推荐（L1）的被推荐人脱敏列表与汇总计数；"
+                    + "status=ALL|REGISTERED|PURCHASED 过滤（非白名单值按 ALL 处理）。"
+                    + "DTO 零层级字段，不暴露关系链层级。")
+    @GetMapping("/my-referrals")
+    public ApiResponse<MyReferralsResponse> myReferrals(
+            @RequestParam(name = "status", defaultValue = "ALL") String status) {
+        String openid = CurrentOpenid.require();
+        return ApiResponse.ok(referralQueryService.myReferrals(openid, status));
     }
 
     @Operation(summary = "确认邀请并绑定关系链",
@@ -86,23 +102,6 @@ public class ReferralController {
         String openid = CurrentOpenid.require();
         boolean bound = referralBindingService.confirmBinding(openid, req.refId());
         return ApiResponse.ok(Map.of("bound", bound));
-    }
-
-    /**
-     * 昵称脱敏：首字 + {@code *} + 尾字；2 字及以下仅「首字 + *」。空昵称返回空串。
-     * 以 code point 计数，正确处理中文/含 emoji 的昵称。
-     */
-    static String maskNickname(String nickname) {
-        if (nickname == null || nickname.isBlank()) {
-            return "";
-        }
-        int cpCount = nickname.codePointCount(0, nickname.length());
-        String first = nickname.substring(0, nickname.offsetByCodePoints(0, 1));
-        if (cpCount <= 2) {
-            return first + "*";
-        }
-        String last = nickname.substring(nickname.offsetByCodePoints(0, cpCount - 1));
-        return first + "*" + last;
     }
 
     /**
