@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sanshuiyuan.ess.config.EssProperties;
+import com.sanshuiyuan.ess.config.SigningPreCheckInterceptor;
 import com.sanshuiyuan.ess.domain.EssFlowRecord;
 import com.sanshuiyuan.ess.domain.FlowStatus;
 import com.sanshuiyuan.ess.exception.EssFlowException;
@@ -33,17 +34,20 @@ public class EssContractService {
     private final EssFlowRecordRepository flowRecordRepository;
     private final EssApiLogService apiLogService;
     private final ObjectMapper objectMapper;
+    private final SigningPreCheckInterceptor signingPreCheck;
 
     public EssContractService(EssApiClient apiClient,
                                EssProperties properties,
                                EssFlowRecordRepository flowRecordRepository,
                                EssApiLogService apiLogService,
-                               ObjectMapper objectMapper) {
+                               ObjectMapper objectMapper,
+                               SigningPreCheckInterceptor signingPreCheck) {
         this.apiClient = apiClient;
         this.properties = properties;
         this.flowRecordRepository = flowRecordRepository;
         this.apiLogService = apiLogService;
         this.objectMapper = objectMapper;
+        this.signingPreCheck = signingPreCheck;
     }
 
     /**
@@ -104,7 +108,29 @@ public class EssContractService {
      */
     @Transactional
     public void startFlow(String contractId) {
+        doStartFlow(contractId, null);
+    }
+
+    /**
+     * 启动签署流程（带身份核验校验）。
+     * <p>
+     * 身份 PASSED 才放行 SIGNING，否则抛出异常阻断签署进入支付环节。
+     *
+     * @param contractId 业务合同 ID
+     * @param userId     用户 ID（不为空时进行身份核验校验）
+     */
+    @Transactional
+    public void startFlow(String contractId, Long userId) {
+        doStartFlow(contractId, userId);
+    }
+
+    private void doStartFlow(String contractId, Long userId) {
         EssFlowRecord record = findFlowRecord(contractId);
+
+        // 签署前置校验：身份 PASSED 才放行 SIGNING
+        if (userId != null) {
+            signingPreCheck.checkIdentityVerified(contractId, userId);
+        }
 
         if (record.getFlowStatus() != FlowStatus.CREATED) {
             throw new EssFlowException(contractId, record.getEssFlowId(),
