@@ -38,6 +38,7 @@ public class ContractArchiveService {
     private final OssStorageClient ossStorageClient;
     private final TencentCloudStorageClient tencentCloudStorageClient;
     private final OssProperties ossProperties;
+    private final CertificateService certificateService;
 
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
@@ -48,12 +49,14 @@ public class ContractArchiveService {
                                    EssDocumentService essDocumentService,
                                    OssStorageClient ossStorageClient,
                                    TencentCloudStorageClient tencentCloudStorageClient,
-                                   OssProperties ossProperties) {
+                                   OssProperties ossProperties,
+                                   CertificateService certificateService) {
         this.contractRepository = contractRepository;
         this.essDocumentService = essDocumentService;
         this.ossStorageClient = ossStorageClient;
         this.tencentCloudStorageClient = tencentCloudStorageClient;
         this.ossProperties = ossProperties;
+        this.certificateService = certificateService;
     }
 
     /**
@@ -118,6 +121,16 @@ public class ContractArchiveService {
             contractRepository.save(contract);
 
             log.info("合同归档完成 [contractNo={}, sha256={}]", contract.getContractNo(), sha256Hash);
+
+            // 7. 归档完成后自动触发待出证标记
+            try {
+                contract.markPendingCertificate();
+                contractRepository.save(contract);
+                log.info("合同已标记待出证 [contractNo={}]", contract.getContractNo());
+            } catch (Exception e) {
+                log.warn("标记待出证失败，不影响归档结果 [contractNo={}]: {}",
+                        contract.getContractNo(), e.getMessage());
+            }
 
             return ArchiveResult.success(contractId, contract.getContractNo(),
                     tencentCloudUrl, ossUrl, sha256Hash);
