@@ -42,6 +42,18 @@ public class Contract {
     }
 
     /**
+     * 签署来源枚举。
+     */
+    public enum SignSource {
+        /** H5 移动端 */
+        H5,
+        /** 微信小程序 */
+        MINI,
+        /** Flutter App */
+        APP
+    }
+
+    /**
      * 合同状态枚举（状态机）。
      */
     public enum ContractStatus {
@@ -133,6 +145,10 @@ public class Contract {
     @Column(name = "archived_at")
     private LocalDateTime archivedAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "sign_source", length = 16)
+    private SignSource signSource;
+
     @Column(name = "ess_flow_id", length = 128)
     private String essFlowId;
 
@@ -177,6 +193,16 @@ public class Contract {
         validateTransition(ContractStatus.SIGNING);
         this.status = ContractStatus.SIGNING;
         this.essFlowId = essFlowId;
+    }
+
+    /**
+     * 进入签署流程（带签署来源）。
+     */
+    public void startSigning(String essFlowId, SignSource signSource) {
+        validateTransition(ContractStatus.SIGNING);
+        this.status = ContractStatus.SIGNING;
+        this.essFlowId = essFlowId;
+        this.signSource = signSource;
     }
 
     /**
@@ -296,6 +322,7 @@ public class Contract {
     public int getDownloadCount() { return downloadCount; }
     public LocalDateTime getArchivedAt() { return archivedAt; }
     public String getEssFlowId() { return essFlowId; }
+    public SignSource getSignSource() { return signSource; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
 }
