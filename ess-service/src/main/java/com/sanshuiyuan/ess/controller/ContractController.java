@@ -70,6 +70,32 @@ public class ContractController {
         ));
     }
 
+    // ========== T17.10: GET /{id}/preview ==========
+
+    /**
+     * 合同预览。
+     * <p>
+     * 返回主合同+附件预览内容。
+     *
+     * @param id 合同 ID
+     * @return 合同预览数据
+     */
+    @GetMapping("/{id}/preview")
+    public ResponseEntity<Map<String, Object>> previewContract(@PathVariable Long id) {
+        log.debug("合同预览请求 [contractId={}]", id);
+
+        GenerateContractResult result = generationService.getContractContent(id);
+
+        return ResponseEntity.ok(Map.of(
+                "code", 0,
+                "contractId", result.contractId(),
+                "contractNo", result.contractNo(),
+                "status", result.status().name(),
+                "mainContract", result.mainContractContent(),
+                "attachment", result.attachmentContent()
+        ));
+    }
+
     private String requireParam(Map<String, String> request, String key) {
         String value = request.get(key);
         if (value == null || value.isBlank()) {
