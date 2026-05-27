@@ -5,6 +5,7 @@ import com.sanshuiyuan.ess.config.EssProperties;
 import com.sanshuiyuan.ess.domain.Contract;
 import com.sanshuiyuan.ess.domain.Contract.CertificateStatus;
 import com.sanshuiyuan.ess.domain.Contract.ContractStatus;
+import com.sanshuiyuan.ess.domain.ContractAuditTrail;
 import com.sanshuiyuan.ess.infra.client.EssApiClient;
 import com.sanshuiyuan.ess.infra.repository.ContractRepository;
 import org.slf4j.Logger;
@@ -28,13 +29,16 @@ public class CertificateService {
     private final ContractRepository contractRepository;
     private final EssApiClient essApiClient;
     private final EssProperties properties;
+    private final AuditTrailService auditTrailService;
 
     public CertificateService(ContractRepository contractRepository,
                                EssApiClient essApiClient,
-                               EssProperties properties) {
+                               EssProperties properties,
+                               AuditTrailService auditTrailService) {
         this.contractRepository = contractRepository;
         this.essApiClient = essApiClient;
         this.properties = properties;
+        this.auditTrailService = auditTrailService;
     }
 
     /**
@@ -86,6 +90,11 @@ public class CertificateService {
             log.info("出证成功 [contractNo={}, certificateNo={}]",
                     contract.getContractNo(), certificateNo);
 
+            // 审计事件：出证成功
+            auditTrailService.recordSystemEvent(contractId,
+                    ContractAuditTrail.Action.CERTIFY_SUCCESS,
+                    String.format("{\"certificateNo\":\"%s\"}", certificateNo));
+
             return CertificateResult.success(contractId, contract.getContractNo(),
                     certificateNo, certificatePdfUrl);
 
@@ -94,6 +103,16 @@ public class CertificateService {
                     contractId, contract.getContractNo(), e.getMessage(), e);
             contract.markCertificateFailed();
             contractRepository.save(contract);
+
+            // 审计事件：出证失败
+            try {
+                auditTrailService.recordSystemEvent(contractId,
+                        ContractAuditTrail.Action.CERTIFY_FAIL,
+                        String.format("{\"error\":\"%s\"}", e.getMessage()));
+            } catch (Exception auditEx) {
+                log.warn("记录出证失败审计事件异常: {}", auditEx.getMessage());
+            }
+
             throw new RuntimeException("出证失败: " + e.getMessage(), e);
         }
     }

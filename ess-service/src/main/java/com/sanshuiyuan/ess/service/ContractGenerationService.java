@@ -3,6 +3,7 @@ package com.sanshuiyuan.ess.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sanshuiyuan.ess.config.ContractTemplateDataInitializer;
 import com.sanshuiyuan.ess.domain.Contract;
+import com.sanshuiyuan.ess.domain.ContractAuditTrail;
 import com.sanshuiyuan.ess.domain.ContractTemplate;
 import com.sanshuiyuan.ess.infra.repository.ContractRepository;
 import com.sanshuiyuan.ess.infra.repository.ContractSnBindingRepository;
@@ -34,17 +35,20 @@ public class ContractGenerationService {
     private final ContractRepository contractRepository;
     private final ContractSnBindingRepository snBindingRepository;
     private final ObjectMapper objectMapper;
+    private final AuditTrailService auditTrailService;
 
     public ContractGenerationService(ContractTemplateService templateService,
                                       ContractNoGenerator contractNoGenerator,
                                       ContractRepository contractRepository,
                                       ContractSnBindingRepository snBindingRepository,
-                                      ObjectMapper objectMapper) {
+                                      ObjectMapper objectMapper,
+                                      AuditTrailService auditTrailService) {
         this.templateService = templateService;
         this.contractNoGenerator = contractNoGenerator;
         this.contractRepository = contractRepository;
         this.snBindingRepository = snBindingRepository;
         this.objectMapper = objectMapper;
+        this.auditTrailService = auditTrailService;
     }
 
     /**
@@ -117,6 +121,16 @@ public class ContractGenerationService {
 
         // 9. 建立 SN 预占位绑定
         createSnBinding(contract.getId(), request.deviceSn());
+
+        // 10. 审计事件：合同创建 + 生成
+        auditTrailService.recordUserEvent(contract.getId(),
+                ContractAuditTrail.Action.CREATE, request.userId(),
+                String.format("{\"orderId\":\"%s\",\"deviceSn\":\"%s\"}",
+                        request.orderId(), request.deviceSn()), null);
+        auditTrailService.recordSystemEvent(contract.getId(),
+                ContractAuditTrail.Action.GENERATE,
+                String.format("{\"templateId\":%d,\"contractNo\":\"%s\"}",
+                        mainTemplate.getId(), contractNo));
 
         log.info("合同已生成 [contractNo={}, userId={}, deviceSn={}]",
                 contractNo, request.userId(), request.deviceSn());
