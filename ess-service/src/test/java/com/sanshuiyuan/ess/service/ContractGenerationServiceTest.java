@@ -20,6 +20,8 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
+import com.sanshuiyuan.ess.domain.ContractAuditTrail;
+
 /**
  * T17.15: ContractGenerationService 测试 —— SN 预占位绑定逻辑。
  */
@@ -30,6 +32,7 @@ class ContractGenerationServiceTest {
     @Mock private ContractNoGenerator contractNoGenerator;
     @Mock private ContractRepository contractRepository;
     @Mock private ContractSnBindingRepository snBindingRepository;
+    @Mock private AuditTrailService auditTrailService;
     private ObjectMapper objectMapper;
     private ContractGenerationService service;
 
@@ -38,7 +41,7 @@ class ContractGenerationServiceTest {
         objectMapper = new ObjectMapper();
         service = new ContractGenerationService(
                 templateService, contractNoGenerator, contractRepository,
-                snBindingRepository, objectMapper);
+                snBindingRepository, objectMapper, auditTrailService);
     }
 
     private ContractTemplate mockTemplate(String code, String content) {

@@ -6,6 +6,7 @@ import com.sanshuiyuan.ess.domain.ContractAccessLog;
 import com.sanshuiyuan.ess.domain.ContractSnBinding;
 import com.sanshuiyuan.ess.infra.repository.ContractAccessLogRepository;
 import com.sanshuiyuan.ess.infra.repository.ContractSnBindingRepository;
+import com.sanshuiyuan.ess.service.AuditTrailService;
 import com.sanshuiyuan.ess.service.ContractAccessLogService;
 import com.sanshuiyuan.ess.service.ContractArchiveService;
 import com.sanshuiyuan.ess.service.ContractQueryService;
@@ -51,6 +52,9 @@ class ContractViewControllerTest {
 
     @MockBean
     private ContractAccessLogRepository accessLogRepository;
+
+    @MockBean
+    private AuditTrailService auditTrailService;
 
     // ========== T20.6: GET /api/h5/contracts/{id}/view ==========
 
