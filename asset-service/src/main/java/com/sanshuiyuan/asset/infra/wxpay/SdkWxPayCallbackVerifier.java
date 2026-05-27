@@ -1,6 +1,8 @@
 package com.sanshuiyuan.asset.infra.wxpay;
 
 import com.wechat.pay.java.core.RSAAutoCertificateConfig;
+import com.wechat.pay.java.core.RSAPublicKeyConfig;
+import com.wechat.pay.java.core.notification.NotificationConfig;
 import com.wechat.pay.java.core.notification.NotificationParser;
 import com.wechat.pay.java.core.notification.RequestParam;
 import com.wechat.pay.java.service.payments.model.Transaction;
@@ -26,13 +28,30 @@ public class SdkWxPayCallbackVerifier implements WxPayCallbackVerifier {
     public SdkWxPayCallbackVerifier(String merchantId,
                                     String privateKeyPath,
                                     String merchantSerialNumber,
-                                    String apiV3Key) {
-        RSAAutoCertificateConfig config = new RSAAutoCertificateConfig.Builder()
-                .merchantId(merchantId)
-                .privateKeyFromPath(privateKeyPath)
-                .merchantSerialNumber(merchantSerialNumber)
-                .apiV3Key(apiV3Key)
-                .build();
+                                    String apiV3Key,
+                                    String publicKeyPath,
+                                    String publicKeyId) {
+        boolean usePublicKey = publicKeyPath != null && !publicKeyPath.isBlank()
+                && publicKeyId != null && !publicKeyId.isBlank();
+        NotificationConfig config;
+        if (usePublicKey) {
+            // 微信支付公钥模式（新商户必须）
+            config = new RSAPublicKeyConfig.Builder()
+                    .merchantId(merchantId)
+                    .privateKeyFromPath(privateKeyPath)
+                    .merchantSerialNumber(merchantSerialNumber)
+                    .apiV3Key(apiV3Key)
+                    .publicKeyFromPath(publicKeyPath)
+                    .publicKeyId(publicKeyId)
+                    .build();
+        } else {
+            config = new RSAAutoCertificateConfig.Builder()
+                    .merchantId(merchantId)
+                    .privateKeyFromPath(privateKeyPath)
+                    .merchantSerialNumber(merchantSerialNumber)
+                    .apiV3Key(apiV3Key)
+                    .build();
+        }
         this.parser = new NotificationParser(config);
     }
 

@@ -1,6 +1,5 @@
 package com.sanshuiyuan.asset.infra.wxpay;
 
-import com.wechat.pay.java.core.RSAAutoCertificateConfig;
 import com.wechat.pay.java.core.notification.NotificationParser;
 import com.wechat.pay.java.core.notification.RequestParam;
 import com.wechat.pay.java.service.payments.model.Transaction;
@@ -20,15 +19,9 @@ public class SdkWalletPayCallbackVerifier implements WalletPayCallbackVerifier {
 
     private final NotificationParser parser;
 
-    public SdkWalletPayCallbackVerifier(String merchantId, String privateKeyPath,
-                                        String merchantSerialNumber, String apiV3Key) {
-        RSAAutoCertificateConfig config = new RSAAutoCertificateConfig.Builder()
-                .merchantId(merchantId)
-                .privateKeyFromPath(privateKeyPath)
-                .merchantSerialNumber(merchantSerialNumber)
-                .apiV3Key(apiV3Key)
-                .build();
-        this.parser = new NotificationParser(config);
+    // parser 由 MpWxPayConfig 用共享 coreConfig（公钥模式或自动证书模式）构建
+    public SdkWalletPayCallbackVerifier(NotificationParser parser) {
+        this.parser = parser;
     }
 
     @Override

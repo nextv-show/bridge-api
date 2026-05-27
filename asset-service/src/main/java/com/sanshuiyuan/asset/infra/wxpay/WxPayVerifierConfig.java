@@ -31,8 +31,11 @@ public class WxPayVerifierConfig {
             @Value("${wxpay.merchant-id}") String merchantId,
             @Value("${wxpay.api-key-path}") String privateKeyPath,
             @Value("${wxpay.merchant-serial-number}") String merchantSerialNumber,
-            @Value("${wxpay.api-v3-key}") String apiV3Key) {
-        return new SdkWxPayCallbackVerifier(merchantId, privateKeyPath, merchantSerialNumber, apiV3Key);
+            @Value("${wxpay.api-v3-key}") String apiV3Key,
+            @Value("${wxpay.public-key-path:}") String publicKeyPath,
+            @Value("${wxpay.public-key-id:}") String publicKeyId) {
+        return new SdkWxPayCallbackVerifier(merchantId, privateKeyPath, merchantSerialNumber, apiV3Key,
+                publicKeyPath, publicKeyId);
     }
 
     @Bean
