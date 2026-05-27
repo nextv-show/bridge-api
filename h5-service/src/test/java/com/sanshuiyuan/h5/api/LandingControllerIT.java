@@ -6,6 +6,8 @@ import com.sanshuiyuan.h5.domain.ConfigStatus;
 import com.sanshuiyuan.h5.infra.repository.LandingConfigRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.condition.DisabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -23,6 +25,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * B.2.5：GET /api/h5/landing/config 返回 PUBLISHED seed；缓存命中第二次不打库。
  */
+@Tag("integration")
+@DisabledIfEnvironmentVariable(named = "CI_SKIP_IT", matches = "true")
 @SpringBootTest
 @AutoConfigureMockMvc
 class LandingControllerIT extends AbstractMysqlContainerTest {

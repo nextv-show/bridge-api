@@ -3,9 +3,13 @@ package com.sanshuiyuan.h5.application;
 import com.sanshuiyuan.h5.AbstractMysqlContainerTest;
 import com.sanshuiyuan.h5.api.dto.LandingConfigResponse;
 import com.sanshuiyuan.h5.config.CacheConfig;
-import org.junit.jupiter.api.AfterEach;
+import com.sanshuiyuan.h5.domain.ConfigStatus;
+import com.sanshuiyuan.h5.infra.repository.LandingConfigRepository;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.condition.DisabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.cache.Cache;
@@ -18,6 +22,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * C.4：向 DB 注入一条含「收益率」的 PUBLISHED 配置 → 接口出口合规校验拦截 → 回退上一份合规快照
  * （不外泄违禁文案）。证明监管「双道防线」之第二道（出口）在运营误配时生效。
  */
+@Tag("integration")
+@DisabledIfEnvironmentVariable(named = "CI_SKIP_IT", matches = "true")
 @SpringBootTest
 class LandingComplianceFallbackIT extends AbstractMysqlContainerTest {
 

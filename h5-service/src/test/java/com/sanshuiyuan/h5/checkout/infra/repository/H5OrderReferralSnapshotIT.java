@@ -4,6 +4,8 @@ import com.sanshuiyuan.h5.AbstractMysqlContainerTest;
 import com.sanshuiyuan.h5.checkout.domain.H5Order;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.condition.DisabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
@@ -13,6 +15,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * T8a.6（h5-service 侧）：V018 迁移在 h5-service 实际连接库（h5_db）落库 ——
  * h5_orders 新增快照列存在，且关系链快照列可写可读（ddl-auto=validate 同时校验实体↔列一致）。
  */
+@Tag("integration")
+@DisabledIfEnvironmentVariable(named = "CI_SKIP_IT", matches = "true")
 @SpringBootTest
 class H5OrderReferralSnapshotIT extends AbstractMysqlContainerTest {
 

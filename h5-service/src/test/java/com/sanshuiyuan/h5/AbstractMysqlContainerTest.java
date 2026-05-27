@@ -1,5 +1,7 @@
 package com.sanshuiyuan.h5;
 
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.condition.DisabledIfEnvironmentVariable;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.MySQLContainer;
@@ -8,6 +10,8 @@ import org.testcontainers.containers.MySQLContainer;
  * 单例 MySQL 容器（withReuse），Flyway 跑真实迁移脚本（V000~V004）建表 + seed。
  * Redis 在测试中不可用，由 LandingConfigService 的 try/catch 优雅降级（不影响断言）。
  */
+@Tag("integration")
+@DisabledIfEnvironmentVariable(named = "CI_SKIP_IT", matches = "true")
 public abstract class AbstractMysqlContainerTest {
 
     @SuppressWarnings("resource")
@@ -17,12 +21,15 @@ public abstract class AbstractMysqlContainerTest {
             .withPassword("test")
             .withReuse(true);
 
-    static {
-        MYSQL.start();
+    private static void ensureStarted() {
+        if (!MYSQL.isRunning()) {
+            MYSQL.start();
+        }
     }
 
     @DynamicPropertySource
     static void datasourceProps(DynamicPropertyRegistry registry) {
+        ensureStarted();
         registry.add("spring.datasource.url", MYSQL::getJdbcUrl);
         registry.add("spring.datasource.username", MYSQL::getUsername);
         registry.add("spring.datasource.password", MYSQL::getPassword);

@@ -2,6 +2,8 @@ package com.sanshuiyuan.h5.api;
 
 import com.sanshuiyuan.h5.AbstractMysqlContainerTest;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.condition.DisabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -15,6 +17,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * B.2.5：公开接口限频。bucket 缩到 2 使边界确定（第 3 次同 IP → 429 + RATE_LIMITED）。
  */
+@Tag("integration")
+@DisabledIfEnvironmentVariable(named = "CI_SKIP_IT", matches = "true")
 @SpringBootTest
 @AutoConfigureMockMvc
 @TestPropertySource(properties = {
