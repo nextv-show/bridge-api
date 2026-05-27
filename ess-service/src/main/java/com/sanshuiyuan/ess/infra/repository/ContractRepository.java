@@ -24,4 +24,6 @@ public interface ContractRepository extends JpaRepository<Contract, Long> {
     List<Contract> findByStatusAndArchiveStatusIn(Contract.ContractStatus status, List<ArchiveStatus> archiveStatuses);
 
     List<Contract> findByStatusIn(List<Contract.ContractStatus> statuses);
+
+    List<Contract> findByStatusAndCertificateStatusIn(Contract.ContractStatus status, List<Contract.CertificateStatus> certificateStatuses);
 }

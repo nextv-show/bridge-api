@@ -38,6 +38,8 @@ public class ContractArchiveService {
     private final OssStorageClient ossStorageClient;
     private final TencentCloudStorageClient tencentCloudStorageClient;
     private final OssProperties ossProperties;
+    private final CertificateService certificateService;
+    private final AuditTrailService auditTrailService;
 
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
@@ -48,12 +50,16 @@ public class ContractArchiveService {
                                    EssDocumentService essDocumentService,
                                    OssStorageClient ossStorageClient,
                                    TencentCloudStorageClient tencentCloudStorageClient,
-                                   OssProperties ossProperties) {
+                                   OssProperties ossProperties,
+                                   CertificateService certificateService,
+                                   AuditTrailService auditTrailService) {
         this.contractRepository = contractRepository;
         this.essDocumentService = essDocumentService;
         this.ossStorageClient = ossStorageClient;
         this.tencentCloudStorageClient = tencentCloudStorageClient;
         this.ossProperties = ossProperties;
+        this.certificateService = certificateService;
+        this.auditTrailService = auditTrailService;
     }
 
     /**
@@ -119,6 +125,21 @@ public class ContractArchiveService {
 
             log.info("合同归档完成 [contractNo={}, sha256={}]", contract.getContractNo(), sha256Hash);
 
+            // 审计事件：归档成功
+            auditTrailService.recordSystemEvent(contractId,
+                    com.sanshuiyuan.ess.domain.ContractAuditTrail.Action.ARCHIVE,
+                    String.format("{\"sha256\":\"%s\",\"ossUrl\":\"%s\"}", sha256Hash, ossUrl));
+
+            // 7. 归档完成后自动触发待出证标记
+            try {
+                contract.markPendingCertificate();
+                contractRepository.save(contract);
+                log.info("合同已标记待出证 [contractNo={}]", contract.getContractNo());
+            } catch (Exception e) {
+                log.warn("标记待出证失败，不影响归档结果 [contractNo={}]: {}",
+                        contract.getContractNo(), e.getMessage());
+            }
+
             return ArchiveResult.success(contractId, contract.getContractNo(),
                     tencentCloudUrl, ossUrl, sha256Hash);
 
@@ -127,6 +148,16 @@ public class ContractArchiveService {
                     contractId, contract.getContractNo(), e.getMessage(), e);
             contract.markArchiveFailed();
             contractRepository.save(contract);
+
+            // 审计事件：归档失败
+            try {
+                auditTrailService.recordSystemEvent(contractId,
+                        com.sanshuiyuan.ess.domain.ContractAuditTrail.Action.ARCHIVE_FAIL,
+                        String.format("{\"error\":\"%s\"}", e.getMessage()));
+            } catch (Exception auditEx) {
+                log.warn("记录归档失败审计事件异常: {}", auditEx.getMessage());
+            }
+
             throw new RuntimeException("合同归档失败: " + e.getMessage(), e);
         }
     }

@@ -2,6 +2,7 @@ package com.sanshuiyuan.ess.service;
 
 import com.sanshuiyuan.ess.domain.Contract;
 import com.sanshuiyuan.ess.domain.Contract.ContractStatus;
+import com.sanshuiyuan.ess.domain.ContractAuditTrail;
 import com.sanshuiyuan.ess.domain.ContractSnBinding;
 import com.sanshuiyuan.ess.domain.EssFlowRecord;
 import com.sanshuiyuan.ess.infra.repository.ContractRepository;
@@ -26,17 +27,20 @@ public class ContractSigningService {
     private final EssContractService essContractService;
     private final ContractStateMachineService stateMachineService;
     private final ContractArchiveService archiveService;
+    private final AuditTrailService auditTrailService;
 
     public ContractSigningService(ContractRepository contractRepository,
                                    ContractSnBindingRepository snBindingRepository,
                                    EssContractService essContractService,
                                    ContractStateMachineService stateMachineService,
-                                   ContractArchiveService archiveService) {
+                                   ContractArchiveService archiveService,
+                                   AuditTrailService auditTrailService) {
         this.contractRepository = contractRepository;
         this.snBindingRepository = snBindingRepository;
         this.essContractService = essContractService;
         this.stateMachineService = stateMachineService;
         this.archiveService = archiveService;
+        this.auditTrailService = auditTrailService;
     }
 
     /**
@@ -78,6 +82,11 @@ public class ContractSigningService {
         log.info("签署流程已创建 [contractNo={}, essFlowId={}]",
                 contract.getContractNo(), flowRecord.getEssFlowId());
 
+        // 审计事件：开始签署
+        auditTrailService.recordSystemEvent(contractId,
+                ContractAuditTrail.Action.START_SIGN,
+                String.format("{\"essFlowId\":\"%s\"}", flowRecord.getEssFlowId()));
+
         return new SigningInitiationResult(
                 contractId, contract.getContractNo(),
                 flowRecord.getEssFlowId(), ContractStatus.SIGNING);
@@ -111,6 +120,11 @@ public class ContractSigningService {
         });
 
         log.info("合同签署完成，触发归档 [contractNo={}, pdfUrl={}]", contract.getContractNo(), pdfUrl);
+
+        // 审计事件：签署完成
+        auditTrailService.recordSystemEvent(contractId,
+                ContractAuditTrail.Action.SIGN_COMPLETE,
+                String.format("{\"pdfHash\":\"%s\"}", pdfHash));
 
         // 自动触发归档
         try {

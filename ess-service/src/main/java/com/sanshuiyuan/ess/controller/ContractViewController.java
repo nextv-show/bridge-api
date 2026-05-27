@@ -3,7 +3,9 @@ package com.sanshuiyuan.ess.controller;
 import com.sanshuiyuan.ess.domain.Contract;
 import com.sanshuiyuan.ess.domain.ContractAccessLog.AccessType;
 import com.sanshuiyuan.ess.domain.ContractAccessLog.AccessSource;
+import com.sanshuiyuan.ess.domain.ContractAuditTrail;
 import com.sanshuiyuan.ess.infra.repository.ContractSnBindingRepository;
+import com.sanshuiyuan.ess.service.AuditTrailService;
 import com.sanshuiyuan.ess.service.ContractAccessLogService;
 import com.sanshuiyuan.ess.service.ContractArchiveService;
 import com.sanshuiyuan.ess.service.ContractQueryService;
@@ -36,15 +38,18 @@ public class ContractViewController {
     private final ContractQueryService queryService;
     private final ContractAccessLogService accessLogService;
     private final ContractSnBindingRepository snBindingRepository;
+    private final AuditTrailService auditTrailService;
 
     public ContractViewController(ContractArchiveService archiveService,
                                    ContractQueryService queryService,
                                    ContractAccessLogService accessLogService,
-                                   ContractSnBindingRepository snBindingRepository) {
+                                   ContractSnBindingRepository snBindingRepository,
+                                   AuditTrailService auditTrailService) {
         this.archiveService = archiveService;
         this.queryService = queryService;
         this.accessLogService = accessLogService;
         this.snBindingRepository = snBindingRepository;
+        this.auditTrailService = auditTrailService;
     }
 
     // ========== T20.6: GET /contracts/{id}/view ==========
@@ -72,6 +77,10 @@ public class ContractViewController {
         String ipAddress = getClientIpAddress(request);
         String userAgent = request.getHeader(HttpHeaders.USER_AGENT);
         accessLogService.logAccess(id, null, AccessType.VIEW, AccessSource.H5, ipAddress, userAgent);
+
+        // 审计事件：查看
+        auditTrailService.recordEvent(id, ContractAuditTrail.Action.VIEW,
+                null, ContractAuditTrail.ActorType.USER, null, ipAddress);
 
         // 获取合同信息
         Contract contract = queryService.getContractDetail(id);
@@ -112,6 +121,10 @@ public class ContractViewController {
         String ipAddress = getClientIpAddress(request);
         String userAgent = request.getHeader(HttpHeaders.USER_AGENT);
         accessLogService.logAccess(id, null, AccessType.DOWNLOAD, AccessSource.H5, ipAddress, userAgent);
+
+        // 审计事件：下载
+        auditTrailService.recordEvent(id, ContractAuditTrail.Action.DOWNLOAD,
+                null, ContractAuditTrail.ActorType.USER, null, ipAddress);
 
         // 获取合同信息
         Contract contract = queryService.getContractDetail(id);

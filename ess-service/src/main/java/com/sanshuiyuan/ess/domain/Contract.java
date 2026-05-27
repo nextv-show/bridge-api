@@ -28,6 +28,20 @@ public class Contract {
     }
 
     /**
+     * 出证状态枚举。
+     */
+    public enum CertificateStatus {
+        /** 待出证 */
+        PENDING,
+        /** 出证中 */
+        APPLYING,
+        /** 已出证 */
+        CERTIFIED,
+        /** 出证失败 */
+        FAILED;
+    }
+
+    /**
      * 合同状态枚举（状态机）。
      */
     public enum ContractStatus {
@@ -102,6 +116,16 @@ public class Contract {
 
     @Column(name = "certificate_no", length = 128)
     private String certificateNo;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "certificate_status", length = 32)
+    private CertificateStatus certificateStatus;
+
+    @Column(name = "certificate_pdf_url", length = 512)
+    private String certificatePdfUrl;
+
+    @Column(name = "certified_at")
+    private LocalDateTime certifiedAt;
 
     @Column(name = "download_count")
     private int downloadCount;
@@ -212,6 +236,37 @@ public class Contract {
         this.downloadCount++;
     }
 
+    /**
+     * 标记为待出证。
+     */
+    public void markPendingCertificate() {
+        this.certificateStatus = CertificateStatus.PENDING;
+    }
+
+    /**
+     * 标记为出证中。
+     */
+    public void markCertifying() {
+        this.certificateStatus = CertificateStatus.APPLYING;
+    }
+
+    /**
+     * 出证成功。
+     */
+    public void completeCertificate(String certificateNo, String certificatePdfUrl) {
+        this.certificateStatus = CertificateStatus.CERTIFIED;
+        this.certificateNo = certificateNo;
+        this.certificatePdfUrl = certificatePdfUrl;
+        this.certifiedAt = LocalDateTime.now();
+    }
+
+    /**
+     * 出证失败。
+     */
+    public void markCertificateFailed() {
+        this.certificateStatus = CertificateStatus.FAILED;
+    }
+
     private void validateTransition(ContractStatus target) {
         if (!this.status.canTransitionTo(target)) {
             throw new IllegalStateException(
@@ -235,6 +290,9 @@ public class Contract {
     public String getOssUrl() { return ossUrl; }
     public ArchiveStatus getArchiveStatus() { return archiveStatus; }
     public String getCertificateNo() { return certificateNo; }
+    public CertificateStatus getCertificateStatus() { return certificateStatus; }
+    public String getCertificatePdfUrl() { return certificatePdfUrl; }
+    public LocalDateTime getCertifiedAt() { return certifiedAt; }
     public int getDownloadCount() { return downloadCount; }
     public LocalDateTime getArchivedAt() { return archivedAt; }
     public String getEssFlowId() { return essFlowId; }
