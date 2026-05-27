@@ -11,6 +11,8 @@ import com.sanshuiyuan.h5.checkout.infra.wxpay.WxRefundClient;
 import com.sanshuiyuan.h5.common.BizException;
 import com.sanshuiyuan.h5.common.ErrorCode;
 import com.sanshuiyuan.h5.rebate.application.RebateService;
+import com.sanshuiyuan.h5.realtime.H5RealtimeBroadcaster;
+import com.sanshuiyuan.h5.realtime.H5RealtimeEvent;
 import com.sanshuiyuan.h5.wxmsg.event.RefundSucceededEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,17 +38,20 @@ public class RefundService {
     private final WxRefundClient wxRefundClient;
     private final ApplicationEventPublisher eventPublisher;
     private final RebateService rebateService;
+    private final H5RealtimeBroadcaster realtimeBroadcaster;
 
     public RefundService(H5OrderRepository orderRepo,
                          RefundRepository refundRepo,
                          WxRefundClient wxRefundClient,
                          ApplicationEventPublisher eventPublisher,
-                         RebateService rebateService) {
+                         RebateService rebateService,
+                         H5RealtimeBroadcaster realtimeBroadcaster) {
         this.orderRepo = orderRepo;
         this.refundRepo = refundRepo;
         this.wxRefundClient = wxRefundClient;
         this.eventPublisher = eventPublisher;
         this.rebateService = rebateService;
+        this.realtimeBroadcaster = realtimeBroadcaster;
     }
 
     @Transactional
@@ -147,11 +152,16 @@ public class RefundService {
                     orderRepo.save(order);
                     // 011: 退款成功（合同解除）→ 取消该订单全部返利。
                     // 冷静期内取消 FROZEN(REFUND_COOLDOWN)，冷静期后取消 CONFIRMED(REFUND_POST_COOLDOWN)。
-                    rebateService.cancelForRefund(order.getId());
+                    int cancelledRebates = rebateService.cancelForRefund(order.getId());
                     // Spec 106: 发布退款成功事件，事务提交后推送模板消息
                     eventPublisher.publishEvent(new RefundSucceededEvent(
                             order.getId(), order.getOpenid(), order.getOrderNo(),
                             refund.getAmountCents()));
+                    realtimeBroadcaster.publish(order.getOpenid(),
+                            H5RealtimeEvent.order(order.getId(), order.getStatus().name(), "refund_success"));
+                    if (cancelledRebates > 0) {
+                        log.info("退款成功后已取消 {} 条返利（由受益人通道推送状态变更）", cancelledRebates);
+                    }
                 });
             } else {
                 refund.markFailed();

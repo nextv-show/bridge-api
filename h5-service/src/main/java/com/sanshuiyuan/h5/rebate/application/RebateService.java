@@ -6,6 +6,10 @@ import com.sanshuiyuan.h5.rebate.domain.RebateLevel;
 import com.sanshuiyuan.h5.rebate.domain.RebateStatus;
 import com.sanshuiyuan.h5.rebate.api.dto.RebateSummary;
 import com.sanshuiyuan.h5.rebate.infra.repository.PendingRebateRepository;
+import com.sanshuiyuan.h5.referral.H5User;
+import com.sanshuiyuan.h5.referral.H5UserRepository;
+import com.sanshuiyuan.h5.realtime.H5RealtimeBroadcaster;
+import com.sanshuiyuan.h5.realtime.H5RealtimeEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -31,10 +35,14 @@ public class RebateService {
 
     private final PendingRebateRepository repo;
     private final RebateProperties props;
+    private final H5UserRepository userRepo;
+    private final H5RealtimeBroadcaster realtimeBroadcaster;
 
-    public RebateService(PendingRebateRepository repo, RebateProperties props) {
+    public RebateService(PendingRebateRepository repo, RebateProperties props, H5UserRepository userRepo, H5RealtimeBroadcaster realtimeBroadcaster) {
         this.repo = repo;
         this.props = props;
+        this.userRepo = userRepo;
+        this.realtimeBroadcaster = realtimeBroadcaster;
     }
 
     /**
@@ -75,14 +83,17 @@ public class RebateService {
     public int confirmExpired() {
         LocalDateTime threshold = LocalDateTime.now().minusHours(props.getCooldownHours());
         List<PendingRebate> due = repo.findByStatusAndFrozenAtBefore(RebateStatus.FROZEN, threshold);
+        int confirmed = 0;
         for (PendingRebate r : due) {
             r.confirm();
             repo.save(r);
+            confirmed++;
+            publishToBeneficiary(r, H5RealtimeEvent.rebate(r.getOrderId(), r.getId(), r.getStatus().name(), "rebate_confirmed"));
         }
-        if (!due.isEmpty()) {
-            log.info("返利解冻确认 {} 条（冷静期 {}h 已满）", due.size(), props.getCooldownHours());
+        if (confirmed > 0) {
+            log.info("返利解冻确认 {} 条（冷静期 {}h 已满）", confirmed, props.getCooldownHours());
         }
-        return due.size();
+        return confirmed;
     }
 
     /**
@@ -106,11 +117,13 @@ public class RebateService {
                     r.cancel(CancelReason.REFUND_COOLDOWN);
                     repo.save(r);
                     cancelled++;
+                    publishToBeneficiary(r, H5RealtimeEvent.rebate(r.getOrderId(), r.getId(), r.getStatus().name(), "rebate_cancelled"));
                 }
                 case CONFIRMED -> {
                     r.cancel(CancelReason.REFUND_POST_COOLDOWN);
                     repo.save(r);
                     cancelled++;
+                    publishToBeneficiary(r, H5RealtimeEvent.rebate(r.getOrderId(), r.getId(), r.getStatus().name(), "rebate_cancelled"));
                 }
                 case CANCELLED -> {
                     // 幂等：重复退款回调不重复取消。
@@ -127,6 +140,13 @@ public class RebateService {
     @Transactional(readOnly = true)
     public List<PendingRebate> listForBeneficiary(Long beneficiaryId) {
         return repo.findByBeneficiaryIdOrderByFrozenAtDesc(beneficiaryId);
+    }
+
+    private void publishToBeneficiary(PendingRebate rebate, H5RealtimeEvent event) {
+        if (rebate.getBeneficiaryId() == null) return;
+        H5User beneficiary = userRepo.findById(rebate.getBeneficiaryId()).orElse(null);
+        if (beneficiary == null) return;
+        realtimeBroadcaster.publish(beneficiary.getOpenid(), event);
     }
 
     /**

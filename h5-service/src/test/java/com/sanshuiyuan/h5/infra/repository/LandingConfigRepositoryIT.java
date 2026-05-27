@@ -6,6 +6,8 @@ import com.sanshuiyuan.h5.domain.LandingConfig;
 import com.sanshuiyuan.h5.domain.LandingFeature;
 import com.sanshuiyuan.h5.domain.LandingTrustBadge;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.condition.DisabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
@@ -18,6 +20,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * B.1.4：seed（V004）落库后能查到唯一 PUBLISHED + 子项按 sort 排序。
  * 顺带验证 JSON 列（hero/simulator/footer）与 Hibernate validate（ddl-auto=validate）相容。
  */
+@Tag("integration")
+@DisabledIfEnvironmentVariable(named = "CI_SKIP_IT", matches = "true")
 @SpringBootTest
 class LandingConfigRepositoryIT extends AbstractMysqlContainerTest {
 

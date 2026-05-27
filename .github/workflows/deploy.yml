@@ -394,8 +394,8 @@ jobs:
             #WXPAY_API_KEY_PATH=/opt/bridge-asset-service/wxpay/apiclient_key.pem
             #WXPAY_API_V3_KEY=
             #WX_MP_APP_ID=
-            WXPAY_NOTIFY_URL=https://h5.sanshuiyuan.com/api/asset/wxpay/callback
-            WXPAY_WALLET_NOTIFY_URL=https://h5.sanshuiyuan.com/api/asset/wxpay/wallet-callback
+            WXPAY_NOTIFY_URL=https://api.sanshuiyuan.com/api/asset/wxpay/callback
+            WXPAY_WALLET_NOTIFY_URL=https://api.sanshuiyuan.com/api/asset/wxpay/wallet-callback
             ENVEOF
             fi
 

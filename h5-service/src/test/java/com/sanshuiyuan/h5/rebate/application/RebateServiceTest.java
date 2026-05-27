@@ -30,8 +30,10 @@ import static org.mockito.Mockito.when;
 class RebateServiceTest {
 
     @Mock PendingRebateRepository repo;
+    @Mock RebateProperties props;
+    @Mock com.sanshuiyuan.h5.referral.H5UserRepository userRepo;
+    @Mock com.sanshuiyuan.h5.realtime.H5RealtimeBroadcaster realtimeBroadcaster;
 
-    private RebateProperties props;
     private RebateService svc;
 
     @BeforeEach
@@ -40,7 +42,7 @@ class RebateServiceTest {
         props.setL1AmountCents(100L);
         props.setL2AmountCents(50L);
         props.setCooldownHours(24L);
-        svc = new RebateService(repo, props);
+        svc = new RebateService(repo, props, userRepo, realtimeBroadcaster);
     }
 
     // ─── 冻结：仅 L1 + L2，严禁 L3 ───
