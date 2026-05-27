@@ -34,16 +34,16 @@ public class WxMiniProgramClient {
         String body = restTemplate.getForObject(url, String.class,
                 java.util.Map.of("appId", appId, "appSecret", appSecret, "jsCode", jsCode));
         if (body == null || body.isBlank()) {
-            throw new RuntimeException("Empty response from WeChat API");
+            throw new WxAuthException("WX_EMPTY_RESPONSE", "微信服务无响应");
         }
         WxRawResponse response;
         try {
             response = MAPPER.readValue(body, WxRawResponse.class);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to parse WeChat jscode2session response: " + body, e);
+            throw new WxAuthException("WX_BAD_RESPONSE", "微信响应解析失败");
         }
         if (response.errcode() != null && response.errcode() != 0) {
-            throw new RuntimeException("WeChat API error: " + response.errcode() + " - " + response.errmsg());
+            throw new WxAuthException("WX_" + response.errcode(), response.errmsg());
         }
         return new WxSessionResponse(response.openid(), response.unionid(), response.session_key());
     }
