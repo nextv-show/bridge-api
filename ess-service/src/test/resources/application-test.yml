@@ -29,3 +29,10 @@ ess:
   connect-timeout-ms: 3000
   read-timeout-ms: 5000
   max-retries: 1
+
+oss:
+  endpoint: http://localhost:9000
+  access-key-id: test-ak
+  access-key-secret: test-sk
+  bucket-name: test-bucket
+  contract-path-prefix: contracts/

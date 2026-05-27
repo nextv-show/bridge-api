@@ -43,3 +43,10 @@ springdoc:
 logging:
   pattern:
     console: '{"time":"%d","level":"%p","logger":"%c","msg":"%m","ex":"%ex"}%n'
+
+oss:
+  endpoint: ${OSS_ENDPOINT:http://localhost:9000}
+  access-key-id: ${OSS_ACCESS_KEY_ID:}
+  access-key-secret: ${OSS_ACCESS_KEY_SECRET:}
+  bucket-name: ${OSS_BUCKET_NAME:sanshuiyuan}
+  contract-path-prefix: contracts/
