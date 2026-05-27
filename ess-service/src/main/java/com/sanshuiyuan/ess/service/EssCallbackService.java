@@ -199,10 +199,10 @@ public class EssCallbackService {
      */
     public record CallbackResult(boolean success, String contractId, String flowId,
                                   String eventType, String message) {
-        static CallbackResult success(String contractId, String flowId, String eventType) {
+        public static CallbackResult success(String contractId, String flowId, String eventType) {
             return new CallbackResult(true, contractId, flowId, eventType, "OK");
         }
-        static CallbackResult ignored(String message) {
+        public static CallbackResult ignored(String message) {
             return new CallbackResult(false, null, null, null, message);
         }
     }
