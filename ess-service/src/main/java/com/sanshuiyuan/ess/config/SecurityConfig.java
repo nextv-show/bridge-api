@@ -23,6 +23,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/internal/**").permitAll()
                         .requestMatchers("/api/ess/**").permitAll()
+                        .requestMatchers("/api/h5/**").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
                         .requestMatchers("/api-docs/**").permitAll()
                         .anyRequest().authenticated()

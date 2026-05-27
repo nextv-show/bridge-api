@@ -1,0 +1,16 @@
+/**
+ * 身份核验引导页
+ *
+ * T18.12: 前端 IdentityVerification.tsx
+ *
+ * 注意：此文件为占位符，实际前端代码在 h5-service 前端项目中实现。
+ *
+ * 页面功能：
+ * 1. 展示当前核验状态（PENDING / IN_PROGRESS / PASSED / FAILED）
+ * 2. 触发人脸识别按钮（调用 verify-identity API）
+ * 3. 失败时显示原因和重试按钮
+ * 4. 每日重试次数限制展示
+ *
+ * 调用流程：
+ * identity-check → verify-identity → 跳转人脸 → identity-status 轮询
+ */
