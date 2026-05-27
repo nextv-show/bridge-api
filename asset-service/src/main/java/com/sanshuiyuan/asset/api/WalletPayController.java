@@ -50,8 +50,14 @@ public class WalletPayController {
         if (openid == null || openid.isBlank()) {
             return ResponseEntity.status(400).body(Map.of("error", "无法获取微信支付身份(openid)，请重新登录"));
         }
-        MpPrepayResult p = mpWxPayClient.jsapiPrepay(
-                OUT_TRADE_PREFIX + r.getId(), openid, r.getAmountCents(), "三水元水费充值");
+        // 微信要求 out_trade_no 6~32 位，故对 rechargeId 左补零（回调侧 Long.valueOf 可还原）
+        String outTradeNo = OUT_TRADE_PREFIX + String.format("%010d", r.getId());
+        MpPrepayResult p;
+        try {
+            p = mpWxPayClient.jsapiPrepay(outTradeNo, openid, r.getAmountCents(), "三水元水费充值");
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(502).body(Map.of("error", "发起微信支付失败：" + e.getMessage()));
+        }
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("appId", p.appId());
