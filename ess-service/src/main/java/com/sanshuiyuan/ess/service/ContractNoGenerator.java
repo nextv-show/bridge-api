@@ -27,9 +27,19 @@ public class ContractNoGenerator {
      * @return 合同编号，如 CT-20260527-A3F8K2
      */
     public String generate() {
+        return generateContractNo(PREFIX);
+    }
+
+    /**
+     * 生成指定前缀的合同编号。
+     *
+     * @param prefix 前缀（如 "SC-" 表示补充协议）
+     * @return 合同编号
+     */
+    public String generateContractNo(String prefix) {
         String datePart = LocalDate.now().format(DATE_FMT);
         String randomPart = generateRandom(RANDOM_LENGTH);
-        return PREFIX + datePart + "-" + randomPart;
+        return prefix + datePart + "-" + randomPart;
     }
 
     private String generateRandom(int length) {
