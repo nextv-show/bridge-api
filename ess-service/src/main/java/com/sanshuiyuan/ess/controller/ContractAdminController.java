@@ -2,6 +2,9 @@ package com.sanshuiyuan.ess.controller;
 
 import com.sanshuiyuan.ess.domain.Contract;
 import com.sanshuiyuan.ess.domain.ContractAccessLog;
+import com.sanshuiyuan.ess.domain.ContractAuditTrail;
+import com.sanshuiyuan.ess.service.AuditTrailService;
+import com.sanshuiyuan.ess.service.CertificateService;
 import com.sanshuiyuan.ess.service.ContractAccessLogService;
 import com.sanshuiyuan.ess.service.ContractArchiveService;
 import com.sanshuiyuan.ess.service.ContractQueryService;
@@ -30,6 +33,10 @@ import java.util.stream.Collectors;
  * T20.9:  GET /api/admin/contracts — 合同列表（多维度检索）
  * T20.10: GET /api/admin/contracts/{id} — 合同详情（完整审计信息）
  * T20.11: GET /api/admin/contracts/{id}/audit — 合同审计记录查询
+ * T22.8:  GET /api/admin/contracts/certificate/{contractId} — 出证信息查询
+ * T22.9:  GET /api/admin/contracts/certificate/{contractId}/download — 出证 PDF 下载
+ * T22.10: GET /api/admin/contracts/search — 增强检索
+ * T22.11: GET /api/admin/contracts/{id}/audit-trail — 审计轨迹查询
  */
 @RestController
 @RequestMapping("/api/admin/contracts")
@@ -41,13 +48,19 @@ public class ContractAdminController {
     private final ContractQueryService queryService;
     private final ContractAccessLogService accessLogService;
     private final ContractArchiveService archiveService;
+    private final CertificateService certificateService;
+    private final AuditTrailService auditTrailService;
 
     public ContractAdminController(ContractQueryService queryService,
                                     ContractAccessLogService accessLogService,
-                                    ContractArchiveService archiveService) {
+                                    ContractArchiveService archiveService,
+                                    CertificateService certificateService,
+                                    AuditTrailService auditTrailService) {
         this.queryService = queryService;
         this.accessLogService = accessLogService;
         this.archiveService = archiveService;
+        this.certificateService = certificateService;
+        this.auditTrailService = auditTrailService;
     }
 
     // ========== T20.9: GET /api/admin/contracts ==========
@@ -199,6 +212,181 @@ public class ContractAdminController {
         return ResponseEntity.ok(response);
     }
 
+    // ========== T22.8: GET /api/admin/contracts/certificate/{contractId} ==========
+
+    /**
+     * 管理后台出证信息查询。
+     * <p>
+     * 查询合同的出证状态和出证结果信息。
+     *
+     * @param contractId 合同 ID
+     * @return 出证信息
+     */
+    @GetMapping("/certificate/{contractId}")
+    public ResponseEntity<Map<String, Object>> getCertificateInfo(@PathVariable Long contractId) {
+        log.info("管理后台出证信息查询 [contractId={}]", contractId);
+
+        Contract contract = queryService.getContractDetail(contractId);
+
+        CertificateService.CertificateResult certResult = certificateService.queryCertificateStatus(contractId);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("code", 0);
+        response.put("contractId", contractId);
+        response.put("contractNo", contract.getContractNo());
+        response.put("certificateStatus", certResult.status());
+        response.put("certificateNo", certResult.certificateNo() != null ? certResult.certificateNo() : "");
+        response.put("certificatePdfUrl", certResult.certificatePdfUrl() != null ? certResult.certificatePdfUrl() : "");
+        response.put("certifiedAt", certResult.certifiedAt() != null ? certResult.certifiedAt() : "");
+        response.put("contractStatus", contract.getStatus().name());
+
+        return ResponseEntity.ok(response);
+    }
+
+    // ========== T22.9: GET /api/admin/contracts/certificate/{contractId}/download ==========
+
+    /**
+     * 管理后台出证 PDF 下载。
+     * <p>
+     * 返回出证 PDF 的下载 URL。
+     *
+     * @param contractId 合同 ID
+     * @return 出证 PDF 下载信息
+     */
+    @GetMapping("/certificate/{contractId}/download")
+    public ResponseEntity<Map<String, Object>> downloadCertificate(@PathVariable Long contractId) {
+        log.info("管理后台出证 PDF 下载请求 [contractId={}]", contractId);
+
+        CertificateService.CertificateResult certResult = certificateService.queryCertificateStatus(contractId);
+
+        if (!certResult.success() || certResult.certificatePdfUrl() == null || certResult.certificatePdfUrl().isBlank()) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("code", -1);
+            errorResponse.put("message", "合同尚未完成出证或出证 PDF 不可用");
+            errorResponse.put("contractId", contractId);
+            return ResponseEntity.badRequest().body(errorResponse);
+        }
+
+        // 审计事件：管理员下载出证 PDF
+        auditTrailService.recordEvent(contractId, ContractAuditTrail.Action.DOWNLOAD,
+                null, ContractAuditTrail.ActorType.ADMIN,
+                String.format("{\"type\":\"certificate\",\"certificateNo\":\"%s\"}", certResult.certificateNo()), null);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("code", 0);
+        response.put("contractId", contractId);
+        response.put("certificateNo", certResult.certificateNo());
+        response.put("downloadUrl", certResult.certificatePdfUrl());
+
+        return ResponseEntity.ok(response);
+    }
+
+    // ========== T22.10: GET /api/admin/contracts/search ==========
+
+    /**
+     * 管理后台增强检索。
+     * <p>
+     * 在原有 listContracts 基础上增加出证状态筛选。
+     *
+     * @param page              页码（从 0 开始）
+     * @param size              每页大小
+     * @param orderId           订单号（模糊匹配）
+     * @param deviceSn          设备 SN（精确匹配）
+     * @param userId            用户 ID
+     * @param contractNo        合同编号（模糊匹配）
+     * @param status            合同状态
+     * @param certificateStatus 出证状态
+     * @param startDate         开始日期（yyyy-MM-dd）
+     * @param endDate           结束日期（yyyy-MM-dd）
+     * @return 合同分页列表
+     */
+    @GetMapping("/search")
+    public ResponseEntity<Map<String, Object>> searchContracts(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String orderId,
+            @RequestParam(required = false) String deviceSn,
+            @RequestParam(required = false) Long userId,
+            @RequestParam(required = false) String contractNo,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String certificateStatus,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
+
+        log.info("管理后台增强检索 [page={}, size={}, orderId={}, deviceSn={}, userId={}, contractNo={}, status={}, certStatus={}, startDate={}, endDate={}]",
+                page, size, orderId, deviceSn, userId, contractNo, status, certificateStatus, startDate, endDate);
+
+        LocalDateTime startDt = parseDate(startDate);
+        LocalDateTime endDt = parseDate(endDate);
+
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<Contract> result = queryService.searchContracts(
+                orderId, deviceSn, userId, contractNo, status,
+                startDt, endDt, pageable);
+
+        // 额外按出证状态筛选（内存过滤）
+        List<Contract> filtered = result.getContent().stream()
+                .filter(c -> certificateStatus == null || certificateStatus.isBlank()
+                        || (c.getCertificateStatus() != null && c.getCertificateStatus().name().equals(certificateStatus))
+                        || ("NOT_APPLIED".equals(certificateStatus) && c.getCertificateStatus() == null))
+                .collect(Collectors.toList());
+
+        List<Map<String, Object>> items = filtered.stream()
+                .map(this::toContractSummaryWithCertificate)
+                .collect(Collectors.toList());
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("code", 0);
+        response.put("total", result.getTotalElements());
+        response.put("page", result.getNumber());
+        response.put("size", result.getSize());
+        response.put("totalPages", result.getTotalPages());
+        response.put("items", items);
+
+        return ResponseEntity.ok(response);
+    }
+
+    // ========== T22.11: GET /api/admin/contracts/{id}/audit-trail ==========
+
+    /**
+     * 合同审计轨迹查询。
+     * <p>
+     * 返回合同全生命周期的审计事件（合同审计轨迹表）。
+     *
+     * @param id    合同 ID
+     * @param page  页码
+     * @param size  每页大小
+     * @return 审计轨迹列表
+     */
+    @GetMapping("/{id}/audit-trail")
+    public ResponseEntity<Map<String, Object>> getAuditTrail(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+
+        log.info("管理后台审计轨迹查询 [contractId={}, page={}, size={}]", id, page, size);
+
+        // 先验证合同存在
+        queryService.getContractDetail(id);
+
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        org.springframework.data.domain.Page<ContractAuditTrail> trails = auditTrailService.getAuditTrail(id, pageable);
+
+        List<Map<String, Object>> items = trails.getContent().stream()
+                .map(this::toAuditTrailItem)
+                .collect(Collectors.toList());
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("code", 0);
+        response.put("contractId", id);
+        response.put("total", trails.getTotalElements());
+        response.put("page", trails.getNumber());
+        response.put("size", trails.getSize());
+        response.put("items", items);
+
+        return ResponseEntity.ok(response);
+    }
+
     // ========== 辅助方法 ==========
 
     private Map<String, Object> toContractSummary(Contract c) {
@@ -239,5 +427,28 @@ public class ContractAdminController {
             log.warn("日期解析失败: {}", dateStr);
             return null;
         }
+    }
+
+    private Map<String, Object> toContractSummaryWithCertificate(Contract c) {
+        Map<String, Object> map = toContractSummary(c);
+        map.put("certificateStatus", c.getCertificateStatus() != null ? c.getCertificateStatus().name() : "");
+        map.put("certificateNo", c.getCertificateNo() != null ? c.getCertificateNo() : "");
+        map.put("certifiedAt", c.getCertifiedAt() != null ? c.getCertifiedAt().format(DTF) : "");
+        map.put("pdfHash", c.getPdfHash() != null ? c.getPdfHash() : "");
+        map.put("essFlowId", c.getEssFlowId() != null ? c.getEssFlowId() : "");
+        return map;
+    }
+
+    private Map<String, Object> toAuditTrailItem(ContractAuditTrail trail) {
+        Map<String, Object> map = new HashMap<>();
+        map.put("id", trail.getId());
+        map.put("contractId", trail.getContractId());
+        map.put("action", trail.getAction().name());
+        map.put("actorId", trail.getActorId() != null ? trail.getActorId() : "");
+        map.put("actorType", trail.getActorType() != null ? trail.getActorType().name() : "");
+        map.put("metadataJson", trail.getMetadataJson() != null ? trail.getMetadataJson() : "");
+        map.put("ipAddress", trail.getIpAddress() != null ? trail.getIpAddress() : "");
+        map.put("createdAt", trail.getCreatedAt() != null ? trail.getCreatedAt().format(DTF) : "");
+        return map;
     }
 }
