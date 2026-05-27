@@ -10,6 +10,7 @@ import com.sanshuiyuan.ess.service.AuditTrailService;
 import com.sanshuiyuan.ess.service.ContractAccessLogService;
 import com.sanshuiyuan.ess.service.ContractArchiveService;
 import com.sanshuiyuan.ess.service.ContractQueryService;
+import com.sanshuiyuan.ess.service.CrossPlatformConsistencyService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -56,6 +57,9 @@ class ContractViewControllerTest {
     @MockBean
     private AuditTrailService auditTrailService;
 
+    @MockBean
+    private CrossPlatformConsistencyService consistencyService;
+
     // ========== T20.6: GET /api/h5/contracts/{id}/view ==========
 
     @Test
@@ -66,7 +70,13 @@ class ContractViewControllerTest {
         contract.completeSigning("https://pdf.example.com/c.pdf", "hash123");
         contract.archive();
 
-        when(archiveService.getViewUrl(1L)).thenReturn("https://oss.sanshuiyuan.com/contracts/CT-20260527-V001.pdf?sign=stub");
+        CrossPlatformConsistencyService.ContractViewResult viewResult =
+                new CrossPlatformConsistencyService.ContractViewResult(
+                        1L, "CT-20260527-V001", "ARCHIVED", "",
+                        "https://oss.sanshuiyuan.com/contracts/CT-20260527-V001.pdf?sign=stub",
+                        "hash123", true, "");
+
+        when(consistencyService.getUnifiedContractView(1L)).thenReturn(viewResult);
         when(queryService.getContractDetail(1L)).thenReturn(contract);
         when(accessLogService.logAccess(eq(1L), isNull(), any(), any(), any(), any()))
                 .thenReturn(ContractAccessLog.create(1L, null,
@@ -82,7 +92,7 @@ class ContractViewControllerTest {
 
     @Test
     void viewContract_notArchived_shouldFail() throws Exception {
-        when(archiveService.getViewUrl(999L))
+        when(consistencyService.getUnifiedContractView(999L))
                 .thenThrow(new IllegalStateException("合同尚未归档，无法查看"));
 
         mockMvc.perform(get("/api/h5/contracts/999/view"))

@@ -1,6 +1,8 @@
 package com.sanshuiyuan.ess.controller;
 
 import com.sanshuiyuan.ess.domain.Contract;
+import com.sanshuiyuan.ess.config.ClientTypeInterceptor;
+import com.sanshuiyuan.ess.config.ClientTypeInterceptor.ClientType;
 import com.sanshuiyuan.ess.infra.repository.ContractRepository;
 import com.sanshuiyuan.ess.service.ContractGenerationService;
 import com.sanshuiyuan.ess.service.ContractGenerationService.GenerateContractRequest;
@@ -8,6 +10,9 @@ import com.sanshuiyuan.ess.service.ContractGenerationService.GenerateContractRes
 import com.sanshuiyuan.ess.service.ContractSigningService;
 import com.sanshuiyuan.ess.service.ContractSigningService.SigningInitiationResult;
 import com.sanshuiyuan.ess.service.ContractStateMachineService;
+import com.sanshuiyuan.ess.service.MultiPlatformSignService;
+import com.sanshuiyuan.ess.service.SignStatusSyncService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -30,15 +35,21 @@ public class ContractController {
     private final ContractSigningService signingService;
     private final ContractStateMachineService stateMachineService;
     private final ContractRepository contractRepository;
+    private final MultiPlatformSignService multiPlatformSignService;
+    private final SignStatusSyncService signStatusSyncService;
 
     public ContractController(ContractGenerationService generationService,
                                ContractSigningService signingService,
                                ContractStateMachineService stateMachineService,
-                               ContractRepository contractRepository) {
+                               ContractRepository contractRepository,
+                               MultiPlatformSignService multiPlatformSignService,
+                               SignStatusSyncService signStatusSyncService) {
         this.generationService = generationService;
         this.signingService = signingService;
         this.stateMachineService = stateMachineService;
         this.contractRepository = contractRepository;
+        this.multiPlatformSignService = multiPlatformSignService;
+        this.signStatusSyncService = signStatusSyncService;
     }
 
     // ========== T17.9: POST /generate ==========
@@ -97,23 +108,28 @@ public class ContractController {
     // ========== T17.12: POST /{id}/initiate-signing ==========
 
     /**
-     * 发起签署流程。
+     * 发起签署流程（多端统一）。
      * <p>
+     * 根据 X-Client-Type 请求头或 clientType 参数确定签署来源，
      * 调用腾讯电子签创建签署流程，合同状态 GENERATED → SIGNING。
      *
      * @param id      合同 ID
-     * @param request 包含 userId
+     * @param request 包含 userId, clientType (可选)
      * @return 签署流程信息
      */
     @PostMapping("/{id}/initiate-signing")
     public ResponseEntity<Map<String, Object>> initiateSigning(
             @PathVariable Long id,
-            @RequestBody Map<String, String> request) {
+            @RequestBody Map<String, String> request,
+            HttpServletRequest httpRequest) {
 
         Long userId = requireLong(request, "userId");
-        log.info("发起签署 [contractId={}, userId={}]", id, userId);
+        ClientType clientType = resolveClientType(request, httpRequest);
 
-        SigningInitiationResult result = signingService.initiateSigning(id, userId);
+        log.info("发起签署 [contractId={}, userId={}, clientType={}]", id, userId, clientType);
+
+        Contract.SignSource signSource = mapToSignSource(clientType);
+        SigningInitiationResult result = signingService.initiateSigning(id, userId, signSource);
 
         return ResponseEntity.ok(Map.of(
                 "code", 0,
@@ -121,8 +137,74 @@ public class ContractController {
                 "contractId", result.contractId(),
                 "contractNo", result.contractNo(),
                 "essFlowId", result.essFlowId(),
-                "status", result.status().name()
+                "status", result.status().name(),
+                "signSource", result.signSource() != null ? result.signSource().name() : ""
         ));
+    }
+
+    // ========== T23.4: GET /{id}/sign-params?clientType= ==========
+
+    /**
+     * 获取多端适配签署参数。
+     * <p>
+     * 根据 clientType 返回对应的签署参数：
+     * - H5: 返回签署 URL
+     * - MINI: 返回小程序签署参数 JSON
+     * - APP: 返回 App 签署参数 JSON
+     *
+     * @param id           合同 ID
+     * @param clientType   客户端类型 (H5/MINI/APP)，可选，默认从请求头解析
+     * @param httpRequest  HTTP 请求
+     * @return 签署参数
+     */
+    @GetMapping("/{id}/sign-params")
+    public ResponseEntity<Map<String, Object>> getSignParams(
+            @PathVariable Long id,
+            @RequestParam(required = false) String clientType,
+            HttpServletRequest httpRequest) {
+
+        ClientType ct = clientType != null && !clientType.isBlank()
+                ? ClientTypeInterceptor.parseClientType(clientType)
+                : ClientTypeInterceptor.resolve(httpRequest);
+
+        log.info("获取签署参数 [contractId={}, clientType={}]", id, ct);
+
+        Contract contract = stateMachineService.getContract(id);
+
+        if (contract.getStatus() != Contract.ContractStatus.SIGNING) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "code", -1,
+                    "message", "合同不在签署中状态",
+                    "currentStatus", contract.getStatus().name()
+            ));
+        }
+
+        String contractId = contract.getContractNo();
+        String signerId = "1"; // 默认签署人 ID，实际应从合同签署方信息中获取
+
+        java.util.Map<String, String> options = new java.util.HashMap<>();
+        options.put("jumpUrl", "/sign-complete?contractId=" + id);
+        options.put("h5Type", "jump");
+        options.put("appType", "android");
+
+        MultiPlatformSignService.SignParamsResult result =
+                multiPlatformSignService.generateSignParams(contractId, signerId, ct, options);
+
+        java.util.Map<String, Object> response = new java.util.HashMap<>();
+        response.put("code", 0);
+        response.put("contractId", id);
+        response.put("contractNo", contract.getContractNo());
+        response.put("clientType", ct.name());
+        response.put("signMethod", result.signMethod());
+
+        if (result.signUrl() != null) {
+            response.put("signUrl", result.signUrl());
+        }
+        if (result.signParams() != null) {
+            response.put("signParams", result.signParams());
+        }
+
+        return ResponseEntity.ok(response);
     }
 
     // ========== T17.13: POST /{id}/callback ==========
@@ -162,28 +244,21 @@ public class ContractController {
         }
     }
 
-    // ========== T17.14: GET /{id}/status ==========
+    // ========== T17.14: GET /{id}/status (跨端实时同步) ==========
 
     /**
-     * 查询签署状态。
+     * 查询签署状态（跨端实时同步）。
+     * <p>
+     * 任意端查询同一合同 ID 返回一致的状态。
+     * 签署中状态会主动同步远端 ESS 状态。
      *
      * @param id 合同 ID
-     * @return 签署状态
+     * @return 签署状态（含跨端同步信息）
      */
     @GetMapping("/{id}/status")
     public ResponseEntity<Map<String, Object>> getContractStatus(@PathVariable Long id) {
-        Contract contract = stateMachineService.getContract(id);
-
-        return ResponseEntity.ok(Map.of(
-                "code", 0,
-                "contractId", id,
-                "contractNo", contract.getContractNo(),
-                "status", contract.getStatus().name(),
-                "essFlowId", contract.getEssFlowId() != null ? contract.getEssFlowId() : "",
-                "pdfUrl", contract.getPdfUrl() != null ? contract.getPdfUrl() : "",
-                "createdAt", contract.getCreatedAt() != null ? contract.getCreatedAt().toString() : "",
-                "updatedAt", contract.getUpdatedAt() != null ? contract.getUpdatedAt().toString() : ""
-        ));
+        SignStatusSyncService.SyncStatusResult syncResult = signStatusSyncService.getSyncedStatus(id);
+        return ResponseEntity.ok(SignStatusSyncService.toResponseMap(syncResult));
     }
 
     private String requireParam(Map<String, String> request, String key) {
@@ -201,5 +276,27 @@ public class ContractController {
         } catch (NumberFormatException e) {
             throw new IllegalArgumentException("参数格式错误: " + key + " 必须为数字");
         }
+    }
+
+    /**
+     * 解析客户端类型：优先从请求参数取，其次从请求头取，默认 H5。
+     */
+    private ClientType resolveClientType(Map<String, String> request, HttpServletRequest httpRequest) {
+        String paramCt = request.get("clientType");
+        if (paramCt != null && !paramCt.isBlank()) {
+            return ClientTypeInterceptor.parseClientType(paramCt);
+        }
+        return ClientTypeInterceptor.resolve(httpRequest);
+    }
+
+    /**
+     * 将 ClientType 映射到 SignSource。
+     */
+    private Contract.SignSource mapToSignSource(ClientType clientType) {
+        return switch (clientType) {
+            case H5 -> Contract.SignSource.H5;
+            case MINI -> Contract.SignSource.MINI;
+            case APP -> Contract.SignSource.APP;
+        };
     }
 }

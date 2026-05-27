@@ -56,6 +56,20 @@ public class ContractSigningService {
      */
     @Transactional
     public SigningInitiationResult initiateSigning(Long contractId, Long userId) {
+        return initiateSigning(contractId, userId, null);
+    }
+
+    /**
+     * 发起签署流程（带签署来源）。
+     *
+     * @param contractId 合同 ID
+     * @param userId     用户 ID
+     * @param signSource 签署来源 (H5/MINI/APP)，为 null 时保持旧逻辑
+     * @return 签署流程信息
+     */
+    @Transactional
+    public SigningInitiationResult initiateSigning(Long contractId, Long userId,
+                                                    Contract.SignSource signSource) {
         Contract contract = stateMachineService.getContract(contractId);
 
         // 校验状态
@@ -65,8 +79,8 @@ public class ContractSigningService {
                             contract.getStatus(), contract.getContractNo()));
         }
 
-        log.info("发起签署流程 [contractId={}, contractNo={}, userId={}]",
-                contractId, contract.getContractNo(), userId);
+        log.info("发起签署流程 [contractId={}, contractNo={}, userId={}, signSource={}]",
+                contractId, contract.getContractNo(), userId, signSource);
 
         // 调用腾讯电子签创建签署流程
         String contractNoStr = contract.getContractNo();
@@ -75,21 +89,28 @@ public class ContractSigningService {
         EssFlowRecord flowRecord = essContractService.createFlow(
                 contractNoStr, flowName, contract.getSignerInfoJson());
 
-        // 更新合同状态
-        contract.startSigning(flowRecord.getEssFlowId());
+        // 更新合同状态（带签署来源）
+        if (signSource != null) {
+            contract.startSigning(flowRecord.getEssFlowId(), signSource);
+        } else {
+            contract.startSigning(flowRecord.getEssFlowId());
+        }
         contractRepository.save(contract);
 
-        log.info("签署流程已创建 [contractNo={}, essFlowId={}]",
-                contract.getContractNo(), flowRecord.getEssFlowId());
+        log.info("签署流程已创建 [contractNo={}, essFlowId={}, signSource={}]",
+                contract.getContractNo(), flowRecord.getEssFlowId(), signSource);
 
         // 审计事件：开始签署
+        String auditMeta = signSource != null
+                ? String.format("{\"essFlowId\":\"%s\",\"signSource\":\"%s\"}",
+                    flowRecord.getEssFlowId(), signSource.name())
+                : String.format("{\"essFlowId\":\"%s\"}", flowRecord.getEssFlowId());
         auditTrailService.recordSystemEvent(contractId,
-                ContractAuditTrail.Action.START_SIGN,
-                String.format("{\"essFlowId\":\"%s\"}", flowRecord.getEssFlowId()));
+                ContractAuditTrail.Action.START_SIGN, auditMeta);
 
         return new SigningInitiationResult(
                 contractId, contract.getContractNo(),
-                flowRecord.getEssFlowId(), ContractStatus.SIGNING);
+                flowRecord.getEssFlowId(), ContractStatus.SIGNING, signSource);
     }
 
     /**
@@ -154,6 +175,15 @@ public class ContractSigningService {
             Long contractId,
             String contractNo,
             String essFlowId,
-            ContractStatus status
-    ) {}
+            ContractStatus status,
+            Contract.SignSource signSource
+    ) {
+        /**
+         * 兼容旧调用方（无 signSource）。
+         */
+        public SigningInitiationResult(Long contractId, String contractNo,
+                                        String essFlowId, ContractStatus status) {
+            this(contractId, contractNo, essFlowId, status, null);
+        }
+    }
 }
