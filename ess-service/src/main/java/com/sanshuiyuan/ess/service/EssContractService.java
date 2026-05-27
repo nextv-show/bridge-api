@@ -190,6 +190,14 @@ public class EssContractService {
                 .orElseThrow(() -> new EssFlowException("unknown", essFlowId, "流程不存在"));
     }
 
+    /**
+     * 根据合同 ID 查询流程记录（公开方法）。
+     */
+    @Transactional(readOnly = true)
+    public EssFlowRecord findByContractId(String contractId) {
+        return findFlowRecord(contractId);
+    }
+
     private EssFlowRecord findFlowRecord(String contractId) {
         return flowRecordRepository.findByContractId(contractId)
                 .orElseThrow(() -> new EssFlowException(contractId, "签署流程不存在"));
