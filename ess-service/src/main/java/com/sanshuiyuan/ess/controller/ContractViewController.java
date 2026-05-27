@@ -4,11 +4,14 @@ import com.sanshuiyuan.ess.domain.Contract;
 import com.sanshuiyuan.ess.domain.ContractAccessLog.AccessType;
 import com.sanshuiyuan.ess.domain.ContractAccessLog.AccessSource;
 import com.sanshuiyuan.ess.domain.ContractAuditTrail;
+import com.sanshuiyuan.ess.config.ClientTypeInterceptor;
+import com.sanshuiyuan.ess.config.ClientTypeInterceptor.ClientType;
 import com.sanshuiyuan.ess.infra.repository.ContractSnBindingRepository;
 import com.sanshuiyuan.ess.service.AuditTrailService;
 import com.sanshuiyuan.ess.service.ContractAccessLogService;
 import com.sanshuiyuan.ess.service.ContractArchiveService;
 import com.sanshuiyuan.ess.service.ContractQueryService;
+import com.sanshuiyuan.ess.service.CrossPlatformConsistencyService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,17 +42,20 @@ public class ContractViewController {
     private final ContractAccessLogService accessLogService;
     private final ContractSnBindingRepository snBindingRepository;
     private final AuditTrailService auditTrailService;
+    private final CrossPlatformConsistencyService consistencyService;
 
     public ContractViewController(ContractArchiveService archiveService,
                                    ContractQueryService queryService,
                                    ContractAccessLogService accessLogService,
                                    ContractSnBindingRepository snBindingRepository,
-                                   AuditTrailService auditTrailService) {
+                                   AuditTrailService auditTrailService,
+                                   CrossPlatformConsistencyService consistencyService) {
         this.archiveService = archiveService;
         this.queryService = queryService;
         this.accessLogService = accessLogService;
         this.snBindingRepository = snBindingRepository;
         this.auditTrailService = auditTrailService;
+        this.consistencyService = consistencyService;
     }
 
     // ========== T20.6: GET /contracts/{id}/view ==========
@@ -58,9 +64,10 @@ public class ContractViewController {
      * 用户查看合同 PDF（从自有 OSS 读取，3s 内可打开）。
      * <p>
      * 返回带签名的临时 OSS URL，前端直接加载。
+     * 跨端一致性保障：统一 OSS PDF URL + 哈希校验。
      *
      * @param id      合同 ID
-     * @param request HTTP 请求（用于获取 IP 和 User-Agent）
+     * @param request HTTP 请求（用于获取 IP、User-Agent、客户端类型）
      * @return 签名 URL
      */
     @GetMapping("/contracts/{id}/view")
@@ -68,32 +75,70 @@ public class ContractViewController {
             @PathVariable Long id,
             HttpServletRequest request) {
 
-        log.info("合同查看请求 [contractId={}]", id);
+        log.info("合同查看请求 [contractId={}]，clientType={}", id,
+                ClientTypeInterceptor.resolve(request));
 
-        // 获取签名 URL
-        String viewUrl = archiveService.getViewUrl(id);
+        // 获取跨端统一的合同查看信息
+        CrossPlatformConsistencyService.ContractViewResult viewResult =
+                consistencyService.getUnifiedContractView(id);
 
-        // 记录访问日志
+        // 解析客户端类型
+        ClientType clientType = ClientTypeInterceptor.resolve(request);
+
+        // 记录访问日志（含客户端类型）
         String ipAddress = getClientIpAddress(request);
         String userAgent = request.getHeader(HttpHeaders.USER_AGENT);
-        accessLogService.logAccess(id, null, AccessType.VIEW, AccessSource.H5, ipAddress, userAgent);
+        accessLogService.logAccess(id, null, AccessType.VIEW, mapAccessSource(clientType),
+                ipAddress, userAgent);
 
         // 审计事件：查看
         auditTrailService.recordEvent(id, ContractAuditTrail.Action.VIEW,
                 null, ContractAuditTrail.ActorType.USER, null, ipAddress);
 
-        // 获取合同信息
-        Contract contract = queryService.getContractDetail(id);
+        Map<String, Object> response = new HashMap<>();
+        response.put("code", 0);
+        response.put("contractId", id);
+        response.put("contractNo", viewResult.contractNo());
+        response.put("status", viewResult.status());
+        response.put("signSource", viewResult.signSource());
+        response.put("viewUrl", viewResult.viewUrl());
+        response.put("pdfHash", viewResult.pdfHash());
+        response.put("hashVerified", viewResult.hashVerified());
+        response.put("ossUrl", viewResult.ossUrl());
+        response.put("clientType", clientType.name());
 
-        return ResponseEntity.ok(Map.of(
-                "code", 0,
-                "contractId", id,
-                "contractNo", contract.getContractNo(),
-                "status", contract.getStatus().name(),
-                "archiveStatus", contract.getArchiveStatus() != null ? contract.getArchiveStatus().name() : "",
-                "viewUrl", viewUrl,
-                "pdfHash", contract.getPdfHash() != null ? contract.getPdfHash() : ""
-        ));
+        return ResponseEntity.ok(response);
+    }
+
+    // ========== T23.5: GET /contracts/{id}/verify-hash ==========
+
+    /**
+     * 跨端 PDF 哈希校验端点。
+     * <p>
+     * 任意端可调用此端点校验 PDF 完整性，确保签署结果跨端一致。
+     *
+     * @param id           合同 ID
+     * @param expectedHash 期望的哈希值
+     * @return 校验结果
+     */
+    @GetMapping("/contracts/{id}/verify-hash")
+    public ResponseEntity<Map<String, Object>> verifyPdfHash(
+            @PathVariable Long id,
+            @RequestParam String expectedHash) {
+
+        log.info("跨端哈希校验请求 [contractId={}]", id);
+
+        CrossPlatformConsistencyService.HashVerificationResult result =
+                consistencyService.verifyPdfHash(id, expectedHash);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("code", result.verified() ? 0 : -1);
+        response.put("contractId", id);
+        response.put("verified", result.verified());
+        response.put("message", result.message());
+        response.put("actualHash", result.actualHash() != null ? result.actualHash() : "");
+
+        return ResponseEntity.ok(response);
     }
 
     // ========== T20.7: GET /contracts/{id}/download ==========
@@ -204,5 +249,16 @@ public class ContractViewController {
             ip = ip.split(",")[0].trim();
         }
         return ip;
+    }
+
+    /**
+     * 将客户端类型映射到访问来源。
+     */
+    private AccessSource mapAccessSource(ClientType clientType) {
+        return switch (clientType) {
+            case H5 -> AccessSource.H5;
+            case MINI -> AccessSource.H5; // 小程序归入 H5 分类
+            case APP -> AccessSource.API;  // App 归入 API 分类
+        };
     }
 }
