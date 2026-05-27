@@ -15,6 +15,8 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
@@ -54,12 +56,24 @@ public class EssApiClient {
 
     /**
      * 调用腾讯电子签企业版 API。
+     * <p>
+     * 使用指数退避重试策略：初始间隔 1s，乘数 2，最大间隔 10s，最多 3 次。
+     * 仅对网络类异常重试（EssApiException），业务 API 错误码不重试。
      *
      * @param action API 动作名（如 CreateFlow, StartFlow）
      * @param params 请求参数
      * @return 响应 JSON
      * @throws EssApiException 调用失败时抛出
      */
+    @Retryable(
+            retryFor = {EssApiException.class},
+            noRetryFor = {
+                    com.sanshuiyuan.ess.exception.EssFlowException.class,
+                    com.sanshuiyuan.ess.exception.EssCallbackVerificationException.class
+            },
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 1000, multiplier = 2.0, maxDelay = 10000)
+    )
     public JsonNode invoke(String action, TreeMap<String, Object> params) {
         long start = System.currentTimeMillis();
         String requestBody;
