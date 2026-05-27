@@ -1,0 +1,9 @@
+dependencies {
+    implementation 'org.flywaydb:flyway-mysql'
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0'
+    implementation 'org.springframework.retry:spring-retry'
+    implementation 'org.springframework.boot:spring-boot-starter-aop'
+    implementation 'com.tencentcloudapi:tencentcloud-sdk-java-essbasic:3.1.1293'
+    testImplementation 'org.awaitility:awaitility'
+    testRuntimeOnly 'com.h2database:h2'
+}

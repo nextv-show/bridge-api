@@ -1,0 +1,31 @@
+server:
+  port: 0
+
+spring:
+  datasource:
+    url: jdbc:h2:mem:ess_test;DB_CLOSE_DELAY=-1;MODE=MySQL
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+  flyway:
+    enabled: false
+
+ess:
+  secret-id: test-secret-id
+  secret-key: test-secret-key-for-integration
+  operator-id: test-operator-id
+  corp-id: test-corp-id
+  template-id: test-template-id
+  callback-url: http://localhost:8085/api/internal/ess/callback
+  api-region: ap-guangzhou
+  api-endpoint: essbasic.tencentcloudapi.com
+  connect-timeout-ms: 3000
+  read-timeout-ms: 5000
+  max-retries: 1
