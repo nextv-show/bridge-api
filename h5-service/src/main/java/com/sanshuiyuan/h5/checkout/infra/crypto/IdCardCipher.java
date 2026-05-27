@@ -3,22 +3,42 @@ package com.sanshuiyuan.h5.checkout.infra.crypto;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.Cipher;
+import javax.crypto.Mac;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.security.SecureRandom;
+import java.util.HexFormat;
 
 @Component
 public class IdCardCipher {
 
     private static final String ALGO = "AES/GCM/NoPadding";
+    private static final String HMAC_ALGO = "HmacSHA256";
     private static final int IV_LEN = 12;
     private static final int TAG_BITS = 128;
 
     private final SecretKeySpec keySpec;
+    private final SecretKeySpec hmacKeySpec;
     private final SecureRandom random = new SecureRandom();
 
     public IdCardCipher(KeyProvider keyProvider) {
-        this.keySpec = new SecretKeySpec(keyProvider.getKey(), "AES");
+        byte[] key = keyProvider.getKey();
+        this.keySpec = new SecretKeySpec(key, "AES");
+        this.hmacKeySpec = new SecretKeySpec(key, HMAC_ALGO);
+    }
+
+    /**
+     * 身份证号的确定性哈希（HMAC-SHA256，密钥同 AES）。AES-GCM 用随机 IV 无法等值比对，
+     * 故用该哈希作为「一证一号」唯一性查询键。入参应为已规整（trim + 大写）的身份证号。
+     */
+    public String idCardHash(String normalizedIdNo) {
+        try {
+            Mac mac = Mac.getInstance(HMAC_ALGO);
+            mac.init(hmacKeySpec);
+            return HexFormat.of().formatHex(mac.doFinal(normalizedIdNo.getBytes()));
+        } catch (Exception e) {
+            throw new IllegalStateException("HMAC id-card hash failed", e);
+        }
     }
 
     public byte[] encrypt(String plaintext) {

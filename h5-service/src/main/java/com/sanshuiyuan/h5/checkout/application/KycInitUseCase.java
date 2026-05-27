@@ -54,6 +54,12 @@ public class KycInitUseCase {
             throw new BizException(ErrorCode.VALIDATION_FAILED, "身份证号格式不正确");
         }
 
+        // 一证一号：同一身份证号若已在其他 openid 下通过实名，拒绝重复绑定（早于阿里云发起以节省调用）。
+        String idCardHash = cipher.idCardHash(idNo);
+        if (kycRepo.existsByIdCardHashAndStatusAndOpenidNot(idCardHash, KycStatus.PASS, openid)) {
+            throw new BizException(ErrorCode.KYC_ID_CARD_CONFLICT);
+        }
+
         AliyunKycClient.KycInitResult result = kycClient.init(openid, metaInfo, returnUrl);
 
         // 落 INIT 记录，把实名信息加密绑定到 certifyId，活体通过后再 promote 为 PASS。
@@ -61,7 +67,7 @@ public class KycInitUseCase {
         byte[] idEnc = cipher.encrypt(idNo);
         KycRecord init = KycRecord.createInit(
                 openid, nameEnc, idEnc,
-                MaskingUtils.maskRealName(name), MaskingUtils.maskIdCard(idNo),
+                MaskingUtils.maskRealName(name), MaskingUtils.maskIdCard(idNo), idCardHash,
                 result.certifyId(), "ALIYUN_LR_FR");
         kycRepo.save(init);
 

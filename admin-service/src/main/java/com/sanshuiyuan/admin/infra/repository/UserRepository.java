@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 
@@ -44,6 +45,12 @@ public interface UserRepository extends JpaRepository<User, Long> {
     long countByStatusIn(Collection<String> statuses);
 
     long countByKycStatus(String kycStatus);
+
+    /** 今日新增：createdAt >= 当日 0 点。 */
+    long countByCreatedAtGreaterThanEqual(LocalDateTime since);
+
+    /** N 日活跃：lastActiveAt >= 阈值。注意 lastActiveAt 当前由 sync 写入，非真实活跃埋点。 */
+    long countByLastActiveAtGreaterThanEqual(LocalDateTime since);
 
     @Query("SELECT COUNT(u) FROM User u WHERE u.tags LIKE %:code%")
     long countByTagLike(@Param("code") String code);

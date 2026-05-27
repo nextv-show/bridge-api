@@ -2,12 +2,14 @@ package com.sanshuiyuan.admin.api;
 
 import com.sanshuiyuan.admin.api.dto.SkuRequest;
 import com.sanshuiyuan.admin.domain.Sku;
+import com.sanshuiyuan.admin.infra.repository.OrderRepository;
 import com.sanshuiyuan.admin.infra.repository.SkuRepository;
 import org.springframework.http.HttpStatus;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.math.BigDecimal;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -16,14 +18,33 @@ import java.util.Map;
 public class SkuAdminController {
 
     private final SkuRepository skuRepo;
+    private final OrderRepository orderRepo;
 
-    public SkuAdminController(SkuRepository skuRepo) {
+    public SkuAdminController(SkuRepository skuRepo, OrderRepository orderRepo) {
         this.skuRepo = skuRepo;
+        this.orderRepo = orderRepo;
     }
 
+    /**
+     * 商品列表。soldTotal/gmvCents 用 orders(PAID) 实时聚合覆盖种子列，
+     * 保证累计销量/累计 GMV 反映真实成交。readOnly 事务确保聚合赋值不会被回写库。
+     */
     @GetMapping
+    @Transactional(readOnly = true)
     public Map<String, Object> list() {
         List<Sku> items = skuRepo.findAll();
+
+        Map<Long, long[]> agg = new HashMap<>();   // skuId → [soldCount, gmvCents]
+        for (Object[] row : orderRepo.aggregateBySku()) {
+            if (row[0] == null) continue;
+            agg.put(((Number) row[0]).longValue(),
+                    new long[]{((Number) row[1]).longValue(), ((Number) row[2]).longValue()});
+        }
+        for (Sku sku : items) {
+            long[] a = agg.getOrDefault(sku.getId(), new long[]{0L, 0L});
+            sku.setSoldTotal((int) a[0]);
+            sku.setGmvCents(a[1]);
+        }
         return Map.of("items", items, "total", items.size());
     }
 

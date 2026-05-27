@@ -42,6 +42,20 @@ public class DeviceAdminController {
         return devices.map(this::toDto);
     }
 
+    /** 各 Stage 设备数 — 供设备页顶部 Stage 过滤条展示真实计数。 */
+    @GetMapping("/counts")
+    public Map<String, Long> counts() {
+        Map<String, Long> counts = new java.util.LinkedHashMap<>();
+        for (DeviceAsset.Stage stage : DeviceAsset.Stage.values()) {
+            counts.put(stage.name(), 0L);
+        }
+        for (Object[] row : deviceRepo.countByStageGroup()) {
+            DeviceAsset.Stage stage = (DeviceAsset.Stage) row[0];
+            counts.put(stage.name(), ((Number) row[1]).longValue());
+        }
+        return counts;
+    }
+
     @PutMapping("/{id}/bind-sn")
     public Map<String, String> bindSn(@PathVariable Long id,
                                       @RequestBody BindSnRequest req,

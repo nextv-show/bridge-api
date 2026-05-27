@@ -14,4 +14,7 @@ public interface KycRecordRepository extends JpaRepository<KycRecord, Long> {
     List<KycRecord> findAllByOpenidAndStatus(String openid, KycStatus status);
 
     Optional<KycRecord> findFirstByCertifyIdAndOpenidAndStatus(String certifyId, String openid, KycStatus status);
+
+    /** 一证一号：同一身份证哈希在「非该 openid」下是否已存在指定状态（PASS）记录。 */
+    boolean existsByIdCardHashAndStatusAndOpenidNot(String idCardHash, KycStatus status, String openid);
 }

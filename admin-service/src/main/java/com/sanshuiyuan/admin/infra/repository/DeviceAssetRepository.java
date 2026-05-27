@@ -25,6 +25,10 @@ public interface DeviceAssetRepository extends JpaRepository<DeviceAsset, Long> 
     @Query("SELECT COUNT(d) FROM DeviceAsset d")
     long countTotal();
 
+    /** 按 Stage 分组计数。返回 [stage, count]。 */
+    @Query("SELECT d.stage, COUNT(d) FROM DeviceAsset d GROUP BY d.stage")
+    List<Object[]> countByStageGroup();
+
     /** 按 userId 批量统计设备数。返回 [userId, count]。 */
     @Query("SELECT d.userId, COUNT(d) FROM DeviceAsset d WHERE d.userId IN :ids GROUP BY d.userId")
     List<Object[]> countByUserIds(@Param("ids") Collection<Long> ids);

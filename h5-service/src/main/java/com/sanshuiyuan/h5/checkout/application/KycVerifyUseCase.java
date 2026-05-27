@@ -5,6 +5,8 @@ import com.sanshuiyuan.h5.checkout.domain.KycRecord;
 import com.sanshuiyuan.h5.checkout.domain.KycStatus;
 import com.sanshuiyuan.h5.checkout.infra.aliyun.AliyunKycClient;
 import com.sanshuiyuan.h5.checkout.infra.repository.KycRecordRepository;
+import com.sanshuiyuan.h5.common.BizException;
+import com.sanshuiyuan.h5.common.ErrorCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -43,6 +45,13 @@ public class KycVerifyUseCase {
             return new KycVerifyResponse("FAIL", "", "");
         }
         KycRecord record = initOpt.get();
+
+        // 一证一号（权威闸口）：活体已过，但若同一身份证号已在其他 openid 下 PASS，则拒绝置 PASS。
+        String idCardHash = record.getIdCardHash();
+        if (idCardHash != null
+                && kycRepo.existsByIdCardHashAndStatusAndOpenidNot(idCardHash, KycStatus.PASS, openid)) {
+            throw new BizException(ErrorCode.KYC_ID_CARD_CONFLICT);
+        }
 
         // 作废该用户旧的 PASS 记录（ASSUMPTION-Q6：一 openid 对应一实名）。
         List<KycRecord> oldRecords = kycRepo.findAllByOpenidAndStatus(openid, KycStatus.PASS);

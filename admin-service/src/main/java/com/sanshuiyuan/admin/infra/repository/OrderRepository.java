@@ -44,6 +44,23 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     @Query("SELECT COUNT(o) FROM Order o WHERE o.status = 'PAID'")
     long countPaid();
 
+    /** 今日（paidAt >= 当日 0 点）已支付订单数。 */
+    @Query("SELECT COUNT(o) FROM Order o WHERE o.status = 'PAID' AND o.paidAt >= :since")
+    long countPaidSince(@Param("since") LocalDateTime since);
+
+    /** 今日（paidAt >= 当日 0 点）已支付 GMV（分）。 */
+    @Query("SELECT COALESCE(SUM(o.amountCents), 0) FROM Order o WHERE o.status = 'PAID' AND o.paidAt >= :since")
+    long sumPaidAmountCentsSince(@Param("since") LocalDateTime since);
+
+    /** 按 skuId 聚合全部已支付订单的销量与 GMV。返回 [skuId, soldCount, sumAmountCents]。 */
+    @Query("""
+            SELECT o.skuId, COUNT(o), COALESCE(SUM(o.amountCents), 0)
+            FROM Order o
+            WHERE o.status = 'PAID'
+            GROUP BY o.skuId
+            """)
+    List<Object[]> aggregateBySku();
+
     /** 按 userId 批量聚合已支付订单数与 GMV。返回 [userId, count, sumAmountCents]。 */
     @Query("""
             SELECT o.userId, COUNT(o), COALESCE(SUM(o.amountCents), 0)

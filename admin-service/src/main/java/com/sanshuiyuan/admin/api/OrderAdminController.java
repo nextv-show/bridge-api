@@ -7,9 +7,11 @@ import com.sanshuiyuan.admin.api.dto.OrderTimelineDto;
 import com.sanshuiyuan.admin.application.OrderAdminService;
 import com.sanshuiyuan.admin.domain.DeviceAsset;
 import com.sanshuiyuan.admin.domain.Order;
+import com.sanshuiyuan.admin.domain.Sku;
 import com.sanshuiyuan.admin.domain.User;
 import com.sanshuiyuan.admin.infra.repository.DeviceAssetRepository;
 import com.sanshuiyuan.admin.infra.repository.OrderRepository;
+import com.sanshuiyuan.admin.infra.repository.SkuRepository;
 import com.sanshuiyuan.admin.infra.repository.UserRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -37,15 +39,18 @@ public class OrderAdminController {
     private final OrderRepository orderRepo;
     private final UserRepository userRepo;
     private final DeviceAssetRepository deviceAssetRepo;
+    private final SkuRepository skuRepo;
     private final OrderAdminService orderService;
 
     public OrderAdminController(OrderRepository orderRepo,
                                 UserRepository userRepo,
                                 DeviceAssetRepository deviceAssetRepo,
+                                SkuRepository skuRepo,
                                 OrderAdminService orderService) {
         this.orderRepo = orderRepo;
         this.userRepo = userRepo;
         this.deviceAssetRepo = deviceAssetRepo;
+        this.skuRepo = skuRepo;
         this.orderService = orderService;
     }
 
@@ -83,9 +88,10 @@ public class OrderAdminController {
             total += count;
         }
 
+        LocalDateTime todayStart = LocalDate.now().atStartOfDay();
         Map<String, Object> kpis = new LinkedHashMap<>();
-        kpis.put("todayOrders", orderRepo.countPaid());
-        kpis.put("todayGmvCents", orderRepo.sumPaidAmountCents());
+        kpis.put("todayOrders", orderRepo.countPaidSince(todayStart));
+        kpis.put("todayGmvCents", orderRepo.sumPaidAmountCentsSince(todayStart));
         kpis.put("pendingOrders", statusCounts.getOrDefault(Order.Status.PENDING_PAY.name(), 0L));
         kpis.put("shippingOrders", statusCounts.getOrDefault(Order.Status.SHIPPED.name(), 0L) + statusCounts.getOrDefault(Order.Status.ACTIVATED.name(), 0L));
         kpis.put("abnormalOrders", statusCounts.getOrDefault(Order.Status.REFUNDING.name(), 0L) + statusCounts.getOrDefault(Order.Status.CANCELLED.name(), 0L));
@@ -193,7 +199,7 @@ public class OrderAdminController {
         dto.put("id", order.getId());
         dto.put("userId", order.getUserId());
         dto.put("skuId", order.getSkuId());
-        dto.put("skuName", "三水元设备套装");
+        dto.put("skuName", resolveSkuName(order.getSkuId()));
         dto.put("qty", order.getQty());
         dto.put("amountCents", order.getAmountCents());
         dto.put("status", order.getStatus().name());
@@ -325,6 +331,11 @@ public class OrderAdminController {
 
     private String addressField(String snapshot) {
         return snapshot == null ? "" : snapshot;
+    }
+
+    private String resolveSkuName(Long skuId) {
+        if (skuId == null) return "";
+        return skuRepo.findById(skuId).map(Sku::getName).orElse("SKU #" + skuId);
     }
 
     private String resolveUserName(Long userId) {

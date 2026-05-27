@@ -23,6 +23,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -127,12 +128,16 @@ public class AdminUserService {
     }
 
     public Map<String, Long> counts() {
+        LocalDateTime todayStart = LocalDate.now().atStartOfDay();
+        LocalDateTime sevenDaysAgo = LocalDateTime.now().minusDays(7);
         Map<String, Long> counts = new LinkedHashMap<>();
         counts.put("ALL", userRepo.count());
         counts.put("KYC_PASS", userRepo.countByKycStatus("PASS"));
         counts.put("KYC_PEND", userRepo.countByKycStatus("PENDING"));
         counts.put("RISK", userRepo.countByTagLike("RISK"));
         counts.put("FROZEN", userRepo.countByStatusIn(FROZEN_STATUSES));
+        counts.put("TODAY_NEW", userRepo.countByCreatedAtGreaterThanEqual(todayStart));
+        counts.put("ACTIVE_7D", userRepo.countByLastActiveAtGreaterThanEqual(sevenDaysAgo));
         return counts;
     }
 
