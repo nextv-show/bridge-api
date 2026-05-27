@@ -385,13 +385,16 @@ jobs:
             REDIS_HOST=localhost
             REDIS_PORT=6379
             S2S_TOKEN=change-me-s2s-shared-token
-            WXPAY_APP_ID=stub
-            WXPAY_MCH_ID=stub
-            WXPAY_MCH_SERIAL=stub
-            WXPAY_API_KEY_PATH=/opt/bridge-asset-service/wxpay/apiclient_key.pem
-            WXPAY_API_V3_KEY=stub
+            # 微信支付默认不配置：asset-service 回退 stub 下单 + 失败关闭验签，可正常启动。
+            # 启用时取消注释并填真实值，并把商户私钥放到 WXPAY_API_KEY_PATH 指向的文件。
+            # ⚠️ 一旦设置 WXPAY_API_V3_KEY，设备支付验签器会立即加载私钥 PEM，缺文件会导致启动失败。
+            #WXPAY_APP_ID=
+            #WXPAY_MCH_ID=
+            #WXPAY_MCH_SERIAL=
+            #WXPAY_API_KEY_PATH=/opt/bridge-asset-service/wxpay/apiclient_key.pem
+            #WXPAY_API_V3_KEY=
+            #WX_MP_APP_ID=
             WXPAY_NOTIFY_URL=https://h5.sanshuiyuan.com/api/asset/wxpay/callback
-            WX_MP_APP_ID=stub
             WXPAY_WALLET_NOTIFY_URL=https://h5.sanshuiyuan.com/api/asset/wxpay/wallet-callback
             ENVEOF
             fi
