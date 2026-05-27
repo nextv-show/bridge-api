@@ -1,0 +1,20 @@
+/**
+ * 身份核验 API 封装
+ *
+ * T18.11: 前端 identityService.ts
+ *
+ * 注意：此文件为占位符，实际前端代码在 h5-service 前端项目中实现。
+ *
+ * API 列表：
+ * - GET  /api/h5/contracts/{contractId}/identity-check?userId={userId}
+ *        → 检查是否需要身份核验
+ *
+ * - POST /api/h5/contracts/{contractId}/verify-identity?userId={userId}
+ *        → 发起人脸识别，返回 faceUrl
+ *
+ * - POST /api/h5/contracts/{contractId}/identity-callback
+ *        → 腾讯电子签回调（服务端处理）
+ *
+ * - GET  /api/h5/contracts/{contractId}/identity-status?userId={userId}
+ *        → 查询核验状态
+ */
