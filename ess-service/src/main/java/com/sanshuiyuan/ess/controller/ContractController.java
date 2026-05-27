@@ -11,6 +11,7 @@ import com.sanshuiyuan.ess.service.ContractSigningService;
 import com.sanshuiyuan.ess.service.ContractSigningService.SigningInitiationResult;
 import com.sanshuiyuan.ess.service.ContractStateMachineService;
 import com.sanshuiyuan.ess.service.MultiPlatformSignService;
+import com.sanshuiyuan.ess.service.SignStatusSyncService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,17 +36,20 @@ public class ContractController {
     private final ContractStateMachineService stateMachineService;
     private final ContractRepository contractRepository;
     private final MultiPlatformSignService multiPlatformSignService;
+    private final SignStatusSyncService signStatusSyncService;
 
     public ContractController(ContractGenerationService generationService,
                                ContractSigningService signingService,
                                ContractStateMachineService stateMachineService,
                                ContractRepository contractRepository,
-                               MultiPlatformSignService multiPlatformSignService) {
+                               MultiPlatformSignService multiPlatformSignService,
+                               SignStatusSyncService signStatusSyncService) {
         this.generationService = generationService;
         this.signingService = signingService;
         this.stateMachineService = stateMachineService;
         this.contractRepository = contractRepository;
         this.multiPlatformSignService = multiPlatformSignService;
+        this.signStatusSyncService = signStatusSyncService;
     }
 
     // ========== T17.9: POST /generate ==========
@@ -240,28 +244,21 @@ public class ContractController {
         }
     }
 
-    // ========== T17.14: GET /{id}/status ==========
+    // ========== T17.14: GET /{id}/status (跨端实时同步) ==========
 
     /**
-     * 查询签署状态。
+     * 查询签署状态（跨端实时同步）。
+     * <p>
+     * 任意端查询同一合同 ID 返回一致的状态。
+     * 签署中状态会主动同步远端 ESS 状态。
      *
      * @param id 合同 ID
-     * @return 签署状态
+     * @return 签署状态（含跨端同步信息）
      */
     @GetMapping("/{id}/status")
     public ResponseEntity<Map<String, Object>> getContractStatus(@PathVariable Long id) {
-        Contract contract = stateMachineService.getContract(id);
-
-        return ResponseEntity.ok(Map.of(
-                "code", 0,
-                "contractId", id,
-                "contractNo", contract.getContractNo(),
-                "status", contract.getStatus().name(),
-                "essFlowId", contract.getEssFlowId() != null ? contract.getEssFlowId() : "",
-                "pdfUrl", contract.getPdfUrl() != null ? contract.getPdfUrl() : "",
-                "createdAt", contract.getCreatedAt() != null ? contract.getCreatedAt().toString() : "",
-                "updatedAt", contract.getUpdatedAt() != null ? contract.getUpdatedAt().toString() : ""
-        ));
+        SignStatusSyncService.SyncStatusResult syncResult = signStatusSyncService.getSyncedStatus(id);
+        return ResponseEntity.ok(SignStatusSyncService.toResponseMap(syncResult));
     }
 
     private String requireParam(Map<String, String> request, String key) {
