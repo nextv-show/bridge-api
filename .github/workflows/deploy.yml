@@ -29,13 +29,15 @@ jobs:
         uses: gradle/actions/setup-gradle@v3
 
       - name: Build Services (skip tests, CI has executed)
-        run: ./gradlew :h5-service:assemble :admin-service:assemble -x test
+        run: ./gradlew :h5-service:assemble :admin-service:assemble :user-service:assemble :asset-service:assemble -x test
 
       - name: Stage jars with stable names
         run: |
           mkdir -p staging
           find h5-service/build/libs/ -name "h5-service-*.jar" ! -name "*-plain.jar" -exec cp {} staging/h5-service.jar \;
           find admin-service/build/libs/ -name "admin-service-*.jar" ! -name "*-plain.jar" -exec cp {} staging/admin-service.jar \;
+          find user-service/build/libs/ -name "user-service-*.jar" ! -name "*-plain.jar" -exec cp {} staging/user-service.jar \;
+          find asset-service/build/libs/ -name "asset-service-*.jar" ! -name "*-plain.jar" -exec cp {} staging/asset-service.jar \;
 
       - name: SCP jars to server
         uses: appleboy/scp-action@v0.1.7
@@ -44,7 +46,7 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
-          source: "staging/h5-service.jar,staging/admin-service.jar"
+          source: "staging/h5-service.jar,staging/admin-service.jar,staging/user-service.jar,staging/asset-service.jar"
           target: "/tmp/"
 
       - name: Activate & Restart bridge-h5-service (Port 8083)
@@ -248,7 +250,216 @@ jobs:
               exit 1
             fi
 
-            # 清理临时 staging 目录
+            echo "[deploy] success: $SERVICE running and UP"
+
+      - name: Activate & Restart bridge-user-service (Port 8081)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          script_stop: true
+          command_timeout: 10m
+          script: |
+            set -euo pipefail
+
+            APP_DIR="/opt/bridge-user-service"
+            REL_DIR="$APP_DIR/releases"
+            INCOMING="/tmp/staging/user-service.jar"
+            ENV_FILE="$APP_DIR/app.env"
+            SERVICE="bridge-user-service"
+            NEW_JAR="app-${{ github.sha }}.jar"
+
+            # 首次自动生成示例配置文件（运营需在服务器手动覆写真实值）
+            sudo mkdir -p "$APP_DIR" "$REL_DIR"
+            if [ ! -f "$ENV_FILE" ]; then
+              echo "[deploy] Creating $ENV_FILE from skeleton"
+              sudo tee "$ENV_FILE" > /dev/null <<'ENVEOF'
+            SERVER_PORT=8081
+            SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3306/user_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+            DB_USERNAME=root
+            DB_PASSWORD=Sanshuiyuan2026!
+            REDIS_HOST=localhost
+            REDIS_PORT=6379
+            JWT_SECRET=change-me-in-production-at-least-256-bits-long!!
+            S2S_TOKEN=change-me-s2s-shared-token
+            WX_MP_APP_ID=stub
+            WX_MP_APP_SECRET=stub
+            ENVEOF
+            fi
+
+            SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
+            if [ ! -f "$SERVICE_FILE" ]; then
+              echo "[deploy] Bootstrapping systemd service: $SERVICE"
+              sudo tee "$SERVICE_FILE" > /dev/null <<SYSEOF
+            [Unit]
+            Description=三水元 User Service (8081)
+            After=network.target
+
+            [Service]
+            Type=simple
+            User=root
+            WorkingDirectory=$APP_DIR
+            EnvironmentFile=$ENV_FILE
+            ExecStart=/usr/bin/java -jar $APP_DIR/app.jar
+            Restart=always
+            RestartSec=10
+
+            [Install]
+            WantedBy=multi-user.target
+            SYSEOF
+              sudo systemctl daemon-reload
+              sudo systemctl enable "$SERVICE"
+            fi
+
+            if [ ! -f "$INCOMING" ]; then
+              echo "[deploy] FATAL: jar not found at $INCOMING" >&2
+              exit 1
+            fi
+
+            PREV_JAR=""
+            if [ -L "$APP_DIR/app.jar" ]; then
+              PREV_JAR="$(readlink "$APP_DIR/app.jar" || true)"
+            fi
+
+            sudo mv -f "$INCOMING" "$REL_DIR/$NEW_JAR"
+            sudo ln -sfn "$REL_DIR/$NEW_JAR" "$APP_DIR/app.jar"
+
+            echo "[deploy] restarting service: $SERVICE"
+            sudo systemctl restart "$SERVICE"
+
+            echo "[deploy] wait health check (max 60s)"
+            ok=0
+            i=0
+            while [ "$i" -lt 30 ]; do
+              i=$((i + 1))
+              sleep 2
+              status=$(curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8081/actuator/health || echo "000")
+              if [ "$status" = "200" ]; then
+                ok=1
+                break
+              fi
+            done
+
+            if [ "$ok" -ne 1 ]; then
+              echo "[deploy] health check failed, rollback!" >&2
+              sudo journalctl -u "$SERVICE" -n 50 --no-pager || true
+              if [ -n "$PREV_JAR" ] && [ -f "$PREV_JAR" ]; then
+                sudo ln -sfn "$PREV_JAR" "$APP_DIR/app.jar"
+                sudo systemctl restart "$SERVICE"
+              fi
+              exit 1
+            fi
+
+            echo "[deploy] success: $SERVICE running and UP"
+
+      - name: Activate & Restart bridge-asset-service (Port 8082)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          script_stop: true
+          command_timeout: 10m
+          script: |
+            set -euo pipefail
+
+            APP_DIR="/opt/bridge-asset-service"
+            REL_DIR="$APP_DIR/releases"
+            INCOMING="/tmp/staging/asset-service.jar"
+            ENV_FILE="$APP_DIR/app.env"
+            SERVICE="bridge-asset-service"
+            NEW_JAR="app-${{ github.sha }}.jar"
+
+            # 首次自动生成示例配置文件（运营需覆写真实商户凭证；S2S_TOKEN 须与 user-service 一致）
+            sudo mkdir -p "$APP_DIR" "$REL_DIR" "$APP_DIR/wxpay"
+            if [ ! -f "$ENV_FILE" ]; then
+              echo "[deploy] Creating $ENV_FILE from skeleton"
+              sudo tee "$ENV_FILE" > /dev/null <<'ENVEOF'
+            SERVER_PORT=8082
+            SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3306/asset_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+            DB_USERNAME=root
+            DB_PASSWORD=Sanshuiyuan2026!
+            REDIS_HOST=localhost
+            REDIS_PORT=6379
+            S2S_TOKEN=change-me-s2s-shared-token
+            WXPAY_APP_ID=stub
+            WXPAY_MCH_ID=stub
+            WXPAY_MCH_SERIAL=stub
+            WXPAY_API_KEY_PATH=/opt/bridge-asset-service/wxpay/apiclient_key.pem
+            WXPAY_API_V3_KEY=stub
+            WXPAY_NOTIFY_URL=https://h5.sanshuiyuan.com/api/asset/wxpay/callback
+            WX_MP_APP_ID=stub
+            WXPAY_WALLET_NOTIFY_URL=https://h5.sanshuiyuan.com/api/asset/wxpay/wallet-callback
+            ENVEOF
+            fi
+
+            SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
+            if [ ! -f "$SERVICE_FILE" ]; then
+              echo "[deploy] Bootstrapping systemd service: $SERVICE"
+              sudo tee "$SERVICE_FILE" > /dev/null <<SYSEOF
+            [Unit]
+            Description=三水元 Asset Service (8082)
+            After=network.target
+
+            [Service]
+            Type=simple
+            User=root
+            WorkingDirectory=$APP_DIR
+            EnvironmentFile=$ENV_FILE
+            ExecStart=/usr/bin/java -jar $APP_DIR/app.jar
+            Restart=always
+            RestartSec=10
+
+            [Install]
+            WantedBy=multi-user.target
+            SYSEOF
+              sudo systemctl daemon-reload
+              sudo systemctl enable "$SERVICE"
+            fi
+
+            if [ ! -f "$INCOMING" ]; then
+              echo "[deploy] FATAL: jar not found at $INCOMING" >&2
+              exit 1
+            fi
+
+            PREV_JAR=""
+            if [ -L "$APP_DIR/app.jar" ]; then
+              PREV_JAR="$(readlink "$APP_DIR/app.jar" || true)"
+            fi
+
+            sudo mv -f "$INCOMING" "$REL_DIR/$NEW_JAR"
+            sudo ln -sfn "$REL_DIR/$NEW_JAR" "$APP_DIR/app.jar"
+
+            echo "[deploy] restarting service: $SERVICE"
+            sudo systemctl restart "$SERVICE"
+
+            echo "[deploy] wait health check (max 60s)"
+            ok=0
+            i=0
+            while [ "$i" -lt 30 ]; do
+              i=$((i + 1))
+              sleep 2
+              status=$(curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8082/actuator/health || echo "000")
+              if [ "$status" = "200" ]; then
+                ok=1
+                break
+              fi
+            done
+
+            if [ "$ok" -ne 1 ]; then
+              echo "[deploy] health check failed, rollback!" >&2
+              sudo journalctl -u "$SERVICE" -n 50 --no-pager || true
+              if [ -n "$PREV_JAR" ] && [ -f "$PREV_JAR" ]; then
+                sudo ln -sfn "$PREV_JAR" "$APP_DIR/app.jar"
+                sudo systemctl restart "$SERVICE"
+              fi
+              exit 1
+            fi
+
+            # 清理临时 staging 目录（最后一个部署步骤）
             rm -rf /tmp/staging
 
             echo "[deploy] success: $SERVICE running and UP"
