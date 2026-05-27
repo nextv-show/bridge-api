@@ -1,6 +1,7 @@
 package com.sanshuiyuan.user.api;
 
 import com.sanshuiyuan.user.api.dto.SwitchRoleRequest;
+import com.sanshuiyuan.user.api.dto.UpdateProfileRequest;
 import com.sanshuiyuan.user.api.dto.UserInfo;
 import com.sanshuiyuan.user.application.RoleService;
 import com.sanshuiyuan.user.domain.Role;
@@ -31,11 +32,30 @@ public class MeController {
     public ResponseEntity<UserInfo> me(@AuthenticationPrincipal Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
-        List<String> roles = userRoleRepository.findByIdUserId(userId)
+        return ResponseEntity.ok(toInfo(user));
+    }
+
+    /** 小程序「头像昵称填写组件」回传昵称/头像后更新资料。 */
+    @PutMapping("/profile")
+    public ResponseEntity<UserInfo> updateProfile(@AuthenticationPrincipal Long userId,
+                                                  @RequestBody UpdateProfileRequest req) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        if (req.nickname() != null && !req.nickname().isBlank()) {
+            user.setNickname(req.nickname().trim());
+        }
+        if (req.avatarUrl() != null && !req.avatarUrl().isBlank()) {
+            user.setAvatarUrl(req.avatarUrl().trim());
+        }
+        userRepository.save(user);
+        return ResponseEntity.ok(toInfo(user));
+    }
+
+    private UserInfo toInfo(User user) {
+        List<String> roles = userRoleRepository.findByIdUserId(user.getId())
                 .stream().map(ur -> ur.getId().getRole().name()).toList();
-        UserInfo info = new UserInfo(user.getId(), user.getNickname(), user.getAvatarUrl(),
+        return new UserInfo(user.getId(), user.getNickname(), user.getAvatarUrl(),
                 user.getActiveRole().name(), roles);
-        return ResponseEntity.ok(info);
     }
 
     @PutMapping("/active-role")
