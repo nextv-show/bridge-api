@@ -1,0 +1,129 @@
+package com.sanshuiyuan.h5.checkout.application;
+
+import com.sanshuiyuan.h5.checkout.domain.H5Order;
+import com.sanshuiyuan.h5.checkout.domain.OrderStatus;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
+import org.springframework.stereotype.Component;
+
+import java.sql.PreparedStatement;
+import java.sql.Statement;
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 在 h5_orders 写入的同一事务内，向 admin 的 {@code orders} 投影一行（按 h5_order_no 幂等 upsert），
+ * 并保证买家在 admin 的 {@code users} 表存在（select-then-insert，应用层去重，不依赖 DB 唯一约束）。
+ *
+ * <p>h5_orders / orders / users / h5_users / skus 同库（h5_db），故可直接用 JdbcTemplate 跨表写。
+ *
+ * <p>投影失败仅记录日志、绝不抛出，避免影响主支付/关单/退款流程。
+ */
+@Component
+public class AdminOrderProjector {
+
+    private static final Logger log = LoggerFactory.getLogger(AdminOrderProjector.class);
+
+    private final JdbcTemplate jdbc;
+
+    public AdminOrderProjector(JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    /**
+     * H5 OrderStatus -> admin orders.status 字符串映射。
+     */
+    static String mapStatus(OrderStatus status) {
+        return switch (status) {
+            case PENDING_PAY -> "PENDING_PAY";
+            case PAID -> "PAID";
+            case CLOSED -> "CANCELLED";
+            case REFUNDING -> "REFUNDING";
+            case REFUNDED -> "REFUNDED";
+        };
+    }
+
+    public void project(H5Order order) {
+        try {
+            long userId = resolveUserId(order.getOpenid());
+            long skuId = resolveSkuId(order.getModelCode());
+            String adminStatus = mapStatus(order.getStatus());
+            String paymentMethod = order.getPaymentChannel();
+            Timestamp createdAt = toTs(order.getCreatedAt());
+            Timestamp paidAt = toTs(order.getPaidAt());
+            Timestamp cancelledAt = "CANCELLED".equals(adminStatus) ? toTs(order.getClosedAt()) : null;
+            Timestamp now = Timestamp.valueOf(LocalDateTime.now());
+
+            jdbc.update(
+                    "INSERT INTO orders (h5_order_no, user_id, sku_id, qty, amount_cents, status, channel, " +
+                            "payment_method, wx_transaction_id, address_snapshot, created_at, paid_at, cancelled_at, updated_at) " +
+                            "VALUES (?, ?, ?, 1, ?, ?, 'H5', ?, ?, '{}', ?, ?, ?, ?) " +
+                            "ON DUPLICATE KEY UPDATE status = VALUES(status), payment_method = VALUES(payment_method), " +
+                            "wx_transaction_id = VALUES(wx_transaction_id), paid_at = VALUES(paid_at), " +
+                            "cancelled_at = VALUES(cancelled_at), updated_at = VALUES(updated_at)",
+                    order.getOrderNo(), userId, skuId, order.getAmountCents(), adminStatus,
+                    paymentMethod, order.getWxTransactionId(), createdAt, paidAt, cancelledAt, now);
+        } catch (Exception e) {
+            log.error("admin orders 投影失败 orderNo={}: {}", order.getOrderNo(), e.getMessage(), e);
+        }
+    }
+
+    private long resolveUserId(String openid) {
+        List<Long> ids = jdbc.queryForList(
+                "SELECT id FROM users WHERE openid = ?", Long.class, openid);
+        if (!ids.isEmpty()) {
+            return ids.get(0);
+        }
+        return insertUser(openid);
+    }
+
+    private long insertUser(String openid) {
+        String nickname = "H5用户";
+        String avatarUrl = null;
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                "SELECT nickname, avatar_url FROM h5_users WHERE openid = ?", openid);
+        if (!rows.isEmpty()) {
+            Map<String, Object> row = rows.get(0);
+            Object n = row.get("nickname");
+            if (n != null && !n.toString().isBlank()) {
+                nickname = n.toString();
+            }
+            Object a = row.get("avatar_url");
+            avatarUrl = a != null ? a.toString() : null;
+        }
+
+        final String finalNickname = nickname;
+        final String finalAvatarUrl = avatarUrl;
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        jdbc.update(con -> {
+            PreparedStatement ps = con.prepareStatement(
+                    "INSERT INTO users (openid, nickname, avatar_url, channel, tier, tags, status, kyc_status, " +
+                            "created_at, updated_at) VALUES (?, ?, ?, 'WECHAT_MP', 'NORMAL', '', 'ACTIVE', 'NONE', NOW(), NOW())",
+                    Statement.RETURN_GENERATED_KEYS);
+            ps.setString(1, openid);
+            ps.setString(2, finalNickname);
+            ps.setString(3, finalAvatarUrl);
+            return ps;
+        }, keyHolder);
+        Number key = keyHolder.getKey();
+        if (key == null) {
+            throw new IllegalStateException("插入 admin users 未返回自增主键 openid=" + openid);
+        }
+        return key.longValue();
+    }
+
+    private long resolveSkuId(String modelCode) {
+        List<Long> ids = jdbc.queryForList(
+                "SELECT id FROM skus WHERE code = ?", Long.class, modelCode);
+        return ids.isEmpty() ? 1L : ids.get(0);
+    }
+
+    private static Timestamp toTs(LocalDateTime dt) {
+        return dt == null ? null : Timestamp.valueOf(dt);
+    }
+}

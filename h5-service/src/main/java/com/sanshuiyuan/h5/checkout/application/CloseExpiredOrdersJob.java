@@ -19,10 +19,13 @@ public class CloseExpiredOrdersJob {
 
     private final H5OrderRepository orderRepo;
     private final WxPayClient wxPayClient;
+    private final AdminOrderProjector adminOrderProjector;
 
-    public CloseExpiredOrdersJob(H5OrderRepository orderRepo, WxPayClient wxPayClient) {
+    public CloseExpiredOrdersJob(H5OrderRepository orderRepo, WxPayClient wxPayClient,
+                                 AdminOrderProjector adminOrderProjector) {
         this.orderRepo = orderRepo;
         this.wxPayClient = wxPayClient;
+        this.adminOrderProjector = adminOrderProjector;
     }
 
     @Scheduled(fixedDelay = 60_000)
@@ -34,6 +37,8 @@ public class CloseExpiredOrdersJob {
                 wxPayClient.closeOrder(order.getOrderNo());
                 order.close();
                 orderRepo.save(order);
+                // 双写：投影关单状态（CANCELLED）到 admin orders 表。
+                adminOrderProjector.project(order);
                 log.info("Closed expired order {}", order.getOrderNo());
             } catch (Exception e) {
                 log.error("Failed to close order {}: {}", order.getOrderNo(), e.getMessage());

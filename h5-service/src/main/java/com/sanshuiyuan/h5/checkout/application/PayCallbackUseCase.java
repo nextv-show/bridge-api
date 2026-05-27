@@ -33,17 +33,20 @@ public class PayCallbackUseCase {
     private final DeviceSpecRepository specRepo;
     private final ApplicationEventPublisher eventPublisher;
     private final RebateService rebateService;
+    private final AdminOrderProjector adminOrderProjector;
 
     public PayCallbackUseCase(WxPayCallbackVerifier verifier, PaymentInboxRepository inboxRepo,
                                H5OrderRepository orderRepo, DeviceSpecRepository specRepo,
                                ApplicationEventPublisher eventPublisher,
-                               RebateService rebateService) {
+                               RebateService rebateService,
+                               AdminOrderProjector adminOrderProjector) {
         this.verifier = verifier;
         this.inboxRepo = inboxRepo;
         this.orderRepo = orderRepo;
         this.specRepo = specRepo;
         this.eventPublisher = eventPublisher;
         this.rebateService = rebateService;
+        this.adminOrderProjector = adminOrderProjector;
     }
 
     @Transactional
@@ -90,6 +93,9 @@ public class PayCallbackUseCase {
         LocalDateTime cooldownEnd = LocalDateTime.now().plusHours(24);
         order.markPaid(result.transactionId(), placeholderSn, cooldownEnd);
         orderRepo.save(order);
+
+        // 双写：同事务内投影已支付状态到 admin orders 表。
+        adminOrderProjector.project(order);
 
         // 011: 按订单快照的 L1/L2 受益人冻结返利（FROZEN）。仅 L1/L2，绝不递归 L3+；
         // 自然流量订单（无邀请人快照）不产生记录。与支付落库同一事务，金额暂为配置占位值。

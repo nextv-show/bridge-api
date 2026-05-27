@@ -1,5 +1,6 @@
 package com.sanshuiyuan.h5.checkout.api;
 
+import com.sanshuiyuan.h5.checkout.application.AdminOrderProjector;
 import com.sanshuiyuan.h5.checkout.domain.H5Order;
 import com.sanshuiyuan.h5.checkout.domain.Refund;
 import com.sanshuiyuan.h5.checkout.infra.repository.H5OrderRepository;
@@ -22,10 +23,13 @@ public class SimulateRefundCallbackController {
 
     private final RefundRepository refundRepo;
     private final H5OrderRepository orderRepo;
+    private final AdminOrderProjector adminOrderProjector;
 
-    public SimulateRefundCallbackController(RefundRepository refundRepo, H5OrderRepository orderRepo) {
+    public SimulateRefundCallbackController(RefundRepository refundRepo, H5OrderRepository orderRepo,
+                                            AdminOrderProjector adminOrderProjector) {
         this.refundRepo = refundRepo;
         this.orderRepo = orderRepo;
+        this.adminOrderProjector = adminOrderProjector;
     }
 
     @PostMapping("/simulate-refund-callback")
@@ -50,6 +54,8 @@ public class SimulateRefundCallbackController {
 
         refundRepo.save(refund);
         orderRepo.save(order);
+        // 双写：投影退款成功状态到 admin orders 表（dev 模拟回调）。
+        adminOrderProjector.project(order);
 
         return ResponseEntity.ok(ApiResponse.ok(Map.of(
                 "refundNo", refundNo,

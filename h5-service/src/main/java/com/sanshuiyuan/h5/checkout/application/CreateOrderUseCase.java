@@ -24,13 +24,16 @@ public class CreateOrderUseCase {
     private final DeviceSpecRepository specRepo;
     private final KycRecordRepository kycRepo;
     private final H5UserRepository userRepo;
+    private final AdminOrderProjector adminOrderProjector;
 
     public CreateOrderUseCase(H5OrderRepository orderRepo, DeviceSpecRepository specRepo,
-                               KycRecordRepository kycRepo, H5UserRepository userRepo) {
+                               KycRecordRepository kycRepo, H5UserRepository userRepo,
+                               AdminOrderProjector adminOrderProjector) {
         this.orderRepo = orderRepo;
         this.specRepo = specRepo;
         this.kycRepo = kycRepo;
         this.userRepo = userRepo;
+        this.adminOrderProjector = adminOrderProjector;
     }
 
     public OrderCreateResponse execute(String openid, String specId, String paymentChannel) {
@@ -63,6 +66,9 @@ public class CreateOrderUseCase {
                 order.snapshotReferral(u.getInviterId(), u.getGrandInviterId()));
 
         orderRepo.save(order);
+
+        // 双写：投影到 admin orders 表（按 h5_order_no 幂等），投影失败不影响下单。
+        adminOrderProjector.project(order);
 
         return new OrderCreateResponse(order.getId(), order.getOrderNo(), order.getAmountCents(),
                 order.getSpecId(), order.getModelCode(), order.getStatus().name());

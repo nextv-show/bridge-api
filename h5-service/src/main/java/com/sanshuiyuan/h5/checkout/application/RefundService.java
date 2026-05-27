@@ -39,19 +39,22 @@ public class RefundService {
     private final ApplicationEventPublisher eventPublisher;
     private final RebateService rebateService;
     private final H5RealtimeBroadcaster realtimeBroadcaster;
+    private final AdminOrderProjector adminOrderProjector;
 
     public RefundService(H5OrderRepository orderRepo,
                          RefundRepository refundRepo,
                          WxRefundClient wxRefundClient,
                          ApplicationEventPublisher eventPublisher,
                          RebateService rebateService,
-                         H5RealtimeBroadcaster realtimeBroadcaster) {
+                         H5RealtimeBroadcaster realtimeBroadcaster,
+                         AdminOrderProjector adminOrderProjector) {
         this.orderRepo = orderRepo;
         this.refundRepo = refundRepo;
         this.wxRefundClient = wxRefundClient;
         this.eventPublisher = eventPublisher;
         this.rebateService = rebateService;
         this.realtimeBroadcaster = realtimeBroadcaster;
+        this.adminOrderProjector = adminOrderProjector;
     }
 
     @Transactional
@@ -103,6 +106,8 @@ public class RefundService {
 
         order.markRefunding();
         orderRepo.save(order);
+        // 双写：投影退款中状态（REFUNDING）到 admin orders 表。
+        adminOrderProjector.project(order);
 
         // Call WxRefundClient outside the transaction boundary would be ideal,
         // but for simplicity in the stub phase, we do it here.
@@ -114,6 +119,8 @@ public class RefundService {
             order.revertToPaid();
             refundRepo.save(refund);
             orderRepo.save(order);
+            // 双写：退款发起失败回退为已支付（PAID），同步到 admin orders 表。
+            adminOrderProjector.project(order);
             throw new BizException(ErrorCode.INTERNAL_ERROR, "退款发起失败，请稍后重试");
         }
 
@@ -150,6 +157,8 @@ public class RefundService {
                 orderRepo.findById(refund.getOrderId()).ifPresent(order -> {
                     order.markRefunded();
                     orderRepo.save(order);
+                    // 双写：投影退款成功状态（REFUNDED）到 admin orders 表。
+                    adminOrderProjector.project(order);
                     // 011: 退款成功（合同解除）→ 取消该订单全部返利。
                     // 冷静期内取消 FROZEN(REFUND_COOLDOWN)，冷静期后取消 CONFIRMED(REFUND_POST_COOLDOWN)。
                     int cancelledRebates = rebateService.cancelForRefund(order.getId());
@@ -170,6 +179,8 @@ public class RefundService {
                 orderRepo.findById(refund.getOrderId()).ifPresent(order -> {
                     order.revertToPaid();
                     orderRepo.save(order);
+                    // 双写：退款失败回退为已支付（PAID），同步到 admin orders 表。
+                    adminOrderProjector.project(order);
                 });
             }
         });

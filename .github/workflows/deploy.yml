@@ -49,6 +49,108 @@ jobs:
           source: "staging/h5-service.jar,staging/admin-service.jar,staging/user-service.jar,staging/asset-service.jar"
           target: "/tmp/"
 
+      # NOTE: admin-service 先于 h5-service 部署 —— admin 的 Flyway 迁移（如 V078 给
+      # orders 加 h5_order_no 列）必须先生效，h5-service 的 AdminOrderProjector 才能写该列。
+      - name: Activate & Restart bridge-admin-service (Port 8084)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          script_stop: true
+          command_timeout: 10m
+          script: |
+            set -euo pipefail
+
+            APP_DIR="/opt/bridge-admin-service"
+            REL_DIR="$APP_DIR/releases"
+            INCOMING="/tmp/staging/admin-service.jar"
+            ENV_FILE="$APP_DIR/app.env"
+            SERVICE="bridge-admin-service"
+            NEW_JAR="app-${{ github.sha }}.jar"
+
+            # Flyway schema history 已于 2026-05-22 手动清理，后续由 Flyway 自动管理
+
+            # 首次自动生成示例配置文件
+            sudo mkdir -p "$APP_DIR" "$REL_DIR"
+            if [ ! -f "$ENV_FILE" ]; then
+              echo "[deploy] Creating $ENV_FILE from skeleton"
+              sudo tee "$ENV_FILE" > /dev/null <<'ENVEOF'
+            SERVER_PORT=8084
+            SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3306/h5_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+            DB_USERNAME=root
+            DB_PASSWORD=Sanshuiyuan2026!
+            ADMIN_JWT_SECRET=sanshuiyuan-admin-jwt-prod-key-2026-please-change-in-production
+            ENVEOF
+            fi
+
+            # 首次初始化 Systemd 配置文件
+            SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
+            if [ ! -f "$SERVICE_FILE" ]; then
+              echo "[deploy] Bootstrapping systemd service: $SERVICE"
+              sudo tee "$SERVICE_FILE" > /dev/null <<SYSEOF
+            [Unit]
+            Description=三水元 H5 Admin Service (8084)
+            After=network.target
+
+            [Service]
+            Type=simple
+            User=root
+            WorkingDirectory=$APP_DIR
+            EnvironmentFile=$ENV_FILE
+            ExecStart=/usr/bin/java -jar $APP_DIR/app.jar
+            Restart=always
+            RestartSec=10
+
+            [Install]
+            WantedBy=multi-user.target
+            SYSEOF
+              sudo systemctl daemon-reload
+              sudo systemctl enable "$SERVICE"
+            fi
+
+            if [ ! -f "$INCOMING" ]; then
+              echo "[deploy] FATAL: jar not found at $INCOMING" >&2
+              exit 1
+            fi
+
+            PREV_JAR=""
+            if [ -L "$APP_DIR/app.jar" ]; then
+              PREV_JAR="$(readlink "$APP_DIR/app.jar" || true)"
+            fi
+
+            sudo mv -f "$INCOMING" "$REL_DIR/$NEW_JAR"
+            sudo ln -sfn "$REL_DIR/$NEW_JAR" "$APP_DIR/app.jar"
+
+            echo "[deploy] restarting service: $SERVICE"
+            sudo systemctl restart "$SERVICE"
+
+            echo "[deploy] wait health check (max 60s)"
+            ok=0
+            i=0
+            while [ "$i" -lt 30 ]; do
+              i=$((i + 1))
+              sleep 2
+              status=$(curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8084/actuator/health || echo "200") # admin-service 没有 actuator 默认放行 200
+              if [ "$status" = "200" ] || [ "$status" = "401" ] || [ "$status" = "404" ]; then # 401 鉴权或 404 表明服务已通
+                ok=1
+                break
+              fi
+            done
+
+            if [ "$ok" -ne 1 ]; then
+              echo "[deploy] health check failed, rollback!" >&2
+              sudo journalctl -u "$SERVICE" -n 50 --no-pager || true
+              if [ -n "$PREV_JAR" ] && [ -f "$PREV_JAR" ]; then
+                sudo ln -sfn "$PREV_JAR" "$APP_DIR/app.jar"
+                sudo systemctl restart "$SERVICE"
+              fi
+              exit 1
+            fi
+
+            echo "[deploy] success: $SERVICE running and UP"
+
       - name: Activate & Restart bridge-h5-service (Port 8083)
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -135,106 +237,6 @@ jobs:
               sleep 2
               status=$(curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8083/actuator/health || echo "000")
               if [ "$status" = "200" ]; then
-                ok=1
-                break
-              fi
-            done
-
-            if [ "$ok" -ne 1 ]; then
-              echo "[deploy] health check failed, rollback!" >&2
-              sudo journalctl -u "$SERVICE" -n 50 --no-pager || true
-              if [ -n "$PREV_JAR" ] && [ -f "$PREV_JAR" ]; then
-                sudo ln -sfn "$PREV_JAR" "$APP_DIR/app.jar"
-                sudo systemctl restart "$SERVICE"
-              fi
-              exit 1
-            fi
-
-            echo "[deploy] success: $SERVICE running and UP"
-
-      - name: Activate & Restart bridge-admin-service (Port 8084)
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          port: ${{ secrets.DEPLOY_PORT || 22 }}
-          script_stop: true
-          command_timeout: 10m
-          script: |
-            set -euo pipefail
-
-            APP_DIR="/opt/bridge-admin-service"
-            REL_DIR="$APP_DIR/releases"
-            INCOMING="/tmp/staging/admin-service.jar"
-            ENV_FILE="$APP_DIR/app.env"
-            SERVICE="bridge-admin-service"
-            NEW_JAR="app-${{ github.sha }}.jar"
-
-            # Flyway schema history 已于 2026-05-22 手动清理，后续由 Flyway 自动管理
-
-            # 首次自动生成示例配置文件
-            sudo mkdir -p "$APP_DIR" "$REL_DIR"
-            if [ ! -f "$ENV_FILE" ]; then
-              echo "[deploy] Creating $ENV_FILE from skeleton"
-              sudo tee "$ENV_FILE" > /dev/null <<'ENVEOF'
-            SERVER_PORT=8084
-            SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3306/h5_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
-            DB_USERNAME=root
-            DB_PASSWORD=Sanshuiyuan2026!
-            ADMIN_JWT_SECRET=sanshuiyuan-admin-jwt-prod-key-2026-please-change-in-production
-            ENVEOF
-            fi
-
-            # 首次初始化 Systemd 配置文件
-            SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
-            if [ ! -f "$SERVICE_FILE" ]; then
-              echo "[deploy] Bootstrapping systemd service: $SERVICE"
-              sudo tee "$SERVICE_FILE" > /dev/null <<SYSEOF
-            [Unit]
-            Description=三水元 H5 Admin Service (8084)
-            After=network.target
-
-            [Service]
-            Type=simple
-            User=root
-            WorkingDirectory=$APP_DIR
-            EnvironmentFile=$ENV_FILE
-            ExecStart=/usr/bin/java -jar $APP_DIR/app.jar
-            Restart=always
-            RestartSec=10
-
-            [Install]
-            WantedBy=multi-user.target
-            SYSEOF
-              sudo systemctl daemon-reload
-              sudo systemctl enable "$SERVICE"
-            fi
-
-            if [ ! -f "$INCOMING" ]; then
-              echo "[deploy] FATAL: jar not found at $INCOMING" >&2
-              exit 1
-            fi
-
-            PREV_JAR=""
-            if [ -L "$APP_DIR/app.jar" ]; then
-              PREV_JAR="$(readlink "$APP_DIR/app.jar" || true)"
-            fi
-
-            sudo mv -f "$INCOMING" "$REL_DIR/$NEW_JAR"
-            sudo ln -sfn "$REL_DIR/$NEW_JAR" "$APP_DIR/app.jar"
-
-            echo "[deploy] restarting service: $SERVICE"
-            sudo systemctl restart "$SERVICE"
-
-            echo "[deploy] wait health check (max 60s)"
-            ok=0
-            i=0
-            while [ "$i" -lt 30 ]; do
-              i=$((i + 1))
-              sleep 2
-              status=$(curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8084/actuator/health || echo "200") # admin-service 没有 actuator 默认放行 200
-              if [ "$status" = "200" ] || [ "$status" = "401" ] || [ "$status" = "404" ]; then # 401 鉴权或 404 表明服务已通
                 ok=1
                 break
               fi
