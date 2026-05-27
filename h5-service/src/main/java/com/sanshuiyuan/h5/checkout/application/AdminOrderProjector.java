@@ -53,7 +53,9 @@ public class AdminOrderProjector {
             long userId = resolveUserId(order.getOpenid());
             long skuId = resolveSkuId(order.getModelCode());
             String adminStatus = mapStatus(order.getStatus());
-            String paymentMethod = order.getPaymentChannel();
+            // admin paymentDisplay 只识别大写枚举（WECHAT/ALIPAY…），h5 存的是小写 channel，统一转大写。
+            String paymentMethod = order.getPaymentChannel() == null
+                    ? null : order.getPaymentChannel().toUpperCase();
             Timestamp createdAt = toTs(order.getCreatedAt());
             Timestamp paidAt = toTs(order.getPaidAt());
             Timestamp cancelledAt = "CANCELLED".equals(adminStatus) ? toTs(order.getClosedAt()) : null;
