@@ -49,6 +49,8 @@ public class SdkWxPayClient implements WxPayClient {
         payer.setOpenid(openid);
         request.setPayer(payer);
 
+        // 诊断：记录本次下单实际下发给微信的回调地址（排查回调不达问题）。
+        log.info("微信 JSAPI 下单 outTradeNo={} notifyUrl={}", outTradeNo, notifyUrl);
         try {
             PrepayWithRequestPaymentResponse resp = jsapiService.prepayWithRequestPayment(request);
             String packageVal = resp.getPackageVal();

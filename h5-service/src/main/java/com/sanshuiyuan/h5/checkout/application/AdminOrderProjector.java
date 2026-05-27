@@ -56,7 +56,9 @@ public class AdminOrderProjector {
             // admin paymentDisplay 只识别大写枚举（WECHAT/ALIPAY…），h5 存的是小写 channel，统一转大写。
             String paymentMethod = order.getPaymentChannel() == null
                     ? null : order.getPaymentChannel().toUpperCase();
-            Timestamp createdAt = toTs(order.getCreatedAt());
+            // 下单刚 save 时实体的 createdAt 仍为 null（@Column insertable=false，DB 默认值未回填），
+            // orders.created_at NOT NULL，故回退 now()。
+            Timestamp createdAt = toTs(order.getCreatedAt() != null ? order.getCreatedAt() : LocalDateTime.now());
             Timestamp paidAt = toTs(order.getPaidAt());
             Timestamp cancelledAt = "CANCELLED".equals(adminStatus) ? toTs(order.getClosedAt()) : null;
             Timestamp now = Timestamp.valueOf(LocalDateTime.now());
