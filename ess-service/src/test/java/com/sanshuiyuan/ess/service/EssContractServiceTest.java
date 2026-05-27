@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sanshuiyuan.ess.config.EssProperties;
+import com.sanshuiyuan.ess.config.SigningPreCheckInterceptor;
 import com.sanshuiyuan.ess.domain.EssFlowRecord;
 import com.sanshuiyuan.ess.domain.FlowStatus;
 import com.sanshuiyuan.ess.exception.EssFlowException;
@@ -27,6 +28,7 @@ class EssContractServiceTest {
     @Mock private EssApiClient apiClient;
     @Mock private EssFlowRecordRepository flowRecordRepository;
     @Mock private EssApiLogService apiLogService;
+    @Mock private SigningPreCheckInterceptor signingPreCheck;
     private EssProperties properties;
     private ObjectMapper objectMapper;
     private EssContractService service;
@@ -37,7 +39,7 @@ class EssContractServiceTest {
                 "tpl-001", "https://cb.example.com", null, null, 5000, 10000, 3);
         objectMapper = new ObjectMapper();
         service = new EssContractService(apiClient, properties, flowRecordRepository,
-                apiLogService, objectMapper);
+                apiLogService, objectMapper, signingPreCheck);
     }
 
     @Test
