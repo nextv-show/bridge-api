@@ -25,15 +25,18 @@ public class ContractSigningService {
     private final ContractSnBindingRepository snBindingRepository;
     private final EssContractService essContractService;
     private final ContractStateMachineService stateMachineService;
+    private final ContractArchiveService archiveService;
 
     public ContractSigningService(ContractRepository contractRepository,
                                    ContractSnBindingRepository snBindingRepository,
                                    EssContractService essContractService,
-                                   ContractStateMachineService stateMachineService) {
+                                   ContractStateMachineService stateMachineService,
+                                   ContractArchiveService archiveService) {
         this.contractRepository = contractRepository;
         this.snBindingRepository = snBindingRepository;
         this.essContractService = essContractService;
         this.stateMachineService = stateMachineService;
+        this.archiveService = archiveService;
     }
 
     /**
@@ -85,6 +88,7 @@ public class ContractSigningService {
      * <p>
      * 1. 更新合同状态为 SIGNED
      * 2. 确认 SN 绑定
+     * 3. 自动触发归档流程
      *
      * @param contractId 合同 ID
      * @param pdfUrl     合同 PDF 地址
@@ -95,6 +99,7 @@ public class ContractSigningService {
         Contract contract = stateMachineService.getContract(contractId);
 
         contract.completeSigning(pdfUrl, pdfHash);
+        contract.markPendingArchive();
         contractRepository.save(contract);
 
         // 确认 SN 绑定
@@ -105,7 +110,15 @@ public class ContractSigningService {
             }
         });
 
-        log.info("合同签署完成 [contractNo={}, pdfUrl={}]", contract.getContractNo(), pdfUrl);
+        log.info("合同签署完成，触发归档 [contractNo={}, pdfUrl={}]", contract.getContractNo(), pdfUrl);
+
+        // 自动触发归档
+        try {
+            archiveService.archiveContract(contractId);
+        } catch (Exception e) {
+            log.error("签署后自动归档失败，将等待重试 [contractId={}]: {}", contractId, e.getMessage());
+            // 归档失败不影响签署完成状态，后续重试机制处理
+        }
     }
 
     /**
