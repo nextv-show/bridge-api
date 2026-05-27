@@ -14,6 +14,20 @@ import java.time.LocalDateTime;
 public class Contract {
 
     /**
+     * 归档状态枚举。
+     */
+    public enum ArchiveStatus {
+        /** 待归档 */
+        PENDING,
+        /** 归档中 */
+        ARCHIVING,
+        /** 已归档 */
+        ARCHIVED,
+        /** 归档失败 */
+        FAILED;
+    }
+
+    /**
      * 合同状态枚举（状态机）。
      */
     public enum ContractStatus {
@@ -77,6 +91,24 @@ public class Contract {
     @Column(name = "pdf_hash", length = 128)
     private String pdfHash;
 
+    @Column(name = "tencent_cloud_url", length = 512)
+    private String tencentCloudUrl;
+
+    @Column(name = "oss_url", length = 512)
+    private String ossUrl;
+
+    @Column(name = "archive_status", length = 32)
+    private ArchiveStatus archiveStatus;
+
+    @Column(name = "certificate_no", length = 128)
+    private String certificateNo;
+
+    @Column(name = "download_count")
+    private int downloadCount;
+
+    @Column(name = "archived_at")
+    private LocalDateTime archivedAt;
+
     @Column(name = "ess_flow_id", length = 128)
     private String essFlowId;
 
@@ -139,6 +171,45 @@ public class Contract {
     public void archive() {
         validateTransition(ContractStatus.ARCHIVED);
         this.status = ContractStatus.ARCHIVED;
+        this.archiveStatus = ArchiveStatus.ARCHIVED;
+        this.archivedAt = LocalDateTime.now();
+    }
+
+    /**
+     * 标记为待归档。
+     */
+    public void markPendingArchive() {
+        this.archiveStatus = ArchiveStatus.PENDING;
+    }
+
+    /**
+     * 标记为归档中。
+     */
+    public void markArchiving() {
+        this.archiveStatus = ArchiveStatus.ARCHIVING;
+    }
+
+    /**
+     * 标记归档失败。
+     */
+    public void markArchiveFailed() {
+        this.archiveStatus = ArchiveStatus.FAILED;
+    }
+
+    /**
+     * 更新归档存储信息。
+     */
+    public void updateArchiveUrls(String tencentCloudUrl, String ossUrl, String pdfHash) {
+        this.tencentCloudUrl = tencentCloudUrl;
+        this.ossUrl = ossUrl;
+        this.pdfHash = pdfHash;
+    }
+
+    /**
+     * 增加下载次数。
+     */
+    public void incrementDownloadCount() {
+        this.downloadCount++;
     }
 
     private void validateTransition(ContractStatus target) {
@@ -160,6 +231,12 @@ public class Contract {
     public String getContractFieldsJson() { return contractFieldsJson; }
     public String getPdfUrl() { return pdfUrl; }
     public String getPdfHash() { return pdfHash; }
+    public String getTencentCloudUrl() { return tencentCloudUrl; }
+    public String getOssUrl() { return ossUrl; }
+    public ArchiveStatus getArchiveStatus() { return archiveStatus; }
+    public String getCertificateNo() { return certificateNo; }
+    public int getDownloadCount() { return downloadCount; }
+    public LocalDateTime getArchivedAt() { return archivedAt; }
     public String getEssFlowId() { return essFlowId; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

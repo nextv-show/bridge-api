@@ -41,6 +41,7 @@ class ContractEndToEndTest {
     @Mock private ContractSnBindingRepository snBindingRepository;
     @Mock private EssContractService essContractService;
     @Mock private ContractTemplateRepository templateRepository;
+    @Mock private ContractArchiveService archiveService;
 
     private ObjectMapper objectMapper;
     private ContractGenerationService generationService;
@@ -59,7 +60,7 @@ class ContractEndToEndTest {
 
         signingService = new ContractSigningService(
                 contractRepository, snBindingRepository,
-                essContractService, stateMachineService);
+                essContractService, stateMachineService, archiveService);
     }
 
     /**
