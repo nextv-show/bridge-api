@@ -1,0 +1,45 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: ess-service
+  datasource:
+    url: jdbc:mysql://localhost:3306/ess_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    validate-on-migrate: false
+    table: ess_flyway_schema_history
+
+ess:
+  secret-id: ${ESS_SECRET_ID:}
+  secret-key: ${ESS_SECRET_KEY:}
+  operator-id: ${ESS_OPERATOR_ID:}
+  corp-id: ${ESS_CORP_ID:}
+  template-id: ${ESS_TEMPLATE_ID:}
+  callback-url: ${ESS_CALLBACK_URL:}
+  api-region: ${ESS_API_REGION:ap-guangzhou}
+  api-endpoint: ${ESS_API_ENDPOINT:essbasic.tencentcloudapi.com}
+  connect-timeout-ms: 5000
+  read-timeout-ms: 10000
+  max-retries: 3
+
+springdoc:
+  api-docs:
+    path: /api-docs
+
+logging:
+  pattern:
+    console: '{"time":"%d","level":"%p","logger":"%c","msg":"%m","ex":"%ex"}%n'
