@@ -120,4 +120,128 @@ public class ContractIdentityController {
                 "kycRecordId", kycInfo.kycRecordId()
         ));
     }
+
+    // ========== T18.6: POST /verify-identity ==========
+
+    /**
+     * 发起身份核验（人脸识别）。
+     * <p>
+     * 调用腾讯电子签 DetectIdentityFace API，返回人脸识别参数。
+     * 必须先通过 identity-check 检查。
+     *
+     * @param contractId 合同 ID
+     * @param userId     用户 ID
+     * @return 人脸识别参数
+     */
+    @PostMapping("/{contractId}/verify-identity")
+    public ResponseEntity<Map<String, Object>> verifyIdentity(
+            @PathVariable String contractId,
+            @RequestParam Long userId) {
+
+        log.info("发起身份核验 [contractId={}, userId={}]", contractId, userId);
+
+        try {
+            var result = verificationService.initiateVerification(contractId, userId);
+            return ResponseEntity.ok(Map.of(
+                    "code", result.has("code") ? result.get("code").asInt() : 0,
+                    "status", "IN_PROGRESS",
+                    "message", "请进行人脸识别",
+                    "verificationId", result.has("verificationId")
+                            ? result.get("verificationId").asText() : "",
+                    "faceUrl", result.has("faceUrl")
+                            ? result.get("faceUrl").asText() : ""
+            ));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "code", -1,
+                    "status", "ERROR",
+                    "message", e.getMessage()
+            ));
+        }
+    }
+
+    // ========== T18.7: POST /identity-callback ==========
+
+    /**
+     * 腾讯电子签身份核验结果回调。
+     * <p>
+     * 腾讯电子签在完成人脸识别后回调此端点。
+     * 注意：此端点在 /api/h5/ 路径下，需要在 SecurityConfig 中放行。
+     *
+     * @param contractId     合同 ID
+     * @param callbackData   回调数据
+     * @return 处理结果
+     */
+    @PostMapping("/{contractId}/identity-callback")
+    public ResponseEntity<Map<String, Object>> identityCallback(
+            @PathVariable String contractId,
+            @RequestBody Map<String, Object> callbackData) {
+
+        log.info("收到身份核验回调 [contractId={}]", contractId);
+
+        String verificationId = (String) callbackData.get("VerificationId");
+        Boolean passed = (Boolean) callbackData.get("Passed");
+        String failureReason = (String) callbackData.get("FailureReason");
+
+        if (verificationId == null) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "code", -1,
+                    "message", "缺少 VerificationId"
+            ));
+        }
+
+        try {
+            java.math.BigDecimal faceScore = null;
+            if (callbackData.containsKey("FaceScore")) {
+                faceScore = new java.math.BigDecimal(callbackData.get("FaceScore").toString());
+            }
+
+            verificationService.handleVerificationCallback(
+                    verificationId,
+                    Boolean.TRUE.equals(passed),
+                    faceScore,
+                    failureReason);
+
+            return ResponseEntity.ok(Map.of(
+                    "code", 0,
+                    "message", "回调处理成功"
+            ));
+        } catch (Exception e) {
+            log.error("处理身份核验回调失败 [contractId={}]: {}", contractId, e.getMessage());
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "code", -1,
+                    "message", "回调处理失败: " + e.getMessage()
+            ));
+        }
+    }
+
+    // ========== T18.8: GET /identity-status ==========
+
+    /**
+     * 查询身份核验状态。
+     *
+     * @param contractId 合同 ID
+     * @param userId     用户 ID
+     * @return 核验状态
+     */
+    @GetMapping("/{contractId}/identity-status")
+    public ResponseEntity<Map<String, Object>> identityStatus(
+            @PathVariable String contractId,
+            @RequestParam Long userId) {
+
+        log.debug("查询身份核验状态 [contractId={}, userId={}]", contractId, userId);
+
+        var result = verificationService.getVerificationStatus(contractId, userId);
+
+        return ResponseEntity.ok(Map.of(
+                "code", result.has("code") ? result.get("code").asInt() : 0,
+                "status", result.has("status") ? result.get("status").asText() : "NONE",
+                "verificationType", result.has("verificationType")
+                        ? result.get("verificationType").asText() : "",
+                "faceScore", result.has("faceScore") ? result.get("faceScore").asText() : null,
+                "verifiedAt", result.has("verifiedAt") ? result.get("verifiedAt").asText() : null,
+                "failureReason", result.has("failureReason") ? result.get("failureReason").asText() : null,
+                "retryCount", result.has("retryCount") ? result.get("retryCount").asInt() : 0
+        ));
+    }
 }
