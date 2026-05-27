@@ -1,0 +1,159 @@
+package com.sanshuiyuan.ess.integration;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sanshuiyuan.ess.config.EssProperties;
+import com.sanshuiyuan.ess.domain.EssFlowRecord;
+import com.sanshuiyuan.ess.domain.FlowStatus;
+import com.sanshuiyuan.ess.infra.repository.EssFlowRecordRepository;
+import com.sanshuiyuan.ess.service.EssCallbackService;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.ActiveProfiles;
+
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * T017-T018 关键路径集成测试。
+ * <p>
+ * 验证核心签署流程的端到端衔接：
+ * 创建合同 → 回调处理 → 状态更新 + 异常场景
+ */
+@SpringBootTest(classes = com.sanshuiyuan.ess.EssServiceApplication.class)
+@ActiveProfiles("test")
+class EssCriticalPathTest {
+
+    @Autowired
+    private EssCallbackService callbackService;
+
+    @Autowired
+    private EssFlowRecordRepository flowRecordRepository;
+
+    @Autowired
+    private EssProperties properties;
+
+    @MockBean
+    private com.sanshuiyuan.ess.infra.client.EssApiClient apiClient;
+
+    @BeforeEach
+    void cleanUp() {
+        flowRecordRepository.deleteAll();
+    }
+
+    /**
+     * T017 关键路径: 创建流程记录 → 回调完成 → 状态验证。
+     */
+    @Test
+    void fullFlow_createThenCallback_shouldUpdateStatus() throws Exception {
+        // 1. 准备 - 创建流程记录
+        EssFlowRecord record = EssFlowRecord.create("c-int-001", "[{\"Name\":\"Test\"}]");
+        record.assignFlowId("flow-int-001");
+        flowRecordRepository.save(record);
+
+        // 2. 构造签名验证所需的回调数据
+        String callbackBody = "{\"FlowId\":\"flow-int-001\",\"EventType\":\"FlowFinished\",\"FlowStatus\":\"3\"}";
+        String timestamp = "1700000000";
+        String signature = computeHmac(timestamp + callbackBody);
+
+        // 3. 处理回调
+        var result = callbackService.handleCallback(callbackBody, signature, timestamp);
+
+        // 4. 验证结果
+        assertTrue(result.success());
+        assertEquals("c-int-001", result.contractId());
+        assertEquals("flow-int-001", result.flowId());
+        assertEquals("FlowFinished", result.eventType());
+
+        // 5. 验证数据库状态更新
+        EssFlowRecord updated = flowRecordRepository.findByEssFlowId("flow-int-001").orElseThrow();
+        assertEquals(FlowStatus.COMPLETED, updated.getFlowStatus());
+    }
+
+    /**
+     * T017 关键路径: 取消回调。
+     */
+    @Test
+    void callback_cancelFlow_shouldUpdateStatus() throws Exception {
+        EssFlowRecord record = EssFlowRecord.create("c-int-002", "[]");
+        record.assignFlowId("flow-int-002");
+        flowRecordRepository.save(record);
+
+        String callbackBody = "{\"FlowId\":\"flow-int-002\",\"EventType\":\"FlowCancelled\"}";
+        String timestamp = "1700000000";
+        String signature = computeHmac(timestamp + callbackBody);
+
+        var result = callbackService.handleCallback(callbackBody, signature, timestamp);
+        assertTrue(result.success());
+
+        EssFlowRecord updated = flowRecordRepository.findByEssFlowId("flow-int-002").orElseThrow();
+        assertEquals(FlowStatus.CANCELLED, updated.getFlowStatus());
+    }
+
+    /**
+     * T018 异常场景: 回调签名验证失败应抛异常。
+     */
+    @Test
+    void callback_invalidSignature_shouldThrow() {
+        String callbackBody = "{\"FlowId\":\"flow-int-003\",\"EventType\":\"FlowFinished\"}";
+
+        assertThrows(com.sanshuiyuan.ess.exception.EssCallbackVerificationException.class,
+                () -> callbackService.handleCallback(callbackBody, "invalid-signature", "1700000000"));
+    }
+
+    /**
+     * T018 异常场景: 回调中 flowId 不存在应返回 ignored。
+     */
+    @Test
+    void callback_unknownFlowId_shouldBeIgnored() throws Exception {
+        String callbackBody = "{\"FlowId\":\"nonexistent-flow\",\"EventType\":\"FlowFinished\"}";
+        String timestamp = "1700000000";
+        String signature = computeHmac(timestamp + callbackBody);
+
+        var result = callbackService.handleCallback(callbackBody, signature, timestamp);
+
+        assertFalse(result.success());
+        assertTrue(result.message().contains("流程不存在"));
+    }
+
+    /**
+     * T018 异常场景: 缺少签名参数应立即拒绝。
+     */
+    @Test
+    void callback_missingSignature_shouldThrow() {
+        assertThrows(com.sanshuiyuan.ess.exception.EssCallbackVerificationException.class,
+                () -> callbackService.handleCallback("{}", null, "1700000000"));
+    }
+
+    /**
+     * T018 异常场景: 缺少时间戳参数应立即拒绝。
+     */
+    @Test
+    void callback_missingTimestamp_shouldThrow() {
+        assertThrows(com.sanshuiyuan.ess.exception.EssCallbackVerificationException.class,
+                () -> callbackService.handleCallback("{}", "some-sig", null));
+    }
+
+    private String computeHmac(String data) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            SecretKeySpec keySpec = new SecretKeySpec(
+                    properties.secretKey().getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+            mac.init(keySpec);
+            byte[] hash = mac.doFinal(data.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : hash) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+}
