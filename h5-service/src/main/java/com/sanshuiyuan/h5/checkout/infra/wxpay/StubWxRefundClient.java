@@ -20,4 +20,10 @@ public class StubWxRefundClient implements WxRefundClient {
         // In production, this decrypts the WeChat callback body
         return null;
     }
+
+    @Override
+    public RefundCallbackResult queryRefund(String refundNo) {
+        log.info("[stub] 退款查询 refundNo={}（stub 始终视为处理中）", refundNo);
+        return null;
+    }
 }
