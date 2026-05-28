@@ -2,51 +2,27 @@ package com.sanshuiyuan.h5.checkout.application;
 
 import com.sanshuiyuan.h5.checkout.domain.H5Order;
 import com.sanshuiyuan.h5.checkout.domain.OrderStatus;
-import com.sanshuiyuan.h5.checkout.domain.PaymentInbox;
-import com.sanshuiyuan.h5.checkout.infra.repository.DeviceSpecRepository;
 import com.sanshuiyuan.h5.checkout.infra.repository.H5OrderRepository;
-import com.sanshuiyuan.h5.checkout.infra.repository.PaymentInboxRepository;
 import com.sanshuiyuan.h5.checkout.infra.wxpay.WxPayCallbackVerifier;
-import com.sanshuiyuan.h5.rebate.application.RebateService;
-import com.sanshuiyuan.h5.wxmsg.event.OrderPaidEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 
 @Service
 public class PayCallbackUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(PayCallbackUseCase.class);
-    private static final DateTimeFormatter ISO_FMT =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX");
 
     private final WxPayCallbackVerifier verifier;
-    private final PaymentInboxRepository inboxRepo;
     private final H5OrderRepository orderRepo;
-    private final DeviceSpecRepository specRepo;
-    private final ApplicationEventPublisher eventPublisher;
-    private final RebateService rebateService;
-    private final AdminOrderProjector adminOrderProjector;
+    private final OrderPaymentCompletionService completionService;
 
-    public PayCallbackUseCase(WxPayCallbackVerifier verifier, PaymentInboxRepository inboxRepo,
-                               H5OrderRepository orderRepo, DeviceSpecRepository specRepo,
-                               ApplicationEventPublisher eventPublisher,
-                               RebateService rebateService,
-                               AdminOrderProjector adminOrderProjector) {
+    public PayCallbackUseCase(WxPayCallbackVerifier verifier, H5OrderRepository orderRepo,
+                              OrderPaymentCompletionService completionService) {
         this.verifier = verifier;
-        this.inboxRepo = inboxRepo;
         this.orderRepo = orderRepo;
-        this.specRepo = specRepo;
-        this.eventPublisher = eventPublisher;
-        this.rebateService = rebateService;
-        this.adminOrderProjector = adminOrderProjector;
+        this.completionService = completionService;
     }
 
     @Transactional
@@ -56,15 +32,7 @@ public class PayCallbackUseCase {
             return "FAIL";
         }
 
-        // Idempotent: insert into payment_inbox with unique key
-        try {
-            inboxRepo.save(PaymentInbox.create(result.transactionId(), result.outTradeNo(), result.rawBody()));
-        } catch (DataIntegrityViolationException e) {
-            log.info("Duplicate callback transactionId={} — idempotent return", result.transactionId());
-            return "SUCCESS";
-        }
-
-        // Update order
+        // 验签通过后查单。幂等（payment_inbox 唯一键）由 OrderPaymentCompletionService 持有。
         var orderOpt = orderRepo.findByOrderNo(result.outTradeNo());
         if (orderOpt.isEmpty()) {
             log.warn("Order not found for outTradeNo={}", result.outTradeNo());
@@ -88,28 +56,8 @@ public class PayCallbackUseCase {
             return "SUCCESS";
         }
 
-        // Write SN (ASSUMPTION-Q3: placeholder SN) + cooldown_end_at
-        String placeholderSn = "SN-PENDING-" + order.getOrderNo();
-        LocalDateTime cooldownEnd = LocalDateTime.now().plusHours(24);
-        order.markPaid(result.transactionId(), placeholderSn, cooldownEnd);
-        orderRepo.save(order);
-
-        // 双写：同事务内投影已支付状态到 admin orders 表。
-        adminOrderProjector.project(order);
-
-        // 011: 按订单快照的 L1/L2 受益人冻结返利（FROZEN）。仅 L1/L2，绝不递归 L3+；
-        // 自然流量订单（无邀请人快照）不产生记录。与支付落库同一事务，金额暂为配置占位值。
-        rebateService.freezeForOrder(order.getId(), order.getInviterId(), order.getGrandInviterId());
-
-        // Spec 106: 发布支付成功事件，事务提交后由 OrderPaidEventListener 异步推送模板消息
-        String modelName = specRepo.findByModelCode(order.getModelCode())
-                .map(s -> s.getName())
-                .orElse(order.getModelCode());
-        String cooldownEndAtStr = cooldownEnd.atZone(ZoneId.systemDefault()).format(ISO_FMT);
-        eventPublisher.publishEvent(new OrderPaidEvent(
-                order.getId(), order.getOpenid(), order.getOrderNo(),
-                modelName, order.getAmountCents(), cooldownEndAtStr));
-
+        // SUCCESS 路径：交由共享完成逻辑落账（幂等插入 inbox + 改单 + 双写 + 冻结返利 + 发事件）。
+        completionService.completePaid(order, result.transactionId(), result.rawBody());
         return "SUCCESS";
     }
 }

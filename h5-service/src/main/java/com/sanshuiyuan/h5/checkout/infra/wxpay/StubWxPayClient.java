@@ -24,6 +24,13 @@ public class StubWxPayClient implements WxPayClient {
     }
 
     @Override
+    public TradeQueryResult queryOrder(String outTradeNo) {
+        // stub 环境永不误判已支付。
+        log.info("[stub] queryOrder outTradeNo={} -> NOTPAY", outTradeNo);
+        return new TradeQueryResult("NOTPAY", null, null);
+    }
+
+    @Override
     public void closeOrder(String outTradeNo) {
         log.info("[stub] closeOrder outTradeNo={}", outTradeNo);
     }
