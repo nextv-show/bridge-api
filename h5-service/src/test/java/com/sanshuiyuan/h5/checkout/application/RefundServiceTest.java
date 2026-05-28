@@ -41,9 +41,11 @@ class RefundServiceTest {
     @Mock ApplicationEventPublisher eventPublisher;
     @Mock RebateService rebateService;
     @Mock H5RealtimeBroadcaster realtimeBroadcaster;
+    @Mock AdminOrderProjector adminOrderProjector;
 
     private RefundService createService() {
-        return new RefundService(orderRepo, refundRepo, wxRefundClient, eventPublisher, rebateService, realtimeBroadcaster);
+        return new RefundService(orderRepo, refundRepo, wxRefundClient, eventPublisher,
+                rebateService, realtimeBroadcaster, adminOrderProjector);
     }
 
     // ─── helpers ───

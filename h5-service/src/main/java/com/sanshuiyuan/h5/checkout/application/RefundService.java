@@ -132,10 +132,6 @@ public class RefundService {
     public void handleRefundCallback(String body, String signature,
                                       String timestamp, String nonce, String serial) {
         log.info("收到微信退款回调");
-        // TODO: verify V3 signature + decrypt once real wxpay is wired
-
-        // Stub: parse refund_no from body or use a simple protocol
-        // In production, decrypt the callback body to extract refund info
         WxRefundClient.RefundCallbackResult result =
                 wxRefundClient.parseCallback(body, signature, timestamp, nonce, serial);
 
@@ -143,10 +139,20 @@ public class RefundService {
             log.warn("退款回调解析失败");
             return;
         }
+        applyRefundResult(result);
+    }
 
+    /**
+     * 应用微信侧的退款结果。回调与主动查单兜底（{@link ReconcileRefundingOrdersJob}）共享此入口，
+     * 以幂等的方式更新 refund / order / 双写投影 / 返利取消 / 模板消息 / 实时广播。
+     *
+     * <p>幂等：refund 已是 SUCCESS 时直接返回。
+     */
+    @Transactional
+    public void applyRefundResult(WxRefundClient.RefundCallbackResult result) {
         refundRepo.findByRefundNo(result.refundNo()).ifPresent(refund -> {
             if (refund.getStatus() == RefundStatus.SUCCESS) {
-                log.info("退款回调幂等跳过 refundNo={}", result.refundNo());
+                log.info("退款幂等跳过 refundNo={}", result.refundNo());
                 return;
             }
 
