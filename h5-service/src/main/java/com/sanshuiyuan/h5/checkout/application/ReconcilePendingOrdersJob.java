@@ -27,8 +27,8 @@ public class ReconcilePendingOrdersJob {
 
     /** 查单窗口：仅核对最近 24h 内创建的订单。 */
     private static final long WINDOW_HOURS = 24;
-    /** 安全间隔：跳过最近 60s 内创建的订单，避免与正常下单/回调流程竞争。 */
-    private static final long SKIP_RECENT_SECONDS = 60;
+    /** 安全间隔：跳过最近 15s 内创建的订单，避免对用户尚在收银台、还没支付的新单做无谓查单。 */
+    private static final long SKIP_RECENT_SECONDS = 15;
 
     private final H5OrderRepository orderRepo;
     private final WxPayClient wxPayClient;
@@ -41,7 +41,7 @@ public class ReconcilePendingOrdersJob {
         this.completionService = completionService;
     }
 
-    @Scheduled(fixedDelay = 120_000)
+    @Scheduled(fixedDelay = 30_000)
     public void reconcile() {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime windowStart = now.minusHours(WINDOW_HOURS);
