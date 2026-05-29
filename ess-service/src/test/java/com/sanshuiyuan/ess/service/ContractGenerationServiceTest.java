@@ -24,6 +24,7 @@ import com.sanshuiyuan.ess.domain.ContractAuditTrail;
 
 /**
  * T17.15: ContractGenerationService 测试 —— SN 预占位绑定逻辑。
+ * 024: 更新为统一合同模板，移除附件相关断言。
  */
 @ExtendWith(MockitoExtension.class)
 class ContractGenerationServiceTest {
@@ -61,12 +62,9 @@ class ContractGenerationServiceTest {
     void generateContract_withDeviceSn_shouldCreateSnBinding() {
         // Arrange
         ContractTemplate mainTpl = mockTemplate("MAIN", "合同编号: {{contractNo}}, SN: {{deviceSn}}");
-        ContractTemplate attachTpl = mockTemplate("ATTACH", "SN: {{deviceSn}}");
 
         when(templateService.getLatestVersion(ContractTemplateDataInitializer.MAIN_CONTRACT_CODE))
                 .thenReturn(mainTpl);
-        when(templateService.getLatestVersion(ContractTemplateDataInitializer.PROPERTY_CERT_CODE))
-                .thenReturn(attachTpl);
         when(contractNoGenerator.generate()).thenReturn("CT-20260527-ABC123");
         when(contractRepository.save(any(Contract.class))).thenAnswer(inv -> inv.getArgument(0));
         when(snBindingRepository.save(any(ContractSnBinding.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -87,7 +85,8 @@ class ContractGenerationServiceTest {
         // Assert: result contains SN in content
         assertNotNull(result);
         assertTrue(result.mainContractContent().contains("SN-DEVICE-001"));
-        assertTrue(result.attachmentContent().contains("SN-DEVICE-001"));
+        // attachmentContent is deprecated, always returns null
+        assertNull(result.attachmentContent());
         assertEquals(Contract.ContractStatus.GENERATED, result.status());
     }
 
@@ -95,12 +94,9 @@ class ContractGenerationServiceTest {
     void generateContract_withoutDeviceSn_shouldNotCreateSnBinding() {
         // Arrange
         ContractTemplate mainTpl = mockTemplate("MAIN", "合同编号: {{contractNo}}, SN: {{deviceSn}}");
-        ContractTemplate attachTpl = mockTemplate("ATTACH", "SN: {{deviceSn}}");
 
         when(templateService.getLatestVersion(ContractTemplateDataInitializer.MAIN_CONTRACT_CODE))
                 .thenReturn(mainTpl);
-        when(templateService.getLatestVersion(ContractTemplateDataInitializer.PROPERTY_CERT_CODE))
-                .thenReturn(attachTpl);
         when(contractNoGenerator.generate()).thenReturn("CT-20260527-XYZ789");
         when(contractRepository.save(any(Contract.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -120,12 +116,9 @@ class ContractGenerationServiceTest {
     void generateContract_withBlankDeviceSn_shouldNotCreateSnBinding() {
         // Arrange
         ContractTemplate mainTpl = mockTemplate("MAIN", "SN: {{deviceSn}}");
-        ContractTemplate attachTpl = mockTemplate("ATTACH", "SN: {{deviceSn}}");
 
         when(templateService.getLatestVersion(ContractTemplateDataInitializer.MAIN_CONTRACT_CODE))
                 .thenReturn(mainTpl);
-        when(templateService.getLatestVersion(ContractTemplateDataInitializer.PROPERTY_CERT_CODE))
-                .thenReturn(attachTpl);
         when(contractNoGenerator.generate()).thenReturn("CT-20260527-BLK000");
         when(contractRepository.save(any(Contract.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -144,12 +137,9 @@ class ContractGenerationServiceTest {
         String templateContent = "编号:{{contractNo}} 日期:{{signDate}} 姓名:{{userName}} " +
                 "身份证:{{idCardNo}} 电话:{{phone}} 型号:{{deviceModel}} SN:{{deviceSn}} 价格:{{devicePrice}}";
         ContractTemplate mainTpl = mockTemplate("MAIN", templateContent);
-        ContractTemplate attachTpl = mockTemplate("ATTACH", templateContent);
 
         when(templateService.getLatestVersion(ContractTemplateDataInitializer.MAIN_CONTRACT_CODE))
                 .thenReturn(mainTpl);
-        when(templateService.getLatestVersion(ContractTemplateDataInitializer.PROPERTY_CERT_CODE))
-                .thenReturn(attachTpl);
         when(contractNoGenerator.generate()).thenReturn("CT-20260527-FULL01");
         when(contractRepository.save(any(Contract.class))).thenAnswer(inv -> inv.getArgument(0));
         when(snBindingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -173,11 +163,8 @@ class ContractGenerationServiceTest {
     void generateContract_contractIdPassedToSnBinding() {
         // Arrange - simulate JPA assigning an ID
         ContractTemplate mainTpl = mockTemplate("MAIN", "test {{contractNo}}");
-        ContractTemplate attachTpl = mockTemplate("ATTACH", "test {{contractNo}}");
 
         when(templateService.getLatestVersion(anyString())).thenReturn(mainTpl);
-        lenient().when(templateService.getLatestVersion(ContractTemplateDataInitializer.PROPERTY_CERT_CODE))
-                .thenReturn(attachTpl);
         when(contractNoGenerator.generate()).thenReturn("CT-20260527-IDCHECK");
 
         // First save (draft) returns contract with id=99
@@ -209,12 +196,9 @@ class ContractGenerationServiceTest {
     void generateContract_shouldTransitionStatusDraftToGenerated() {
         // Arrange
         ContractTemplate mainTpl = mockTemplate("MAIN", "test");
-        ContractTemplate attachTpl = mockTemplate("ATTACH", "test");
 
         when(templateService.getLatestVersion(ContractTemplateDataInitializer.MAIN_CONTRACT_CODE))
                 .thenReturn(mainTpl);
-        when(templateService.getLatestVersion(ContractTemplateDataInitializer.PROPERTY_CERT_CODE))
-                .thenReturn(attachTpl);
         when(contractNoGenerator.generate()).thenReturn("CT-20260527-STAT01");
         when(contractRepository.save(any(Contract.class))).thenAnswer(inv -> inv.getArgument(0));
         when(snBindingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
