@@ -43,6 +43,9 @@ public class ContractTemplate {
     @Column(name = "version", nullable = false)
     private int version;
 
+    @Column(name = "is_deprecated", nullable = false)
+    private Boolean isDeprecated = false;
+
     @Column(name = "created_at", insertable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -80,6 +83,7 @@ public class ContractTemplate {
     public TemplateType getTemplateType() { return templateType; }
     public String getContentBody() { return contentBody; }
     public int getVersion() { return version; }
+    public Boolean getIsDeprecated() { return isDeprecated; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
 }
