@@ -76,15 +76,14 @@ public class ContractController {
 
         GenerateContractResult result = generationService.generateContract(genRequest);
 
-        return ResponseEntity.ok(Map.of(
-                "code", 0,
-                "message", "合同生成成功",
-                "contractId", result.contractId(),
-                "contractNo", result.contractNo(),
-                "status", result.status().name(),
-                "mainContract", result.mainContractContent(),
-                "attachment", result.attachmentContent()
-        ));
+        Map<String, Object> resp = new java.util.LinkedHashMap<>();
+        resp.put("code", 0);
+        resp.put("message", "合同生成成功");
+        resp.put("contractId", result.contractId());
+        resp.put("contractNo", result.contractNo());
+        resp.put("status", result.status().name());
+        resp.put("mainContract", result.mainContractContent());
+        return ResponseEntity.ok(resp);
     }
 
     // ========== T17.10: GET /{id}/preview ==========
@@ -95,14 +94,13 @@ public class ContractController {
 
         GenerateContractResult result = generationService.getContractContent(id);
 
-        return ResponseEntity.ok(Map.of(
-                "code", 0,
-                "contractId", result.contractId(),
-                "contractNo", result.contractNo(),
-                "status", result.status().name(),
-                "mainContract", result.mainContractContent(),
-                "attachment", result.attachmentContent()
-        ));
+        Map<String, Object> resp = new java.util.LinkedHashMap<>();
+        resp.put("code", 0);
+        resp.put("contractId", result.contractId());
+        resp.put("contractNo", result.contractNo());
+        resp.put("status", result.status().name());
+        resp.put("mainContract", result.mainContractContent());
+        return ResponseEntity.ok(resp);
     }
 
     // ========== T17.12: POST /{id}/initiate-signing ==========

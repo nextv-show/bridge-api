@@ -139,9 +139,9 @@ public class ContractRevokeService {
         long start = System.currentTimeMillis();
         try {
             TreeMap<String, Object> params = new TreeMap<>();
+            ObjectNode agent = objectMapper.createObjectNode();
             ObjectNode operator = objectMapper.createObjectNode();
-            operator.put("OperatorId", properties.operatorId());
-            operator.put("OperatorType", 1);
+            operator.put("UserId", properties.operatorId());
             params.put("Operator", operator);
             params.put("FlowId", essFlowId);
             params.put("CancelMessage", reason != null ? reason : "用户冷静期内撤销");
@@ -149,7 +149,7 @@ public class ContractRevokeService {
             JsonNode response = apiClient.invoke("CancelFlow", params);
 
             int duration = (int) (System.currentTimeMillis() - start);
-            apiLogService.recordSuccessAsync("CancelFlow", params.toString(),
+            apiLogService.recordSuccessAsync("ChannelCancelFlow", params.toString(),
                     response.toString(), 200, duration);
 
             log.info("腾讯电子签撤回成功 [contractId={}, flowId={}]", contract.getId(), essFlowId);
@@ -165,7 +165,7 @@ public class ContractRevokeService {
             throw e;
         } catch (Exception e) {
             int duration = (int) (System.currentTimeMillis() - start);
-            apiLogService.recordFailureAsync("CancelFlow", "{}", null, null, duration, e.getMessage());
+            apiLogService.recordFailureAsync("ChannelCancelFlow", "{}", null, null, duration, e.getMessage());
             throw new RuntimeException("腾讯电子签撤回失败: " + e.getMessage(), e);
         }
     }

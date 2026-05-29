@@ -29,7 +29,7 @@ class EssDocumentServiceTest {
     @BeforeEach
     void setUp() {
         EssProperties props = new EssProperties("sid", "skey", "op-001", "corp-001",
-                "tpl-001", "https://cb.example.com", null, null, 5000, 10000, 3);
+                "tpl-001", "https://cb.example.com", null, null, 5000, 10000, 3, Boolean.FALSE);
         objectMapper = new ObjectMapper();
         service = new EssDocumentService(apiClient, props, contractService, objectMapper);
     }
@@ -68,7 +68,7 @@ class EssDocumentServiceTest {
 
         ObjectNode response = objectMapper.createObjectNode();
         response.put("Url", "https://files.ess.tencent.com/single.pdf");
-        when(apiClient.invoke(eq("DescribeFileUrl"), any())).thenReturn(response);
+        when(apiClient.invoke(eq("DescribeFileUrls"), any())).thenReturn(response);
 
         String url = service.getFileUrl("c-001", "file-001");
 

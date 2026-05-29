@@ -142,12 +142,11 @@ public class SupplementaryContractService {
         long start = System.currentTimeMillis();
         try {
             TreeMap<String, Object> params = new TreeMap<>();
-            ObjectNode operator = objectMapper.createObjectNode();
-            operator.put("OperatorId", properties.operatorId());
-            operator.put("OperatorType", 1);
+            TreeMap<String, Object> operator = new TreeMap<>();
+            operator.put("UserId", properties.operatorId());
             params.put("Operator", operator);
             params.put("FlowName", flowName);
-            params.put("FlowApprovers", sc.getSignerInfoJson() != null ? sc.getSignerInfoJson() : "[]");
+            params.put("Approvers", sc.getSignerInfoJson() != null ? sc.getSignerInfoJson() : "[]");
 
             JsonNode response = apiClient.invoke("CreateFlow", params);
             String essFlowId = response.get("FlowId").asText();

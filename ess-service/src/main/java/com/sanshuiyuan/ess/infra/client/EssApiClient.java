@@ -2,23 +2,14 @@ package com.sanshuiyuan.ess.infra.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sanshuiyuan.ess.config.EssProperties;
 import com.sanshuiyuan.ess.exception.EssApiException;
-import com.tencentcloudapi.common.Credential;
-import com.tencentcloudapi.common.exception.TencentCloudSDKException;
-import com.tencentcloudapi.common.profile.ClientProfile;
-import com.tencentcloudapi.common.profile.HttpProfile;
+import okhttp3.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestTemplate;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -28,43 +19,33 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.TreeMap;
+import java.util.concurrent.TimeUnit;
 
 /**
- * 腾讯电子签企业版 HTTP 客户端封装。
+ * 腾讯电子签 API 客户端。
  * <p>
- * 负责：HTTP 调用、TC3-HMAC-SHA256 签名、鉴权、错误处理、超时控制。
- * 所有 API 调用通过此客户端统一出口，确保审计日志可追踪。
+ * 使用 TC3-HMAC-SHA256 手动签名 + OkHttp 发送。
+ * 参考腾讯官方 ess-java-kit 的签名逻辑，但不依赖 SDK 的 call() 方法
+ * （SDK call() 在联调环境存在 Endpoint/Version 兼容问题）。
  */
 @Component
 public class EssApiClient {
 
     private static final Logger log = LoggerFactory.getLogger(EssApiClient.class);
-    private static final String SERVICE = "essbasic";
-    private static final String HOST = "essbasic.tencentcloudapi.com";
-    private static final String ALGORITHM = "TC3-HMAC-SHA256";
-    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(ZoneId.of("UTC"));
 
     private final EssProperties properties;
-    private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
+    private final OkHttpClient httpClient;
 
     public EssApiClient(EssProperties properties, ObjectMapper objectMapper) {
         this.properties = properties;
         this.objectMapper = objectMapper;
-        this.restTemplate = createRestTemplate(properties);
+        this.httpClient = new OkHttpClient.Builder()
+                .connectTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .build();
     }
 
-    /**
-     * 调用腾讯电子签企业版 API。
-     * <p>
-     * 使用指数退避重试策略：初始间隔 1s，乘数 2，最大间隔 10s，最多 3 次。
-     * 仅对网络类异常重试（EssApiException），业务 API 错误码不重试。
-     *
-     * @param action API 动作名（如 CreateFlow, StartFlow）
-     * @param params 请求参数
-     * @return 响应 JSON
-     * @throws EssApiException 调用失败时抛出
-     */
     @Retryable(
             retryFor = {EssApiException.class},
             noRetryFor = {
@@ -76,97 +57,78 @@ public class EssApiClient {
     )
     public JsonNode invoke(String action, TreeMap<String, Object> params) {
         long start = System.currentTimeMillis();
-        String requestBody;
         try {
-            requestBody = objectMapper.writeValueAsString(params);
-        } catch (Exception e) {
-            throw new EssApiException(action, "序列化请求参数失败", e);
-        }
+            String body = objectMapper.writeValueAsString(params);
+            String endpoint = properties.apiEndpoint();
+            String service = "ess";
 
-        try {
+            log.info("ESS API [action={}, bodyLen={}, endpoint={}]", action, body.length(), properties.apiEndpoint());
+
+            // TC3-HMAC-SHA256 签名
+            byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
             String timestamp = String.valueOf(Instant.now().getEpochSecond());
-            HttpHeaders headers = buildAuthHeaders(action, requestBody, timestamp);
+            String date = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+                    .withZone(ZoneId.of("UTC")).format(Instant.now());
 
-            HttpEntity<String> entity = new HttpEntity<>(requestBody, headers);
-            String url = "https://" + properties.apiEndpoint();
+            String hashedPayload = sha256Hex(bodyBytes);
+            String canonicalRequest = "POST\n/\n\ncontent-type:application/json; charset=utf-8\nhost:"
+                    + endpoint + "\n\ncontent-type;host\n" + hashedPayload;
+            String credentialScope = date + "/" + service + "/tc3_request";
+            String stringToSign = "TC3-HMAC-SHA256\n" + timestamp + "\n" + credentialScope
+                    + "\n" + sha256Hex(canonicalRequest.getBytes(StandardCharsets.UTF_8));
 
-            String responseBody = restTemplate.postForObject(url, entity, String.class);
-            long duration = System.currentTimeMillis() - start;
+            byte[] secretDate = hmacSha256(("TC3" + properties.secretKey()).getBytes(StandardCharsets.UTF_8), date);
+            byte[] secretService = hmacSha256(secretDate, service);
+            byte[] secretSigning = hmacSha256(secretService, "tc3_request");
+            String signature = hexEncode(hmacSha256(secretSigning, stringToSign));
 
-            JsonNode response = objectMapper.readTree(responseBody);
-            JsonNode responseNode = response.get("Response");
+            String authorization = "TC3-HMAC-SHA256 Credential=" + properties.secretId() + "/" + credentialScope
+                    + ", SignedHeaders=content-type;host, Signature=" + signature;
 
-            if (responseNode != null && responseNode.has("Error")) {
-                String errorCode = responseNode.get("Error").get("Code").asText();
-                String errorMsg = responseNode.get("Error").get("Message").asText();
-                throw new EssApiException(action, 200,
-                        String.format("API Error [%s]: %s", errorCode, errorMsg));
+            // OkHttp 发送
+            Request request = new Request.Builder()
+                    .url("https://" + endpoint + "/")
+                    .addHeader("Content-Type", "application/json; charset=utf-8")
+                    .addHeader("Host", endpoint)
+                    .addHeader("X-TC-Action", action)
+                    .addHeader("X-TC-Version", "2020-11-11")
+                    .addHeader("X-TC-Timestamp", timestamp)
+                    .addHeader("X-TC-Region", properties.apiRegion())
+                    .addHeader("Authorization", authorization)
+                    .post(RequestBody.create(bodyBytes, MediaType.parse("application/json; charset=utf-8")))
+                    .build();
+
+            try (Response response = httpClient.newCall(request).execute()) {
+                long duration = System.currentTimeMillis() - start;
+                String responseBody = response.body() != null ? response.body().string() : "";
+
+                log.info("ESS API [action={}] 耗时 {}ms, httpCode={}", action, duration, response.code());
+
+                JsonNode responseJson = objectMapper.readTree(responseBody);
+                JsonNode responseNode = responseJson.get("Response");
+
+                if (responseNode != null && responseNode.has("Error")) {
+                    String errorCode = responseNode.get("Error").get("Code").asText();
+                    String errorMsg = responseNode.get("Error").get("Message").asText();
+                    log.error("ESS API [action={}] 业务错误 [{}]: {}", action, errorCode, errorMsg);
+                    throw new EssApiException(action, response.code(),
+                            String.format("API Error [%s]: %s", errorCode, errorMsg));
+                }
+
+                return responseNode != null ? responseNode : responseJson;
             }
-
-            log.info("ESS API [{}] 调用成功, 耗时 {}ms", action, duration);
-            return responseNode != null ? responseNode : response;
 
         } catch (EssApiException e) {
             throw e;
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - start;
-            log.error("ESS API [{}] 调用异常, 耗时 {}ms: {}", action, duration, e.getMessage());
+            log.error("ESS API [action={}] 调用异常, 耗时 {}ms: {}", action, duration, e.getMessage());
             throw new EssApiException(action, e.getMessage(), e);
         }
     }
 
-    /**
-     * 构建 TC3-HMAC-SHA256 鉴权头。
-     */
-    HttpHeaders buildAuthHeaders(String action, String payload, String timestamp) {
-        try {
-            String date = DATE_FMT.format(Instant.ofEpochSecond(Long.parseLong(timestamp)));
-
-            // 1. 拼接规范请求串
-            String hashedPayload = sha256Hex(payload);
-            String canonicalRequest = "POST\n/\n\ncontent-type:application/json; charset=utf-8\nhost:" + HOST + "\n\ncontent-type;host\n" + hashedPayload;
-
-            // 2. 拼接待签名字符串
-            String credentialScope = date + "/" + SERVICE + "/tc3_request";
-            String hashedCanonicalRequest = sha256Hex(canonicalRequest);
-            String stringToSign = ALGORITHM + "\n" + timestamp + "\n" + credentialScope + "\n" + hashedCanonicalRequest;
-
-            // 3. 计算签名
-            byte[] secretDate = hmacSha256(("TC3" + properties.secretKey()).getBytes(StandardCharsets.UTF_8), date);
-            byte[] secretService = hmacSha256(secretDate, SERVICE);
-            byte[] secretSigning = hmacSha256(secretService, "tc3_request");
-            String signature = hexEncode(hmacSha256(secretSigning, stringToSign));
-
-            // 4. 构建 Authorization
-            String authorization = ALGORITHM + " Credential=" + properties.secretId() + "/" + credentialScope
-                    + ", SignedHeaders=content-type;host, Signature=" + signature;
-
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.set("Host", HOST);
-            headers.set("X-TC-Action", action);
-            headers.set("X-TC-Version", "2021-05-26");
-            headers.set("X-TC-Timestamp", timestamp);
-            headers.set("X-TC-Region", properties.apiRegion());
-            headers.set("Authorization", authorization);
-
-            return headers;
-        } catch (Exception e) {
-            throw new EssApiException(action, "构建鉴权头失败", e);
-        }
-    }
-
-    private RestTemplate createRestTemplate(EssProperties props) {
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(props.connectTimeoutMs());
-        factory.setReadTimeout(props.readTimeoutMs());
-        return new RestTemplate(factory);
-    }
-
-    private static String sha256Hex(String data) throws Exception {
-        MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        byte[] hash = digest.digest(data.getBytes(StandardCharsets.UTF_8));
-        return hexEncode(hash);
+    private static String sha256Hex(byte[] data) throws Exception {
+        return hexEncode(MessageDigest.getInstance("SHA-256").digest(data));
     }
 
     private static byte[] hmacSha256(byte[] key, String data) throws Exception {
@@ -177,9 +139,7 @@ public class EssApiClient {
 
     private static String hexEncode(byte[] bytes) {
         StringBuilder sb = new StringBuilder();
-        for (byte b : bytes) {
-            sb.append(String.format("%02x", b));
-        }
+        for (byte b : bytes) sb.append(String.format("%02x", b));
         return sb.toString();
     }
 }

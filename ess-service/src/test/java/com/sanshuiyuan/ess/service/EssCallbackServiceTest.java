@@ -31,7 +31,7 @@ class EssCallbackServiceTest {
     @BeforeEach
     void setUp() {
         properties = new EssProperties("sid", "skey", "op-001", "corp-001",
-                "tpl-001", "https://cb.example.com", null, null, 5000, 10000, 3);
+                "tpl-001", "https://cb.example.com", null, null, 5000, 10000, 3, Boolean.FALSE);
         objectMapper = new ObjectMapper();
         service = new EssCallbackService(properties, flowRecordRepository, objectMapper);
     }

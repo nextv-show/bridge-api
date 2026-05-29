@@ -1,0 +1,18 @@
+# ================================================================
+# 联调/测试环境 Profile
+# 用法: java -jar app.jar --spring.profiles.active=test
+# ================================================================
+ess:
+  api-endpoint: ${ESS_API_ENDPOINT:ess.test.ess.tencent.cn}
+  collect-id-card: false
+  # 联调环境降低超时以快速暴露问题
+  connect-timeout-ms: 5000
+  read-timeout-ms: 10000
+
+spring:
+  datasource:
+    url: jdbc:mysql://${DB_HOST:bridge-mysql}:3306/ess_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+
+logging:
+  level:
+    com.sanshuiyuan.ess: DEBUG

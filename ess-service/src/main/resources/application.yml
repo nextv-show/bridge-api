@@ -4,6 +4,8 @@ server:
 spring:
   application:
     name: ess-service
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:test}
   datasource:
     url: jdbc:mysql://localhost:3306/ess_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
     username: ${DB_USERNAME:root}
@@ -31,10 +33,11 @@ ess:
   template-id: ${ESS_TEMPLATE_ID:}
   callback-url: ${ESS_CALLBACK_URL:}
   api-region: ${ESS_API_REGION:ap-guangzhou}
-  api-endpoint: ${ESS_API_ENDPOINT:essbasic.tencentcloudapi.com}
+  api-endpoint: ${ESS_API_ENDPOINT:ess.test.ess.tencent.cn}
   connect-timeout-ms: 5000
   read-timeout-ms: 10000
   max-retries: 3
+  collect-id-card: false
 
 springdoc:
   api-docs:

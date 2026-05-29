@@ -13,42 +13,44 @@ import org.springframework.validation.annotation.Validated;
 @Validated
 @ConfigurationProperties(prefix = "ess")
 public record EssProperties(
+        @NotBlank(message = "ESS secret-id 必须配置")
+        String secretId,
 
-    @NotBlank(message = "ESS secret-id 必须配置")
-    String secretId,
+        @NotBlank(message = "ESS secret-key 必须配置")
+        String secretKey,
 
-    @NotBlank(message = "ESS secret-key 必须配置")
-    String secretKey,
+        @NotBlank(message = "ESS operator-id 必须配置")
+        String operatorId,
 
-    @NotBlank(message = "ESS operator-id 必须配置")
-    String operatorId,
+        @NotBlank(message = "ESS corp-id 必须配置")
+        String corpId,
 
-    @NotBlank(message = "ESS corp-id 必须配置")
-    String corpId,
+        /** 合同模板 ID，可逗号分隔多个 */
+        String templateId,
 
-    /** 合同模板 ID，可逗号分隔多个 */
-    String templateId,
+        /** Webhook 回调地址 */
+        String callbackUrl,
 
-    /** Webhook 回调地址 */
-    String callbackUrl,
+        /** API 地域，默认 ap-guangzhou */
+        String apiRegion,
 
-    /** API 地域，默认 ap-guangzhou */
-    String apiRegion,
+        /** API 接入点，默认 ess.test.ess.tencent.cn（联调环境） */
+        String apiEndpoint,
 
-    /** API 接入点，默认 essbasic.tencentcloudapi.com */
-    String apiEndpoint,
+        /** HTTP 连接超时（毫秒），默认 5000 */
+        @Positive
+        Integer connectTimeoutMs,
 
-    /** HTTP 连接超时（毫秒），默认 5000 */
-    @Positive
-    Integer connectTimeoutMs,
+        /** HTTP 读取超时（毫秒），默认 10000 */
+        @Positive
+        Integer readTimeoutMs,
 
-    /** HTTP 读取超时（毫秒），默认 10000 */
-    @Positive
-    Integer readTimeoutMs,
+        /** API 调用最大重试次数，默认 3 */
+        @Positive
+        Integer maxRetries,
 
-    /** API 调用最大重试次数，默认 3 */
-    @Positive
-    Integer maxRetries
+        /** 是否在创建签署方时传身份证号，生产环境建议开启 */
+        Boolean collectIdCard
 ) {
 
     /**
@@ -59,7 +61,7 @@ public record EssProperties(
             apiRegion = "ap-guangzhou";
         }
         if (apiEndpoint == null || apiEndpoint.isBlank()) {
-            apiEndpoint = "essbasic.tencentcloudapi.com";
+            apiEndpoint = "ess.test.ess.tencent.cn";
         }
         if (connectTimeoutMs == null) {
             connectTimeoutMs = 5000;
@@ -69,6 +71,9 @@ public record EssProperties(
         }
         if (maxRetries == null) {
             maxRetries = 3;
+        }
+        if (collectIdCard == null) {
+            collectIdCard = Boolean.FALSE;
         }
     }
 }

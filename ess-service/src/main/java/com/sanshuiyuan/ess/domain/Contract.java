@@ -123,6 +123,7 @@ public class Contract {
     @Column(name = "oss_url", length = 512)
     private String ossUrl;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "archive_status", length = 32)
     private ArchiveStatus archiveStatus;
 

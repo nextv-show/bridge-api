@@ -53,6 +53,9 @@ public class EssDocumentService {
 
         try {
             TreeMap<String, Object> params = new TreeMap<>();
+            ObjectNode agent = objectMapper.createObjectNode();
+            agent.put("AppId", properties.corpId());
+            params.put("Agent", agent);
             params.put("Operator", buildOperator());
             params.put("FlowId", record.getEssFlowId());
 
@@ -92,11 +95,14 @@ public class EssDocumentService {
 
         try {
             TreeMap<String, Object> params = new TreeMap<>();
+            ObjectNode agent = objectMapper.createObjectNode();
+            agent.put("AppId", properties.corpId());
+            params.put("Agent", agent);
             params.put("Operator", buildOperator());
             params.put("FlowId", record.getEssFlowId());
             params.put("FileId", fileId);
 
-            JsonNode response = apiClient.invoke("DescribeFileUrl", params);
+            JsonNode response = apiClient.invoke("DescribeFileUrls", params);
             String url = response.has("Url") ? response.get("Url").asText() : null;
 
             log.info("PDF 文件 URL 获取成功 [contractId={}, fileId={}]",
@@ -113,8 +119,7 @@ public class EssDocumentService {
 
     private ObjectNode buildOperator() {
         ObjectNode operator = objectMapper.createObjectNode();
-        operator.put("OperatorId", properties.operatorId());
-        operator.put("OperatorType", 1);
+        operator.put("UserId", properties.operatorId());
         return operator;
     }
 }

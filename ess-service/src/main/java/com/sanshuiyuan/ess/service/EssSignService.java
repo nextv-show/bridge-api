@@ -57,6 +57,9 @@ public class EssSignService {
         long start = System.currentTimeMillis();
         try {
             TreeMap<String, Object> params = new TreeMap<>();
+            ObjectNode agent = objectMapper.createObjectNode();
+            agent.put("AppId", properties.corpId());
+            params.put("Agent", agent);
             params.put("Operator", buildOperator());
             params.put("FlowId", record.getEssFlowId());
 
@@ -69,7 +72,7 @@ public class EssSignService {
             int h5TypeInt = "embed".equalsIgnoreCase(h5Type) ? 2 : 1;
             params.put("H5Type", h5TypeInt);
 
-            JsonNode response = apiClient.invoke("CreateH5SignUrl", params);
+            JsonNode response = apiClient.invoke("CreateSchemeUrl", params);
             String signUrl = response.has("H5SignUrl") ? response.get("H5SignUrl").asText() : null;
 
             log.info("H5 签署 URL 已生成 [contractId={}, signerId={}]", contractId, signerId);
@@ -99,6 +102,9 @@ public class EssSignService {
         long start = System.currentTimeMillis();
         try {
             TreeMap<String, Object> params = new TreeMap<>();
+            ObjectNode agent = objectMapper.createObjectNode();
+            agent.put("AppId", properties.corpId());
+            params.put("Agent", agent);
             params.put("Operator", buildOperator());
             params.put("FlowId", record.getEssFlowId());
             params.put("SignId", signerId);
@@ -106,7 +112,7 @@ public class EssSignService {
                 params.put("WxAppId", wxAppId);
             }
 
-            JsonNode response = apiClient.invoke("CreateMiniAppSignParams", params);
+            JsonNode response = apiClient.invoke("CreateSchemeUrl", params);
 
             log.info("小程序签署参数已生成 [contractId={}, signerId={}]", contractId, signerId);
             return response;
@@ -133,12 +139,15 @@ public class EssSignService {
 
         try {
             TreeMap<String, Object> params = new TreeMap<>();
+            ObjectNode agent = objectMapper.createObjectNode();
+            agent.put("AppId", properties.corpId());
+            params.put("Agent", agent);
             params.put("Operator", buildOperator());
             params.put("FlowId", record.getEssFlowId());
             params.put("SignId", signerId);
             params.put("AppType", appType);
 
-            JsonNode response = apiClient.invoke("CreateAppSignParams", params);
+            JsonNode response = apiClient.invoke("CreateSchemeUrl", params);
 
             log.info("App 签署参数已生成 [contractId={}, appType={}]", contractId, appType);
             return response;
@@ -162,6 +171,9 @@ public class EssSignService {
 
         try {
             TreeMap<String, Object> params = new TreeMap<>();
+            ObjectNode agent = objectMapper.createObjectNode();
+            agent.put("AppId", properties.corpId());
+            params.put("Agent", agent);
             params.put("Operator", buildOperator());
             params.put("FlowId", record.getEssFlowId());
 
@@ -188,8 +200,7 @@ public class EssSignService {
 
     private ObjectNode buildOperator() {
         ObjectNode operator = objectMapper.createObjectNode();
-        operator.put("OperatorId", properties.operatorId());
-        operator.put("OperatorType", 1);
+        operator.put("UserId", properties.operatorId());
         return operator;
     }
 }

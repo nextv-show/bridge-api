@@ -36,7 +36,7 @@ class EssContractServiceTest {
     @BeforeEach
     void setUp() {
         properties = new EssProperties("sid", "skey", "op-001", "corp-001",
-                "tpl-001", "https://cb.example.com", null, null, 5000, 10000, 3);
+                "tpl-001", "https://cb.example.com", null, null, 5000, 10000, 3, Boolean.FALSE);
         objectMapper = new ObjectMapper();
         service = new EssContractService(apiClient, properties, flowRecordRepository,
                 apiLogService, objectMapper, signingPreCheck);
@@ -108,8 +108,10 @@ class EssContractServiceTest {
         when(flowRecordRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         ObjectNode apiResponse = objectMapper.createObjectNode();
-        apiResponse.put("FlowStatus", "3"); // COMPLETED
-        when(apiClient.invoke(eq("DescribeFlowStatus"), any())).thenReturn(apiResponse);
+        ObjectNode flowInfo = objectMapper.createObjectNode();
+        flowInfo.put("Status", "3"); // COMPLETED
+        apiResponse.set("FlowInfo", flowInfo);
+        when(apiClient.invoke(eq("DescribeFlowInfo"), any())).thenReturn(apiResponse);
 
         FlowStatus status = service.describeFlowStatus("c-001");
 

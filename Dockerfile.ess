@@ -1,0 +1,6 @@
+FROM eclipse-temurin:21-jre-alpine
+LABEL maintainer="sanshuiyuan"
+WORKDIR /app
+COPY ess-service/build/libs/ess-service-0.1.0-SNAPSHOT.jar app.jar
+EXPOSE 8085
+ENTRYPOINT ["sh", "-c", "java ${JAVA_OPTS} -jar app.jar"]

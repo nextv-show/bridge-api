@@ -29,7 +29,7 @@ class EssSignServiceTest {
     @BeforeEach
     void setUp() {
         properties = new EssProperties("sid", "skey", "op-001", "corp-001",
-                "tpl-001", "https://cb.example.com", null, null, 5000, 10000, 3);
+                "tpl-001", "https://cb.example.com", null, null, 5000, 10000, 3, Boolean.FALSE);
         objectMapper = new ObjectMapper();
         service = new EssSignService(apiClient, properties, contractService, objectMapper);
     }
@@ -46,14 +46,14 @@ class EssSignServiceTest {
         when(contractService.findByContractId("c-001")).thenReturn(record);
 
         ObjectNode response = objectMapper.createObjectNode();
-        response.put("H5SignUrl", "https://sign.ess.tencent.com/h5?token=xxx");
-        when(apiClient.invoke(eq("CreateH5SignUrl"), any())).thenReturn(response);
+        response.put("H5SignUrl", "https://sign.ess.tencent.com/h5?token=***");
+        when(apiClient.invoke(eq("CreateSchemeUrl"), any())).thenReturn(response);
 
         String url = service.generateH5SignUrl("c-001", "signer-001",
                 "https://app.example.com/done", "jump");
 
-        assertEquals("https://sign.ess.tencent.com/h5?token=xxx", url);
-        verify(apiClient).invoke(eq("CreateH5SignUrl"), any());
+        assertEquals("https://sign.ess.tencent.com/h5?token=***", url);
+        verify(apiClient).invoke(eq("CreateSchemeUrl"), any());
     }
 
     @Test
@@ -62,8 +62,8 @@ class EssSignServiceTest {
         when(contractService.findByContractId("c-001")).thenReturn(record);
 
         ObjectNode response = objectMapper.createObjectNode();
-        response.put("H5SignUrl", "https://embed.ess.tencent.com?token=yyy");
-        when(apiClient.invoke(eq("CreateH5SignUrl"), any())).thenReturn(response);
+        response.put("H5SignUrl", "https://embed.ess.tencent.com?token=***");
+        when(apiClient.invoke(eq("CreateSchemeUrl"), any())).thenReturn(response);
 
         String url = service.generateH5SignUrl("c-001", "signer-001", null, "embed");
         assertNotNull(url);
@@ -76,7 +76,7 @@ class EssSignServiceTest {
 
         ObjectNode response = objectMapper.createObjectNode();
         response.put("SignParams", "encrypted-data");
-        when(apiClient.invoke(eq("CreateMiniAppSignParams"), any())).thenReturn(response);
+        when(apiClient.invoke(eq("CreateSchemeUrl"), any())).thenReturn(response);
 
         JsonNode result = service.generateMiniAppSignParams("c-001", "signer-001", "wx1234");
         assertNotNull(result);
@@ -89,7 +89,7 @@ class EssSignServiceTest {
 
         ObjectNode response = objectMapper.createObjectNode();
         response.put("AppSignParams", "app-encrypted-data");
-        when(apiClient.invoke(eq("CreateAppSignParams"), any())).thenReturn(response);
+        when(apiClient.invoke(eq("CreateSchemeUrl"), any())).thenReturn(response);
 
         JsonNode result = service.generateAppSignParams("c-001", "signer-001", "android");
         assertNotNull(result);

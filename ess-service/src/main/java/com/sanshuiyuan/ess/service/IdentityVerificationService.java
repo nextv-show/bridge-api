@@ -78,6 +78,9 @@ public class IdentityVerificationService {
         long start = System.currentTimeMillis();
         try {
             TreeMap<String, Object> params = new TreeMap<>();
+            ObjectNode agent = objectMapper.createObjectNode();
+            agent.put("AppId", properties.corpId());
+            params.put("Agent", agent);
             params.put("Operator", buildOperator());
 
             // 签署人信息（从 KYC 获取）
@@ -90,7 +93,7 @@ public class IdentityVerificationService {
             // 核验类型：人脸识别
             params.put("VerificationType", 1); // 1=人脸核身
 
-            JsonNode response = apiClient.invoke("DetectIdentityFace", params);
+            JsonNode response = apiClient.invoke("DetectInfoVerify", params);
 
             String verificationId = response.has("VerificationId")
                     ? response.get("VerificationId").asText() : null;
@@ -230,8 +233,7 @@ public class IdentityVerificationService {
 
     private ObjectNode buildOperator() {
         ObjectNode operator = objectMapper.createObjectNode();
-        operator.put("OperatorId", properties.operatorId());
-        operator.put("OperatorType", 1);
+        operator.put("UserId", properties.operatorId());
         return operator;
     }
 }

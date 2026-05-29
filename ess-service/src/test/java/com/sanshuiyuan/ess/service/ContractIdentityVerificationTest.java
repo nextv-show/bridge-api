@@ -50,7 +50,7 @@ class ContractIdentityVerificationTest {
     @BeforeEach
     void setUp() {
         properties = new EssProperties("sid", "skey", "op-001", "corp-001",
-                "tpl-001", "https://cb.example.com", null, null, 5000, 10000, 3);
+                "tpl-001", "https://cb.example.com", null, null, 5000, 10000, 3, Boolean.FALSE);
         objectMapper = new ObjectMapper();
         identityCheckService = new IdentityCheckService(objectMapper);
         verificationService = new IdentityVerificationService(
@@ -93,7 +93,7 @@ class ContractIdentityVerificationTest {
             ObjectNode detectResponse = objectMapper.createObjectNode();
             detectResponse.put("VerificationId", "verify-ess-001");
             detectResponse.put("FaceUrl", "https://face.example.com/token123");
-            when(apiClient.invoke(eq("DetectIdentityFace"), any())).thenReturn(detectResponse);
+            when(apiClient.invoke(eq("DetectInfoVerify"), any())).thenReturn(detectResponse);
 
             ObjectNode verifyResult = verificationService.initiateVerification(contractId, userId);
             assertEquals(0, verifyResult.get("code").asInt());
