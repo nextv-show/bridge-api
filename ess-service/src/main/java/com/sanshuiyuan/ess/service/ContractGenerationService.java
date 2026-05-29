@@ -21,9 +21,8 @@ import java.util.Map;
 /**
  * 合同生成服务。
  * <p>
- * 读取 KYC + SKU 数据 → 填充模板 → 生成合同实例。
- * 将《设备购买协议》《设备代运营服务协议》合并为一份主合同，
- * 《产权归属确认书》作为附件。
+ * 读取 KYC + SKU 数据 → 填充统一合同模板 → 生成合同实例。
+ * 三合一统一合同模板包含：设备买卖、物权归属、代运营及冷静期退款规则。
  */
 @Service
 public class ContractGenerationService {
@@ -72,25 +71,31 @@ public class ContractGenerationService {
             Long contractId,
             String contractNo,
             String mainContractContent,
+            @Deprecated
             String attachmentContent,
             Contract.ContractStatus status
-    ) {}
+    ) {
+        /**
+         * @deprecated 三合一统一合同模板不再生成独立附件，始终返回 null。
+         */
+        @Deprecated
+        public String attachmentContent() {
+            return null;
+        }
+    }
 
     /**
      * 生成合同。
      * <p>
-     * 1. 获取最新主合同模板
+     * 1. 获取最新统一合同模板
      * 2. 填充用户实名信息、设备信息、SN预占位
-     * 3. 同时生成附件（产权归属确认书）
-     * 4. 创建合同实例 + SN绑定
+     * 3. 创建合同实例 + SN绑定
      */
     @Transactional
     public GenerateContractResult generateContract(GenerateContractRequest request) {
-        // 1. 获取模板
+        // 1. 获取统一合同模板
         ContractTemplate mainTemplate = templateService.getLatestVersion(
                 ContractTemplateDataInitializer.MAIN_CONTRACT_CODE);
-        ContractTemplate attachTemplate = templateService.getLatestVersion(
-                ContractTemplateDataInitializer.PROPERTY_CERT_CODE);
 
         // 2. 生成合同编号
         String contractNo = contractNoGenerator.generate();
@@ -105,24 +110,21 @@ public class ContractGenerationService {
         Map<String, String> fields = buildFields(request, contractNo);
         String fieldsJson = toJson(fields);
 
-        // 5. 填充主合同
+        // 5. 填充统一合同内容
         String mainContent = fillTemplate(mainTemplate.getContentBody(), fields);
 
-        // 6. 填充附件（产权归属确认书）
-        String attachContent = fillTemplate(attachTemplate.getContentBody(), fields);
-
-        // 7. 构建签署方信息
+        // 6. 构建签署方信息
         Map<String, Object> signerInfo = buildSignerInfo(request);
         String signerInfoJson = toJson(signerInfo);
 
-        // 8. 标记为已生成
+        // 7. 标记为已生成
         contract.markGenerated(fieldsJson, signerInfoJson);
         contractRepository.save(contract);
 
-        // 9. 建立 SN 预占位绑定
+        // 8. 建立 SN 预占位绑定
         createSnBinding(contract.getId(), request.deviceSn());
 
-        // 10. 审计事件：合同创建 + 生成
+        // 9. 审计事件：合同创建 + 生成
         auditTrailService.recordUserEvent(contract.getId(),
                 ContractAuditTrail.Action.CREATE, request.userId(),
                 String.format("{\"orderId\":\"%s\",\"deviceSn\":\"%s\"}",
@@ -136,7 +138,9 @@ public class ContractGenerationService {
                 contractNo, request.userId(), request.deviceSn());
 
         return new GenerateContractResult(
-                contract.getId(), contractNo, mainContent, attachContent, contract.getStatus());
+                contract.getId(), contractNo, mainContent,
+                null, // attachmentContent 已弃用，始终返回 null
+                contract.getStatus());
     }
 
     /**
@@ -153,14 +157,11 @@ public class ContractGenerationService {
         ContractTemplate mainTemplate = templateService.getById(contract.getTemplateId());
         String mainContent = fillTemplate(mainTemplate.getContentBody(), fields);
 
-        // 获取附件模板
-        ContractTemplate attachTemplate = templateService.getLatestVersion(
-                ContractTemplateDataInitializer.PROPERTY_CERT_CODE);
-        String attachContent = fillTemplate(attachTemplate.getContentBody(), fields);
-
         return new GenerateContractResult(
                 contract.getId(), contract.getContractNo(),
-                mainContent, attachContent, contract.getStatus());
+                mainContent,
+                null, // attachmentContent 已弃用，始终返回 null
+                contract.getStatus());
     }
 
     private Map<String, String> buildFields(GenerateContractRequest request, String contractNo) {
