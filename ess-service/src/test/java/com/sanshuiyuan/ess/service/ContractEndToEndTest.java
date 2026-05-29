@@ -75,11 +75,7 @@ class ContractEndToEndTest {
         when(mainTpl.getContentBody()).thenReturn(
                 "合同编号: {{contractNo}}, 姓名: {{userName}}, SN: {{deviceSn}}, 价格: {{devicePrice}}");
 
-        ContractTemplate attachTpl = mock(ContractTemplate.class);
-        when(attachTpl.getContentBody()).thenReturn("SN: {{deviceSn}}, 姓名: {{userName}}");
-
         when(templateService.getLatestVersion("MAIN_CONTRACT")).thenReturn(mainTpl);
-        when(templateService.getLatestVersion("PROPERTY_CERT")).thenReturn(attachTpl);
         when(contractNoGenerator.generate()).thenReturn("CT-20260527-E2E001");
 
         // 模拟 JPA save：分配 ID 并返回
@@ -106,7 +102,7 @@ class ContractEndToEndTest {
         assertTrue(genResult.mainContractContent().contains("SN-E2E-DEVICE"));
         assertTrue(genResult.mainContractContent().contains("李四"));
         assertTrue(genResult.mainContractContent().contains("29800"));
-        assertTrue(genResult.attachmentContent().contains("SN-E2E-DEVICE"));
+        assertNull(genResult.attachmentContent());
 
         // 验证 SN 预占位
         ArgumentCaptor<ContractSnBinding> snCaptor = ArgumentCaptor.forClass(ContractSnBinding.class);
