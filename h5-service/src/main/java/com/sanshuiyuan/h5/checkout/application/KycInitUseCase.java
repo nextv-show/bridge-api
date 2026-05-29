@@ -30,21 +30,19 @@ public class KycInitUseCase {
         this.kycRepo = kycRepo;
         this.kycClient = kycClient;
         this.cipher = cipher;
-        // 阿里云认证完成后回跳的 H5 页面。前端用 HashRouter，checkout 在 /#/checkout；
-        // 阿里云会在该地址后追加 ?response=<json>（含 certifyId），前端从真实 query 解析。
         this.returnUrl = stripTrailingSlash(publicBaseUrl) + "/#/checkout";
     }
 
     @Transactional
-    public KycInitResponse execute(String openid, String metaInfo, String realName, String idCardNo) {
-        // Check if already verified (ASSUMPTION-Q2: don't re-init for PASS users)
+    public KycInitResponse execute(String openid, String metaInfo, String realName, String idCardNo, String phone) {
+        // Check if already verified
         Optional<KycRecord> existing = kycRepo.findFirstByOpenidAndStatusOrderByVerifiedAtDesc(openid, KycStatus.PASS);
         if (existing.isPresent()) {
             KycRecord r = existing.get();
-            return KycInitResponse.alreadyVerified(r.getRealNameMask(), r.getIdCardNoMask());
+            return KycInitResponse.alreadyVerified(r.getRealNameMask(), r.getIdCardNoMask(), r.getPhoneMask());
         }
 
-        // LR_FR 活体方案不回传身份信息，需前端采集姓名 + 身份证号，后端校验后加密绑定到本次 certifyId。
+        // Validate name
         String name = realName == null ? "" : realName.trim();
         String idNo = idCardNo == null ? "" : idCardNo.trim().toUpperCase();
         if (name.isEmpty() || name.length() > 64) {
@@ -54,7 +52,13 @@ public class KycInitUseCase {
             throw new BizException(ErrorCode.VALIDATION_FAILED, "身份证号格式不正确");
         }
 
-        // 一证一号：同一身份证号若已在其他 openid 下通过实名，拒绝重复绑定（早于阿里云发起以节省调用）。
+        // Validate phone (required for e-contract signing)
+        String phoneTrim = phone == null ? "" : phone.trim();
+        if (phoneTrim.isEmpty() || !phoneTrim.matches("^1[3-9]\\d{9}$")) {
+            throw new BizException(ErrorCode.VALIDATION_FAILED, "请填写正确的 11 位手机号");
+        }
+
+        // 一证一号
         String idCardHash = cipher.idCardHash(idNo);
         if (kycRepo.existsByIdCardHashAndStatusAndOpenidNot(idCardHash, KycStatus.PASS, openid)) {
             throw new BizException(ErrorCode.KYC_ID_CARD_CONFLICT);
@@ -62,13 +66,16 @@ public class KycInitUseCase {
 
         AliyunKycClient.KycInitResult result = kycClient.init(openid, metaInfo, returnUrl);
 
-        // 落 INIT 记录，把实名信息加密绑定到 certifyId，活体通过后再 promote 为 PASS。
+        // 加密存储：姓名、身份证号、手机号
         byte[] nameEnc = cipher.encrypt(name);
         byte[] idEnc = cipher.encrypt(idNo);
+        byte[] phoneEnc = cipher.encrypt(phoneTrim);
+        String phoneMask = MaskingUtils.maskPhone(phoneTrim);
         KycRecord init = KycRecord.createInit(
                 openid, nameEnc, idEnc,
                 MaskingUtils.maskRealName(name), MaskingUtils.maskIdCard(idNo), idCardHash,
-                result.certifyId(), "ALIYUN_LR_FR");
+                result.certifyId(), "ALIYUN_LR_FR",
+                phoneEnc, phoneMask);
         kycRepo.save(init);
 
         return KycInitResponse.init(result.certifyId(), result.verifyToken(), result.verifyUrl());

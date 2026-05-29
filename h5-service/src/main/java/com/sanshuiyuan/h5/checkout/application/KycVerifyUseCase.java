@@ -61,6 +61,6 @@ public class KycVerifyUseCase {
         record.promoteToPass();
         kycRepo.save(record);
 
-        return new KycVerifyResponse("PASS", record.getRealNameMask(), record.getIdCardNoMask());
+        return new KycVerifyResponse("PASS", record.getRealNameMask(), record.getIdCardNoMask(), record.getPhoneMask());
     }
 }

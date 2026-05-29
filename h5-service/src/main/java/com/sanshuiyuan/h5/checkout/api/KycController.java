@@ -34,7 +34,8 @@ public class KycController {
         String metaInfo = req == null ? null : req.metaInfo();
         String realName = req == null ? null : req.realName();
         String idCardNo = req == null ? null : req.idCardNo();
-        return ApiResponse.ok(kycInitUseCase.execute(openid, metaInfo, realName, idCardNo));
+        String phone = req == null ? null : req.phone();
+        return ApiResponse.ok(kycInitUseCase.execute(openid, metaInfo, realName, idCardNo, phone));
     }
 
     @PostMapping("/verify")

@@ -10,6 +10,7 @@ import com.sanshuiyuan.h5.checkout.infra.repository.H5OrderRepository;
 import com.sanshuiyuan.h5.checkout.infra.repository.KycRecordRepository;
 import com.sanshuiyuan.h5.common.BizException;
 import com.sanshuiyuan.h5.common.ErrorCode;
+import com.sanshuiyuan.h5.checkout.application.AdminOrderProjector;
 import com.sanshuiyuan.h5.referral.H5User;
 import com.sanshuiyuan.h5.referral.H5UserRepository;
 import org.junit.jupiter.api.Test;
@@ -35,9 +36,10 @@ class CreateOrderUseCaseTest {
     @Mock DeviceSpecRepository specRepo;
     @Mock KycRecordRepository kycRepo;
     @Mock H5UserRepository userRepo;
+    @Mock AdminOrderProjector adminOrderProjector;
 
     private CreateOrderUseCase createUseCase() {
-        return new CreateOrderUseCase(orderRepo, specRepo, kycRepo, userRepo);
+        return new CreateOrderUseCase(orderRepo, specRepo, kycRepo, userRepo, adminOrderProjector);
     }
 
     private DeviceSpec activeSpec() {

@@ -13,4 +13,10 @@ public final class MaskingUtils {
         if (realName == null || realName.isEmpty()) return "***";
         return realName.charAt(0) + " **";
     }
+
+    /** 手机号脱敏：138****8888 */
+    public static String maskPhone(String phone) {
+        if (phone == null || phone.length() != 11) return "***";
+        return phone.substring(0, 3) + "****" + phone.substring(7);
+    }
 }

@@ -28,6 +28,12 @@ public class KycRecord {
     @Column(name = "id_card_no_enc", nullable = false)
     private byte[] idCardNoEnc;
 
+    @Column(name = "phone_enc")
+    private byte[] phoneEnc;
+
+    @Column(name = "phone_mask", length = 16)
+    private String phoneMask;
+
     @Column(name = "id_card_no_mask", nullable = false, length = 32)
     private String idCardNoMask;
 
@@ -59,7 +65,8 @@ public class KycRecord {
 
     public static KycRecord create(String openid, byte[] realName, byte[] idCardNoEnc,
                                     String realNameMask, String idCardNoMask, String idCardHash,
-                                    String certifyId, String channel) {
+                                    String certifyId, String channel,
+                                    byte[] phoneEnc, String phoneMask) {
         KycRecord r = new KycRecord();
         r.openid = openid;
         r.realName = realName;
@@ -69,6 +76,8 @@ public class KycRecord {
         r.idCardHash = idCardHash;
         r.certifyId = certifyId;
         r.channel = channel;
+        r.phoneEnc = phoneEnc;
+        r.phoneMask = phoneMask;
         r.status = KycStatus.PASS;
         r.verifiedAt = LocalDateTime.now();
         return r;
@@ -77,7 +86,8 @@ public class KycRecord {
     /** 发起认证时落 INIT 记录：绑定前端采集的实名信息到 certifyId，活体通过后再 promote。 */
     public static KycRecord createInit(String openid, byte[] realName, byte[] idCardNoEnc,
                                        String realNameMask, String idCardNoMask, String idCardHash,
-                                       String certifyId, String channel) {
+                                       String certifyId, String channel,
+                                       byte[] phoneEnc, String phoneMask) {
         KycRecord r = new KycRecord();
         r.openid = openid;
         r.realName = realName;
@@ -87,6 +97,8 @@ public class KycRecord {
         r.idCardHash = idCardHash;
         r.certifyId = certifyId;
         r.channel = channel;
+        r.phoneEnc = phoneEnc;
+        r.phoneMask = phoneMask;
         r.status = KycStatus.INIT;
         return r;
     }
@@ -105,6 +117,8 @@ public class KycRecord {
     public String getOpenid() { return openid; }
     public byte[] getRealName() { return realName; }
     public byte[] getIdCardNoEnc() { return idCardNoEnc; }
+    public byte[] getPhoneEnc() { return phoneEnc; }
+    public String getPhoneMask() { return phoneMask; }
     public String getIdCardNoMask() { return idCardNoMask; }
     public String getIdCardHash() { return idCardHash; }
     public String getRealNameMask() { return realNameMask; }
