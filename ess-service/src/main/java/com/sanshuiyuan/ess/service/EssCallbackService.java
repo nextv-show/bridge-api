@@ -32,6 +32,10 @@ public class EssCallbackService {
     private final EssProperties properties;
     private final EssFlowRecordRepository flowRecordRepository;
     private final ObjectMapper objectMapper;
+    /**
+     * Contract 状态机桥接（可选注入；单测不依赖）。setter 注入避开 EssContractService → bridge 循环。
+     */
+    private ContractCompletionBridge completionBridge;
 
     public EssCallbackService(EssProperties properties,
                                EssFlowRecordRepository flowRecordRepository,
@@ -39,6 +43,11 @@ public class EssCallbackService {
         this.properties = properties;
         this.flowRecordRepository = flowRecordRepository;
         this.objectMapper = objectMapper;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setCompletionBridge(ContractCompletionBridge completionBridge) {
+        this.completionBridge = completionBridge;
     }
 
     /**
@@ -80,8 +89,15 @@ public class EssCallbackService {
             updateFlowStatus(record, eventType, callbackData);
             flowRecordRepository.save(record);
 
-            log.info("ESS 回调处理成功 [contractId={}, flowId={}, event={}]",
-                    record.getContractId(), flowId, eventType);
+            // 5. 关键桥接：FlowRecord 进入 COMPLETED 时，必须把 Contract 也推到 SIGNED。
+            //    历史 bug：webhook 只更新 EssFlowRecord 不更新 Contract，H5 永远轮询不到完成。
+            if (record.getFlowStatus() == FlowStatus.COMPLETED && completionBridge != null) {
+                String pdfHashHint = extractPdfHash(callbackData);
+                completionBridge.bridgeToSigned(record.getContractId(), pdfHashHint);
+            }
+
+            log.info("ESS 回调处理成功 [contractId={}, flowId={}, event={}, flowStatus={}]",
+                    record.getContractId(), flowId, eventType, record.getFlowStatus());
 
             return CallbackResult.success(record.getContractId(), flowId, eventType);
 
@@ -143,6 +159,20 @@ public class EssCallbackService {
         return "UNKNOWN";
     }
 
+    /**
+     * 从回调 payload 中尽力抽取 PdfHash 作为桥接 hint。常见字段：PdfHash / Data.PdfHash / FileHash。
+     * 找不到返回 null（桥接环节会回退为空字符串占位，归档时由 SHA-256 计算补齐）。
+     */
+    private String extractPdfHash(JsonNode data) {
+        if (data == null) return null;
+        if (data.has("PdfHash")) return data.get("PdfHash").asText(null);
+        if (data.has("FileHash")) return data.get("FileHash").asText(null);
+        if (data.has("Data") && data.get("Data").has("PdfHash")) {
+            return data.get("Data").get("PdfHash").asText(null);
+        }
+        return null;
+    }
+
     private void updateFlowStatus(EssFlowRecord record, String eventType, JsonNode callbackData) {
         String dataJson = callbackData.toString();
 
@@ -150,7 +180,7 @@ public class EssCallbackService {
             case "FlowStatusChanged", "SignComplete" -> {
                 String status = callbackData.has("FlowStatus")
                         ? callbackData.get("FlowStatus").asText() : null;
-                FlowStatus mapped = mapStatus(status);
+                FlowStatus mapped = EssStatusMapper.map(status);
                 if (mapped != null) {
                     applyStatus(record, mapped, dataJson);
                 }
@@ -160,20 +190,6 @@ public class EssCallbackService {
             case "FlowRejected" -> record.reject(dataJson);
             default -> record.updateCallbackData(dataJson);
         }
-    }
-
-    private FlowStatus mapStatus(String status) {
-        if (status == null) return null;
-        return switch (status) {
-            case "0", "INIT" -> FlowStatus.INIT;
-            case "1", "CREATED" -> FlowStatus.CREATED;
-            case "2", "SIGNING" -> FlowStatus.SIGNING;
-            case "3", "COMPLETED", "FINISH" -> FlowStatus.COMPLETED;
-            case "4", "CANCELLED" -> FlowStatus.CANCELLED;
-            case "5", "REJECTED" -> FlowStatus.REJECTED;
-            case "6", "EXPIRED" -> FlowStatus.EXPIRED;
-            default -> null;
-        };
     }
 
     private void applyStatus(EssFlowRecord record, FlowStatus status, String data) {

@@ -123,11 +123,20 @@ public class ContractController {
 
         Long userId = requireLong(request, "userId");
         ClientType clientType = resolveClientType(request, httpRequest);
+        String phoneOverride = request.get("phone");
+        String nameOverride = request.get("realName");
+        String idCardOverride = request.get("realIdCard");
 
-        log.info("发起签署 [contractId={}, userId={}, clientType={}]", id, userId, clientType);
+        log.info("发起签署 [contractId={}, userId={}, clientType={}, phoneOverride={}, nameOverride={}, idCardOverride={}]",
+                id, userId, clientType,
+                phoneOverride != null ? "***" : "null",
+                nameOverride != null ? "**" : "null",
+                idCardOverride != null ? "***" : "null");
 
         Contract.SignSource signSource = mapToSignSource(clientType);
-        SigningInitiationResult result = signingService.initiateSigning(id, userId, signSource);
+        String[] overrides = (phoneOverride != null || nameOverride != null || idCardOverride != null)
+                ? new String[]{phoneOverride, nameOverride, idCardOverride} : null;
+        SigningInitiationResult result = signingService.initiateSigning(id, userId, signSource, overrides);
 
         return ResponseEntity.ok(Map.of(
                 "code", 0,
@@ -181,7 +190,9 @@ public class ContractController {
         String signerId = "1"; // 默认签署人 ID，实际应从合同签署方信息中获取
 
         java.util.Map<String, String> options = new java.util.HashMap<>();
-        options.put("jumpUrl", "/sign-complete?contractId=" + id);
+        // 使用绝对 URL，确保 ESS 回调能正确跳回 H5 页面
+        // CheckoutPage 会在挂载时从 URL 恢复签约状态
+        options.put("jumpUrl", "https://h5.sanshuiyuan.com/checkout?contractId=" + id);
         options.put("h5Type", "jump");
         options.put("appType", "android");
 
