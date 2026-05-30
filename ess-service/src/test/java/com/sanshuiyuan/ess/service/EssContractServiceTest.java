@@ -100,7 +100,8 @@ class EssContractServiceTest {
     }
 
     @Test
-    void describeFlowStatus_shouldReturnAndUpdateStatus() {
+    void describeFlowStatus_parsesRealEssResponseShape_FlowDetailInfos() {
+        // 真实线上响应：FlowDetailInfos[0].FlowStatus = 2 (已签署)
         EssFlowRecord record = EssFlowRecord.create("c-001", "[{}]");
         record.assignFlowId("flow-001");
         record.startSigning();
@@ -108,13 +109,78 @@ class EssContractServiceTest {
         when(flowRecordRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         ObjectNode apiResponse = objectMapper.createObjectNode();
-        ObjectNode flowInfo = objectMapper.createObjectNode();
-        flowInfo.put("Status", "3"); // COMPLETED
-        apiResponse.set("FlowInfo", flowInfo);
+        com.fasterxml.jackson.databind.node.ArrayNode arr = objectMapper.createArrayNode();
+        ObjectNode detail = objectMapper.createObjectNode();
+        detail.put("FlowId", "flow-001");
+        detail.put("FlowStatus", 2); // 腾讯 2 = 已签署完成
+        arr.add(detail);
+        apiResponse.set("FlowDetailInfos", arr);
         when(apiClient.invoke(eq("DescribeFlowInfo"), any())).thenReturn(apiResponse);
 
         FlowStatus status = service.describeFlowStatus("c-001");
 
+        assertEquals(FlowStatus.COMPLETED, status,
+                "FlowDetailInfos[0].FlowStatus=2 必须映射为内部 COMPLETED（修复响应解析 + 状态码映射）");
+    }
+
+    @Test
+    void describeFlowStatus_legacyFlowInfoShape_stillWorks() {
+        // 老的 mock 响应结构仍兼容（fallback 路径）
+        EssFlowRecord record = EssFlowRecord.create("c-002", "[{}]");
+        record.assignFlowId("flow-002");
+        record.startSigning();
+        when(flowRecordRepository.findByContractId("c-002")).thenReturn(Optional.of(record));
+        when(flowRecordRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        ObjectNode apiResponse = objectMapper.createObjectNode();
+        ObjectNode flowInfo = objectMapper.createObjectNode();
+        flowInfo.put("Status", "2"); // 已签署，老 mock 结构
+        apiResponse.set("FlowInfo", flowInfo);
+        when(apiClient.invoke(eq("DescribeFlowInfo"), any())).thenReturn(apiResponse);
+
+        FlowStatus status = service.describeFlowStatus("c-002");
         assertEquals(FlowStatus.COMPLETED, status);
+    }
+
+    @Test
+    void describeFlowStatus_signingStatus_doesNotPromote() {
+        // FlowStatus=1（待签署/部分签署）应保持 SIGNING，不能误判 COMPLETED
+        EssFlowRecord record = EssFlowRecord.create("c-003", "[{}]");
+        record.assignFlowId("flow-003");
+        record.startSigning();
+        when(flowRecordRepository.findByContractId("c-003")).thenReturn(Optional.of(record));
+        lenient().when(flowRecordRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        ObjectNode apiResponse = objectMapper.createObjectNode();
+        com.fasterxml.jackson.databind.node.ArrayNode arr = objectMapper.createArrayNode();
+        ObjectNode detail = objectMapper.createObjectNode();
+        detail.put("FlowStatus", 1);
+        arr.add(detail);
+        apiResponse.set("FlowDetailInfos", arr);
+        when(apiClient.invoke(eq("DescribeFlowInfo"), any())).thenReturn(apiResponse);
+
+        FlowStatus status = service.describeFlowStatus("c-003");
+        assertEquals(FlowStatus.SIGNING, status);
+    }
+
+    @Test
+    void describeFlowStatus_unknownStatus_keepsLocal() {
+        // 线上观察到 FlowStatus=7（流程内部状态），必须保留本地 SIGNING，避免错误推进
+        EssFlowRecord record = EssFlowRecord.create("c-004", "[{}]");
+        record.assignFlowId("flow-004");
+        record.startSigning();
+        when(flowRecordRepository.findByContractId("c-004")).thenReturn(Optional.of(record));
+        lenient().when(flowRecordRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        ObjectNode apiResponse = objectMapper.createObjectNode();
+        com.fasterxml.jackson.databind.node.ArrayNode arr = objectMapper.createArrayNode();
+        ObjectNode detail = objectMapper.createObjectNode();
+        detail.put("FlowStatus", 7);
+        arr.add(detail);
+        apiResponse.set("FlowDetailInfos", arr);
+        when(apiClient.invoke(eq("DescribeFlowInfo"), any())).thenReturn(apiResponse);
+
+        FlowStatus status = service.describeFlowStatus("c-004");
+        assertEquals(FlowStatus.SIGNING, status, "FlowStatus=7 不应被误映射为 COMPLETED");
     }
 }

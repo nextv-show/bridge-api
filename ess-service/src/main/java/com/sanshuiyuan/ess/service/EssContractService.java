@@ -41,6 +41,14 @@ public class EssContractService {
     private final EssApiLogService apiLogService;
     private final ObjectMapper objectMapper;
     private final SigningPreCheckInterceptor signingPreCheck;
+    /**
+     * Contract 状态机桥接（可选注入）。
+     * <p>
+     * - 生产环境总是注入：FlowRecord COMPLETED 时同步把 Contract 推到 SIGNED；
+     * - 单元测试不依赖 Contract 域，bridge 缺省为 null，逻辑会安全跳过。
+     * 使用 setter 注入避免与 ContractSigningService 形成构造循环。
+     */
+    private ContractCompletionBridge completionBridge;
 
     public EssContractService(EssApiClient apiClient,
                                EssProperties properties,
@@ -54,6 +62,11 @@ public class EssContractService {
         this.apiLogService = apiLogService;
         this.objectMapper = objectMapper;
         this.signingPreCheck = signingPreCheck;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setCompletionBridge(ContractCompletionBridge completionBridge) {
+        this.completionBridge = completionBridge;
     }
 
     /**
@@ -160,16 +173,18 @@ public class EssContractService {
             params.put("FlowIds", java.util.List.of(record.getEssFlowId()));
 
             JsonNode response = apiClient.invoke("DescribeFlowInfo", params);
-            String status = null;
-            if (response.has("FlowInfo") && response.get("FlowInfo").has("Status")) {
-                status = response.get("FlowInfo").get("Status").asText();
-            }
+
+            // 腾讯 ESS 实际响应结构：
+            //   { "FlowDetailInfos": [ { "FlowId": "...", "FlowStatus": 2, ... } ] }
+            // 历史代码错误地读 response.FlowInfo.Status（字段不存在），导致同步永远 no-op。
+            // 兼容老 mock 路径：若 FlowDetailInfos 不存在，回退到 FlowInfo.Status。
+            String status = extractFlowStatus(response);
 
             int duration = (int) (System.currentTimeMillis() - start);
             apiLogService.recordSuccessAsync("DescribeFlowInfo", params.toString(),
                     response.toString(), 200, duration);
 
-            FlowStatus mapped = mapEssStatus(status);
+            FlowStatus mapped = EssStatusMapper.map(status);
             if (mapped != null && mapped != record.getFlowStatus()) {
                 updateRecordStatus(record, mapped, response.toString());
             }
@@ -187,6 +202,28 @@ public class EssContractService {
             throw new EssFlowException(contractId, record.getEssFlowId(),
                     "查询流程状态失败: " + e.getMessage());
         }
+    }
+
+    /**
+     * 从 ESS DescribeFlowInfo 响应中抽取流程状态字符串。
+     * <p>
+     * 优先读新版 {@code FlowDetailInfos[0].FlowStatus}；兼容老版 {@code FlowInfo.Status}。
+     * 返回 null 表示响应中没有任何可识别的状态字段。
+     */
+    private static String extractFlowStatus(JsonNode response) {
+        if (response == null) return null;
+        if (response.has("FlowDetailInfos")
+                && response.get("FlowDetailInfos").isArray()
+                && response.get("FlowDetailInfos").size() > 0) {
+            JsonNode first = response.get("FlowDetailInfos").get(0);
+            if (first.has("FlowStatus")) {
+                return first.get("FlowStatus").asText();
+            }
+        }
+        if (response.has("FlowInfo") && response.get("FlowInfo").has("Status")) {
+            return response.get("FlowInfo").get("Status").asText();
+        }
+        return null;
     }
 
     @Transactional(readOnly = true)
@@ -239,7 +276,13 @@ public class EssContractService {
                     approver.put("ApproverName", signer.get("userName").asText());
                 }
                 if (signer.has("phone")) {
-                    approver.put("ApproverMobile", signer.get("phone").asText());
+                    String phone = signer.get("phone").asText();
+                    // 仅当手机号为有效大陆手机号时才传入 ESS API，防止脱敏/空值导致腾讯电子签报错
+                    if (phone != null && phone.matches("^1[3-9]\\d{9}$")) {
+                        approver.put("ApproverMobile", phone);
+                    } else {
+                        log.warn("签署方手机号无效，跳过 ApproverMobile [phone={}]", phone);
+                    }
                 }
                 // 身份证号：仅在显式开启时传入（生产环境建议开启）
                 if (Boolean.TRUE.equals(properties.collectIdCard())
@@ -263,20 +306,6 @@ public class EssContractService {
         return approvers;
     }
 
-    private FlowStatus mapEssStatus(String essStatus) {
-        if (essStatus == null) return null;
-        return switch (essStatus) {
-            case "0", "INIT" -> FlowStatus.INIT;
-            case "1", "CREATED" -> FlowStatus.CREATED;
-            case "2", "SIGNING" -> FlowStatus.SIGNING;
-            case "3", "COMPLETED", "FINISH" -> FlowStatus.COMPLETED;
-            case "4", "CANCELLED" -> FlowStatus.CANCELLED;
-            case "5", "REJECTED" -> FlowStatus.REJECTED;
-            case "6", "EXPIRED" -> FlowStatus.EXPIRED;
-            default -> null;
-        };
-    }
-
     private void updateRecordStatus(EssFlowRecord record, FlowStatus status, String callbackData) {
         switch (status) {
             case COMPLETED -> record.complete(callbackData);
@@ -286,5 +315,18 @@ public class EssContractService {
             default -> { /* other statuses handled implicitly */ }
         }
         flowRecordRepository.save(record);
+
+        // 关键桥接：远端首次报告 COMPLETED 时，必须把 Contract 状态机也推进到 SIGNED，
+        // 否则 H5 /contracts/{id}/status 永远轮询不到完成状态。
+        // 历史 bug：长期只更新 EssFlowRecord 不更新 Contract，导致用户签完仍在转圈。
+        if (status == FlowStatus.COMPLETED && completionBridge != null) {
+            try {
+                completionBridge.bridgeToSigned(record.getContractId(), null);
+            } catch (Exception e) {
+                log.warn("FlowRecord COMPLETED 后桥接 Contract 失败 [contractNo={}]: {}",
+                        record.getContractId(), e.getMessage());
+                // 桥接失败不影响 FlowRecord 状态保存；兜底 Job 会重试。
+            }
+        }
     }
 }

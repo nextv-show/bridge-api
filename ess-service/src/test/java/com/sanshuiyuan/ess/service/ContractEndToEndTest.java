@@ -61,7 +61,8 @@ class ContractEndToEndTest {
 
         signingService = new ContractSigningService(
                 contractRepository, snBindingRepository,
-                essContractService, stateMachineService, archiveService, auditTrailService);
+                essContractService, stateMachineService, archiveService, auditTrailService,
+                objectMapper);
     }
 
     /**
@@ -116,7 +117,12 @@ class ContractEndToEndTest {
                 "CT-20260527-E2E001", 1L, 100L, "ORD-E2E-001", "SN-E2E-DEVICE");
         savedContract.markGenerated(
                 objectMapper.writeValueAsString(java.util.Map.of("deviceSn", "SN-E2E-DEVICE")),
-                objectMapper.writeValueAsString(java.util.Map.of("userId", 100)));
+                // signerInfoJson 必须含真实姓名，否则 ContractSigningService.validateRealName 会抛
+                objectMapper.writeValueAsString(java.util.Map.of(
+                        "userId", 100,
+                        "userName", "李四",
+                        "idCardNo", "320102199203022345",
+                        "phone", "13900139000")));
         // 模拟 JPA ID
         try {
             var idField = Contract.class.getDeclaredField("id");

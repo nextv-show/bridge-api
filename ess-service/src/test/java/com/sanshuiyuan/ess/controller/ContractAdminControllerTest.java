@@ -69,6 +69,15 @@ class ContractAdminControllerTest {
     @MockBean
     private ContractSnBindingRepository snBindingRepository;
 
+    @MockBean
+    private com.sanshuiyuan.ess.service.ReconcileSigningContractsJob reconcileJob;
+
+    @MockBean
+    private com.sanshuiyuan.ess.service.ContractCompletionBridge completionBridge;
+
+    @MockBean
+    private com.sanshuiyuan.ess.service.EssContractService essContractService;
+
     // ========== T20.9: GET /api/admin/contracts ==========
 
     @Test
