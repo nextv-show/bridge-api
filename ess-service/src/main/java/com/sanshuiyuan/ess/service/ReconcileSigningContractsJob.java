@@ -68,11 +68,14 @@ public class ReconcileSigningContractsJob {
                 continue; // 还没建流程的合同跳过
             }
             try {
+                // describeFlowStatus 内部：远端查 + 更新 EssFlowRecord +（COMPLETED 时）调桥接。
+                // 我们调一次就够了 —— 不要再无条件 bridgeToSigned，否则会把还在签的合同
+                // 误算「桥接成功」从而错误推进（即便 bridgeToSigned 本身有 FlowRecord 防御，
+                // 这里的二次调用也是浪费）。
                 essContractService.describeFlowStatus(contract.getContractNo());
-                // 二次保险：即便 describeFlowStatus 的 hook 因任何原因未触发桥接，
-                // 这里直接读 EssFlowRecord 的 status 再 reconcile 一次（幂等）。
-                // 注意：describeFlowStatus 已在内部 reload + updateRecordStatus；
-                // 如果它把 record 推进到 COMPLETED 但 Contract 桥接失败，下面这步把它补上。
+                // bridgeToSigned 内部会再次校验 FlowRecord.flowStatus==COMPLETED；
+                // 这里调它仅作为 fallback：处理「describeFlowStatus 已经把 record 推到
+                // COMPLETED 但桥接因任何原因未触发」的极端情况（例如桥接 hook 异常被吞）。
                 if (completionBridge.bridgeToSigned(contract.getContractNo(), null)) {
                     promoted++;
                 }

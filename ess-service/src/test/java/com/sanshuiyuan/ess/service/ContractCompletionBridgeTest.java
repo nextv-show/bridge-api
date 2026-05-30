@@ -1,7 +1,10 @@
 package com.sanshuiyuan.ess.service;
 
 import com.sanshuiyuan.ess.domain.Contract;
+import com.sanshuiyuan.ess.domain.EssFlowRecord;
+import com.sanshuiyuan.ess.domain.FlowStatus;
 import com.sanshuiyuan.ess.infra.repository.ContractRepository;
+import com.sanshuiyuan.ess.infra.repository.EssFlowRecordRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,6 +23,7 @@ import static org.mockito.Mockito.*;
 class ContractCompletionBridgeTest {
 
     @Mock private ContractRepository contractRepository;
+    @Mock private EssFlowRecordRepository flowRecordRepository;
     @Mock private ContractSigningService signingService;
     @Mock private EssDocumentService documentService;
     @Mock private ObjectProvider<ContractSigningService> signingProvider;
@@ -31,7 +35,8 @@ class ContractCompletionBridgeTest {
     void setUp() {
         lenient().when(signingProvider.getObject()).thenReturn(signingService);
         lenient().when(documentProvider.getObject()).thenReturn(documentService);
-        bridge = new ContractCompletionBridge(contractRepository, signingProvider, documentProvider);
+        bridge = new ContractCompletionBridge(
+                contractRepository, flowRecordRepository, signingProvider, documentProvider);
     }
 
     private Contract signingContract() {
@@ -41,10 +46,23 @@ class ContractCompletionBridgeTest {
         return c;
     }
 
+    private EssFlowRecord flowRecordWithStatus(FlowStatus status) {
+        EssFlowRecord r = EssFlowRecord.create("CT-X", "[{}]");
+        r.assignFlowId("flow-1");
+        if (status == FlowStatus.SIGNING) r.startSigning();
+        if (status == FlowStatus.COMPLETED) r.complete("{}");
+        if (status == FlowStatus.CANCELLED) r.cancel();
+        if (status == FlowStatus.REJECTED) r.reject("{}");
+        if (status == FlowStatus.ERROR) r.markError("{}");
+        return r;
+    }
+
     @Test
-    void bridgeToSigned_signingContract_callsCompleteSigning() {
+    void bridgeToSigned_flowRecordCompleted_promotesAndCallsSigningService() {
         Contract c = signingContract();
         when(contractRepository.findByContractNo("CT-X")).thenReturn(Optional.of(c));
+        when(flowRecordRepository.findByContractId("CT-X"))
+                .thenReturn(Optional.of(flowRecordWithStatus(FlowStatus.COMPLETED)));
         when(documentService.getFileUrls("CT-X")).thenReturn(List.of("https://ess/file.pdf"));
 
         boolean result = bridge.bridgeToSigned("CT-X", null);
@@ -54,9 +72,58 @@ class ContractCompletionBridgeTest {
     }
 
     @Test
+    void bridgeToSigned_flowRecordNotCompleted_neverPromotes() {
+        // 关键防御：FlowRecord 仍 CREATED/SIGNING 时绝不能推进 Contract → SIGNED
+        Contract c = signingContract();
+        when(contractRepository.findByContractNo("CT-X")).thenReturn(Optional.of(c));
+        when(flowRecordRepository.findByContractId("CT-X"))
+                .thenReturn(Optional.of(flowRecordWithStatus(FlowStatus.CREATED)));
+
+        boolean result = bridge.bridgeToSigned("CT-X", null);
+
+        assertFalse(result);
+        verifyNoInteractions(signingService);
+        verifyNoInteractions(documentService); // 早退后甚至不去拉 PDF
+    }
+
+    @Test
+    void bridgeToSigned_flowRecordSigning_neverPromotes() {
+        Contract c = signingContract();
+        when(contractRepository.findByContractNo("CT-X")).thenReturn(Optional.of(c));
+        when(flowRecordRepository.findByContractId("CT-X"))
+                .thenReturn(Optional.of(flowRecordWithStatus(FlowStatus.SIGNING)));
+
+        assertFalse(bridge.bridgeToSigned("CT-X", null));
+        verifyNoInteractions(signingService);
+    }
+
+    @Test
+    void bridgeToSigned_flowRecordRejected_neverPromotes() {
+        Contract c = signingContract();
+        when(contractRepository.findByContractNo("CT-X")).thenReturn(Optional.of(c));
+        when(flowRecordRepository.findByContractId("CT-X"))
+                .thenReturn(Optional.of(flowRecordWithStatus(FlowStatus.REJECTED)));
+
+        assertFalse(bridge.bridgeToSigned("CT-X", null));
+        verifyNoInteractions(signingService);
+    }
+
+    @Test
+    void bridgeToSigned_flowRecordMissing_returnsFalse() {
+        Contract c = signingContract();
+        when(contractRepository.findByContractNo("CT-X")).thenReturn(Optional.of(c));
+        when(flowRecordRepository.findByContractId("CT-X")).thenReturn(Optional.empty());
+
+        assertFalse(bridge.bridgeToSigned("CT-X", null));
+        verifyNoInteractions(signingService);
+    }
+
+    @Test
     void bridgeToSigned_usesHashHintWhenProvided() {
         Contract c = signingContract();
         when(contractRepository.findByContractNo("CT-X")).thenReturn(Optional.of(c));
+        when(flowRecordRepository.findByContractId("CT-X"))
+                .thenReturn(Optional.of(flowRecordWithStatus(FlowStatus.COMPLETED)));
         when(documentService.getFileUrls("CT-X")).thenReturn(List.of("https://ess/file.pdf"));
 
         bridge.bridgeToSigned("CT-X", "sha256hint");
@@ -66,13 +133,17 @@ class ContractCompletionBridgeTest {
 
     @Test
     void bridgeToSigned_pdfUrlFetchFails_stillPromotesWithNullUrl() {
+        // ESS DescribeFileUrls 抛异常（例如尚未生成 PDF）也必须继续推进；归档会重试拉取。
+        // 同时验证：异常不污染调用方事务（lift out of @Transactional 的设计）。
         Contract c = signingContract();
         when(contractRepository.findByContractNo("CT-X")).thenReturn(Optional.of(c));
+        when(flowRecordRepository.findByContractId("CT-X"))
+                .thenReturn(Optional.of(flowRecordWithStatus(FlowStatus.COMPLETED)));
         when(documentService.getFileUrls("CT-X")).thenThrow(new RuntimeException("ESS down"));
 
         boolean result = bridge.bridgeToSigned("CT-X", null);
 
-        assertTrue(result, "PDF URL 拉失败也必须继续推进到 SIGNED，归档环节会再次拉取");
+        assertTrue(result);
         verify(signingService).completeSigning(eq(c.getId()), isNull(), eq(""));
     }
 
@@ -86,6 +157,7 @@ class ContractCompletionBridgeTest {
 
         assertFalse(result);
         verifyNoInteractions(signingService);
+        verifyNoInteractions(flowRecordRepository); // 早退后不查 FlowRecord
     }
 
     @Test
@@ -102,6 +174,8 @@ class ContractCompletionBridgeTest {
     void bridgeToSigned_signingServiceThrows_swallowsAndReturnsFalse() {
         Contract c = signingContract();
         when(contractRepository.findByContractNo("CT-X")).thenReturn(Optional.of(c));
+        when(flowRecordRepository.findByContractId("CT-X"))
+                .thenReturn(Optional.of(flowRecordWithStatus(FlowStatus.COMPLETED)));
         when(documentService.getFileUrls("CT-X")).thenReturn(List.of("https://ess/file.pdf"));
         doThrow(new RuntimeException("archive boom"))
                 .when(signingService).completeSigning(any(), any(), any());
