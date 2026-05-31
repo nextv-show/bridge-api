@@ -43,6 +43,12 @@ user-service:
   base-url: http://localhost:8081
   s2s-token: ${S2S_TOKEN:local-dev-static-token}
 
+# 校验 user-service 签发的 access token（HS256）。secret 必须与 user-service 的 jwt.secret 完全一致，
+# 默认值也保持字节级相同，prod 两端 JWT_SECRET 均未设时回退到同一默认，验签才能通过。
+# ⚠️ 生产务必给 user-service 与 asset-service 设置同一个强 JWT_SECRET，勿沿用此公开默认值（否则可被伪造验签通过的有效 token）。
+jwt:
+  secret: ${JWT_SECRET:change-me-in-production-at-least-256-bits-long!!}
+
 # 推荐返利（一次性实物销售介绍费）。金额按机型（SKU）固定费率列决定，不在此配置；此处仅冷静期。
 asset:
   rebate:
