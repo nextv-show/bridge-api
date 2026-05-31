@@ -21,7 +21,7 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/actuator/health", "/api-docs/**", "/swagger-ui/**", "/wxpay/callback", "/wxpay/wallet-callback").permitAll()
+                .requestMatchers("/actuator/health", "/api-docs/**", "/swagger-ui/**", "/wxpay/callback", "/wxpay/wallet-callback", "/wxpay/refund-callback").permitAll()
                 // 内部 S2S 接口在 authorize 链上放行，鉴权改由 S2sTokenFilter 按 X-S2S-Token 校验。
                 .requestMatchers("/internal/**").permitAll()
                 .anyRequest().authenticated()

@@ -32,6 +32,7 @@ public class MpWxPayConfig {
     @Value("${wxpay.wallet-notify-url:}") private String walletNotifyUrl;
     @Value("${wxpay.public-key-path:}") private String publicKeyPath;
     @Value("${wxpay.public-key-id:}") private String publicKeyId;
+    @Value("${wxpay.refund-notify-url:}") private String refundNotifyUrl;
 
     private Config cachedConfig;
 
@@ -84,6 +85,29 @@ public class MpWxPayConfig {
             log.error("小程序微信支付 SDK 初始化失败，回退 Stub: {}", e.getMessage());
             cachedConfig = null;
             return new StubMpWxPayClient();
+        }
+    }
+
+    /**
+     * 购机退款客户端。配齐凭证时启用 SDK（wechatpay-java RefundService + NotificationParser），
+     * 否则回退 Stub —— 与 {@link #mpWxPayClient()} 同形（dev/CI 不打微信）。
+     */
+    @Bean
+    public WxRefundClient wxRefundClient() {
+        if (!credsPresent()) {
+            log.warn("微信退款未配置（缺商户凭证），回退 StubWxRefundClient");
+            return new StubWxRefundClient();
+        }
+        try {
+            com.wechat.pay.java.service.refund.RefundService refundService =
+                    new com.wechat.pay.java.service.refund.RefundService.Builder().config(coreConfig()).build();
+            NotificationParser parser = new NotificationParser((NotificationConfig) coreConfig());
+            log.info("启用微信退款（SdkWxRefundClient）mchId={}", merchantId);
+            return new SdkWxRefundClient(refundService, parser, refundNotifyUrl);
+        } catch (Exception e) {
+            log.error("微信退款 SDK 初始化失败，回退 Stub: {}", e.getMessage());
+            cachedConfig = null;
+            return new StubWxRefundClient();
         }
     }
 
