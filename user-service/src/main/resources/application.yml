@@ -33,6 +33,12 @@ jwt:
 # service-to-service token：必须与 asset-service 的 user-service.s2s-token 一致
 s2s-token: ${S2S_TOKEN:local-dev-static-token}
 
+# 出站调用 asset-service 内部接口（购机订单在 asset-service 独立库）。
+# s2s-token 与 asset-service 入站期望 s2s-token 共享同一 S2S_TOKEN 环境变量 / 默认值。
+asset-service:
+  base-url: http://localhost:8082
+  s2s-token: ${S2S_TOKEN:local-dev-static-token}
+
 # 推广关系链（ref_id HMAC 签名密钥 + 分享链接基址）
 user:
   referral:

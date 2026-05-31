@@ -1,6 +1,7 @@
 package com.sanshuiyuan.user.referral;
 
 import com.sanshuiyuan.user.domain.User;
+import com.sanshuiyuan.user.infra.client.AssetServiceClient;
 import com.sanshuiyuan.user.infra.repository.UserRepository;
 import com.sanshuiyuan.user.referral.api.MyReferralsResponse;
 import com.sanshuiyuan.user.referral.api.ReferralItemResponse;
@@ -13,6 +14,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 我的推荐查询服务（015 T15.2，自 h5-service 忠实移植）。
@@ -23,8 +25,9 @@ import java.util.List;
  *   <li>返回 DTO <b>零层级字段</b>：不暴露 inviter_id / grand_inviter_id / level / L1 / L2。</li>
  * </ul>
  *
- * <p><b>购买状态待补全</b>：购机订单在 asset-service（另一个库），user-service 查不到购买状态。
- * 本期 {@code purchased} 一律按 false / {@code REGISTERED} 处理；后续经 asset-service 内部接口补全。
+ * <p><b>购买状态</b>：购机订单在 asset-service（另一个库）。本服务批量调用 asset-service 内部接口
+ * （{@link AssetServiceClient#paidUserIds}）取已购机用户集合回填 {@code purchased}；该调用容错降级，
+ * 取不到时整批按未购买 / {@code REGISTERED} 处理，绝不阻塞推荐列表查询。
  */
 @Service
 @Transactional(readOnly = true)
@@ -33,9 +36,11 @@ public class ReferralQueryService {
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     private final UserRepository userRepo;
+    private final AssetServiceClient assetServiceClient;
 
-    public ReferralQueryService(UserRepository userRepo) {
+    public ReferralQueryService(UserRepository userRepo, AssetServiceClient assetServiceClient) {
         this.userRepo = userRepo;
+        this.assetServiceClient = assetServiceClient;
     }
 
     /**
@@ -50,12 +55,16 @@ public class ReferralQueryService {
         // L1 单层正向展开：仅查我直接推荐的人。
         List<User> referred = userRepo.findByInviterId(currentUserId);
 
+        // 批量回填购买状态：一次性问 asset-service「这些人里谁有 PAID 订单」（容错，失败则空集→全按未购买）。
+        Set<Long> paidUserIds = assetServiceClient.paidUserIds(
+                referred.stream().map(User::getId).toList());
+
         int registeredCount = 0;
         int purchasedCount = 0;
         List<ReferralItemResponse> items = new ArrayList<>();
         for (User u : referred) {
-            // 购买状态待经 asset-service 内部接口补全（后续）；本期一律按 false / REGISTERED 处理。
-            boolean purchased = false;
+            boolean purchased = paidUserIds.contains(u.getId());
+            // paidAt 暂无（asset-service 仅返回是否已购，未携带购买日期）；purchasedAt 留 null。
             LocalDateTime paidAt = null;
             if (purchased) {
                 purchasedCount++;
