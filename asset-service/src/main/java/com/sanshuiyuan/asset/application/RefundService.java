@@ -35,14 +35,15 @@ public class RefundService {
      * 处理购机退款成功：订单 PAID→REFUND，并取消其推荐返利。
      *
      * @param orderId 退款订单 id
+     * @return 本次联动取消的推荐返利条数；幂等命中（订单已是 REFUND）返回 0
      */
     @Transactional
-    public void handleRefundSucceeded(Long orderId) {
+    public int handleRefundSucceeded(Long orderId) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
 
         if (order.getStatus() == OrderStatus.REFUND) {
-            return; // 幂等：已退款，不重复联动取消返利。
+            return 0; // 幂等：已退款，不重复联动取消返利。
         }
 
         order.setStatus(OrderStatus.REFUND);
@@ -51,5 +52,6 @@ public class RefundService {
         // 退款联动取消推荐返利（实体商品买卖合同解除）。
         int cancelled = rebateService.cancelForRefund(orderId);
         log.info("购机退款 orderId={} 置 REFUND，联动取消推荐返利 {} 条", orderId, cancelled);
+        return cancelled;
     }
 }

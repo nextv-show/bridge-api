@@ -39,6 +39,11 @@ wxpay:
   public-key-path: ${WXPAY_PUBLIC_KEY_PATH:}
   public-key-id: ${WXPAY_PUBLIC_KEY_ID:}
 
+# 入站 S2S 期望令牌：校验其他服务（如 user-service）调用本服务 /internal/** 时携带的 X-S2S-Token。
+# 与 user-service 顶层 s2s-token 共享同一 S2S_TOKEN 环境变量 / 默认值，prod 未设时两端仍对齐。
+# 注意：本 key 是「入站期望」，与下方 user-service.s2s-token（出站调用 user-service 携带）用途相反。
+s2s-token: ${S2S_TOKEN:local-dev-static-token}
+
 user-service:
   base-url: http://localhost:8081
   s2s-token: ${S2S_TOKEN:local-dev-static-token}
