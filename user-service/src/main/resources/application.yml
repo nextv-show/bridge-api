@@ -33,6 +33,14 @@ jwt:
 # service-to-service token：必须与 asset-service 的 user-service.s2s-token 一致
 s2s-token: ${S2S_TOKEN:local-dev-static-token}
 
+# 推广关系链（ref_id HMAC 签名密钥 + 分享链接基址）
+user:
+  referral:
+    # 生产务必用环境变量 USER_REFERRAL_REF_ID_SECRET 覆盖此默认值（默认值仅用于本地/测试）
+    ref-id-secret: ${USER_REFERRAL_REF_ID_SECRET:please-override-in-prod-please-override-in-prod}
+    # 分享链接基址；小程序分享无需 url，留空即可（shareUrl 退化为相对路径）
+    link-base: ${USER_REFERRAL_LINK_BASE:}
+
 wx:
   miniprogram:
     app-id: ${WX_MP_APP_ID:}

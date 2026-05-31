@@ -43,6 +43,11 @@ user-service:
   base-url: http://localhost:8081
   s2s-token: ${S2S_TOKEN:local-dev-static-token}
 
+# 推荐返利（一次性实物销售介绍费）。金额按机型（SKU）固定费率列决定，不在此配置；此处仅冷静期。
+asset:
+  rebate:
+    cooldown-hours: ${ASSET_REBATE_COOLDOWN_HOURS:24}
+
 springdoc:
   api-docs:
     path: /api-docs
