@@ -1,6 +1,7 @@
 package com.sanshuiyuan.asset.application;
 
 import com.sanshuiyuan.asset.application.event.OwnerRoleGrantRequested;
+import com.sanshuiyuan.asset.application.event.RebateFreezeRequested;
 import com.sanshuiyuan.asset.domain.*;
 import com.sanshuiyuan.asset.infra.repository.DeviceAssetRepository;
 import com.sanshuiyuan.asset.infra.repository.OrderRepository;
@@ -79,5 +80,11 @@ public class PayCallbackUseCase {
         // D.2.4: Grant the OWNER role only after this payment transaction commits, asynchronously,
         // so a user-service outage can never roll back or block the payment main transaction.
         eventPublisher.publishEvent(new OwnerRoleGrantRequested(order.getUserId()));
+
+        // 推荐返利（一次性实物销售介绍费）：同 OwnerRole 的「提交后异步」模式触发冻结。
+        // 被推荐人 = 购机下单人；关系链查询 + SKU 费率快照 + 冻结全部推迟到事务提交后异步执行，
+        // 取关系链的 user-service 故障绝不可阻塞或回滚本支付主事务。「每人仅一次」由领域服务封顶。
+        eventPublisher.publishEvent(
+                new RebateFreezeRequested(order.getId(), order.getUserId(), order.getSkuId()));
     }
 }

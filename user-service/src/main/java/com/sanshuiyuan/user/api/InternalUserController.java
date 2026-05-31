@@ -61,6 +61,25 @@ public class InternalUserController {
     }
 
     /**
+     * S2S：按 userId 取买家关系链（供 asset-service 在购机支付成功时分账定位 L1/L2）。
+     * /internal/** 已由 S2sTokenFilter 鉴权。返回 {inviterId, grandInviterId}（均可为 null）；
+     * 用户不存在返回 404。
+     *
+     * <p><b>合规</b>：仅返回单条记录的一次性快照，不向上递归（L3+ 物理隔离）。
+     */
+    @GetMapping("/{id}/referral-chain")
+    public ResponseEntity<Map<String, Object>> getReferralChain(@PathVariable("id") Long userId) {
+        return userRepository.findById(userId)
+                .<ResponseEntity<Map<String, Object>>>map(u -> {
+                    Map<String, Object> body = new LinkedHashMap<>();
+                    body.put("inviterId", u.getInviterId());
+                    body.put("grandInviterId", u.getGrandInviterId());
+                    return ResponseEntity.ok(body);
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
      * H5 登录成功后并号（spec 012）。/internal/** 已由 S2sTokenFilter 鉴权，不对外暴露。
      * inviterId 由 H5 端 RefIdCodec 解密后传入，仅首次创建写入关系链。
      */
