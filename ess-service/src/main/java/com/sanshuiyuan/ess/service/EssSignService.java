@@ -138,7 +138,12 @@ public class EssSignService {
 
             JsonNode response = apiClient.invoke("CreateSchemeUrl", params);
 
-            log.info("小程序签署参数已生成 [contractId={}, signerId={}]", contractId, signerId);
+            // 核对用：打印腾讯 CreateSchemeUrl 小程序跳转响应的字段名与原始 JSON，
+            // 据此校准前端 resolveJump()（path 取哪个字段、是否需电子签 appId）。
+            java.util.List<String> keys = new java.util.ArrayList<>();
+            response.fieldNames().forEachRemaining(keys::add);
+            log.info("小程序签署参数已生成 [contractId={}, signerId={}, wxAppId={}, 响应字段={}, raw={}]",
+                    contractId, signerId, wxAppId, keys, response.toString());
             return response;
 
         } catch (EssFlowException e) {

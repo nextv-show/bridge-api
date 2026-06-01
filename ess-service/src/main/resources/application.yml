@@ -37,7 +37,8 @@ ess:
   connect-timeout-ms: 5000
   read-timeout-ms: 10000
   max-retries: 3
-  collect-id-card: false
+  # 个人签署传 ApproverIdCardNumber，触发腾讯电子签内的实名+人脸核身（小程序认购签约依赖此项）。
+  collect-id-card: ${ESS_COLLECT_ID_CARD:true}
 
 # 小程序签署默认 appId（sign-params?clientType=MINI 时透传给 ESS CreateSchemeUrl；前端可用 wxAppId 覆盖）。
 wx:

@@ -111,14 +111,9 @@ aliyun:
     product-code: ${ALIYUN_KYC_PRODUCT_CODE:LR_FR}     # 活体检测方案（唯一取值 LR_FR）
     model: ${ALIYUN_KYC_MODEL:MOVE_ACTION}             # 活体类型：远近移动+眨眼（推荐）
 
-# 小程序原生人脸核身（腾讯人脸核身/FaceID）。secret-id 留空则回退桩实现（dev/test/未对接）。
-tencent:
-  faceid:
-    secret-id: ${TENCENT_FACEID_SECRET_ID:}
-    secret-key: ${TENCENT_FACEID_SECRET_KEY:}
-    rule-id: ${TENCENT_FACEID_RULE_ID:}                # 慧眼/FaceID 业务流程 ruleId
-    region: ${TENCENT_FACEID_REGION:ap-guangzhou}
-    mp-app-id: ${WX_MP_APP_ID:stub}                    # weapp 人脸 SDK 绑定的小程序 appId
+# 小程序设备认购签约：实名+人脸核身由腾讯电子签小程序承载，h5 经此 base-url 反代调 ess 合同接口。
+ess-service:
+  base-url: ${ESS_SERVICE_BASE_URL:http://localhost:8085}
 
 ---
 # ───────────────── dev（本地开发） ─────────────────
