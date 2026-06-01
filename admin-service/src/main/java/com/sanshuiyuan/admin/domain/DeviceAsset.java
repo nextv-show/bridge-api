@@ -4,6 +4,10 @@ import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
 
+/**
+ * 设备资产（h5_db.device_assets，本表为全系统真表——admin V074 建，admin/h5 共用；
+ * asset_db.device_assets 为废弃旧表，见 024）。认购支付完成由 024 在 PAID 事务建 PENDING_MATCH 行。
+ */
 @Entity
 @Table(name = "device_assets")
 public class DeviceAsset {
@@ -14,9 +18,11 @@ public class DeviceAsset {
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
+    // 认购单台幂等键（024：UNIQUE(order_id)，迁移 V079）。
     @Column(name = "order_id", nullable = false)
     private Long orderId;
 
+    // SN 待绑定时为 null（024：sn 改可空，由 BindSnUseCase 后续绑定）。
     @Column(length = 64, unique = true)
     private String sn;
 

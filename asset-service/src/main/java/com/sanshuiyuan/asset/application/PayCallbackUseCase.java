@@ -64,6 +64,10 @@ public class PayCallbackUseCase {
         Sku sku = skuRepository.findById(order.getSkuId())
                 .orElseThrow(() -> new RuntimeException("Sku not found: " + order.getSkuId()));
 
+        // [废弃-024] 本路径写的是 asset_db.device_assets（asset-service 数据源），与真正在用的
+        // h5_db.device_assets（admin V074 建、admin/h5 共用）不同库且当前无客户端、行数为 0。
+        // 认购已统一收敛到 h5-service（H5/小程序/App），资产入库改由 024（h5-service 在 PAID 事务
+        // 直写 h5_db.device_assets）负责。此处保留不删，待 005/后续清理 asset-service 旧 /orders 路径。
         // Create DeviceAsset(s) based on quantity
         for (int i = 0; i < order.getQty(); i++) {
             DeviceAsset asset = new DeviceAsset();
