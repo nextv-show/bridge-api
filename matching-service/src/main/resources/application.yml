@@ -29,3 +29,12 @@ springdoc:
 # E-1：复用 h5-service 的 H5 JWT 密钥（HS256）。生产务必与 h5-service 同值环境变量覆盖。
 h5:
   jwt-secret: ${H5_JWT_SECRET:dev-h5-jwt-secret-please-override-in-prod-0001}
+  # 手机号 AES-GCM 主密钥（Base64，32字节）。务必与 h5-service 同值，否则跨服务解密失败。
+  aes-master-key: ${H5_AES_MASTER_KEY:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}
+
+# B.2.4 撮合发布限频（按手机号 + IP）。
+rate-limit:
+  matching:
+    ip-per-minute: 60
+    phone-per-minute: 1
+    phone-per-day: 5
