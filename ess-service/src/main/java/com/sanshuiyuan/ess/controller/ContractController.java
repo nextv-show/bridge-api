@@ -38,6 +38,10 @@ public class ContractController {
     private final MultiPlatformSignService multiPlatformSignService;
     private final SignStatusSyncService signStatusSyncService;
 
+    /** 小程序签署默认 appId（前端未显式传 wxAppId 时回退）。 */
+    @org.springframework.beans.factory.annotation.Value("${wx.miniprogram.app-id:}")
+    private String defaultMiniAppId;
+
     public ContractController(ContractGenerationService generationService,
                                ContractSigningService signingService,
                                ContractStateMachineService stateMachineService,
@@ -168,6 +172,7 @@ public class ContractController {
     public ResponseEntity<Map<String, Object>> getSignParams(
             @PathVariable Long id,
             @RequestParam(required = false) String clientType,
+            @RequestParam(required = false) String wxAppId,
             HttpServletRequest httpRequest) {
 
         ClientType ct = clientType != null && !clientType.isBlank()
@@ -195,6 +200,13 @@ public class ContractController {
         options.put("jumpUrl", "https://h5.sanshuiyuan.com/checkout?contractId=" + id);
         options.put("h5Type", "jump");
         options.put("appType", "android");
+        // 小程序签署：把小程序 appId 透传给 ESS CreateSchemeUrl（前端传 wxAppId 优先，否则用服务端默认配置）。
+        if (ct == ClientType.MINI) {
+            String mpAppId = (wxAppId != null && !wxAppId.isBlank()) ? wxAppId : defaultMiniAppId;
+            if (mpAppId != null && !mpAppId.isBlank()) {
+                options.put("wxAppId", mpAppId);
+            }
+        }
 
         MultiPlatformSignService.SignParamsResult result =
                 multiPlatformSignService.generateSignParams(contractId, signerId, ct, options);

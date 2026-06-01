@@ -39,6 +39,11 @@ ess:
   max-retries: 3
   collect-id-card: false
 
+# 小程序签署默认 appId（sign-params?clientType=MINI 时透传给 ESS CreateSchemeUrl；前端可用 wxAppId 覆盖）。
+wx:
+  miniprogram:
+    app-id: ${WX_MP_APP_ID:}
+
 springdoc:
   api-docs:
     path: /api-docs

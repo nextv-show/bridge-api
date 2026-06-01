@@ -44,6 +44,23 @@ class KycInitUseCaseTest {
             setField(r, "status", KycStatus.PASS);
             setField(r, "realNameMask", "张 **");
             setField(r, "idCardNoMask", "110*************34");
+            setField(r, "phoneMask", "138****8000");
+            return r;
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private KycRecord verifiedRecordNoPhone() {
+        try {
+            var ctor = KycRecord.class.getDeclaredConstructor();
+            ctor.setAccessible(true);
+            KycRecord r = ctor.newInstance();
+            setField(r, "openid", "openid1");
+            setField(r, "status", KycStatus.PASS);
+            setField(r, "realNameMask", "张 **");
+            setField(r, "idCardNoMask", "110*************34");
+            // phoneMask intentionally null (simulates early users)
             return r;
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -97,6 +114,26 @@ class KycInitUseCaseTest {
 
         verify(kycClient).init("openid1", "meta-info-stub", "https://h5.example.com/#/checkout");
         verify(kycRepo).save(org.mockito.ArgumentMatchers.any(KycRecord.class));
+    }
+
+    @Test
+    void execute_alreadyVerified_noPhone_updatesRecordAndReturnsNewMask() {
+        KycRecord noPhone = verifiedRecordNoPhone();
+        when(kycRepo.findFirstByOpenidAndStatusOrderByVerifiedAtDesc("openid1", KycStatus.PASS))
+                .thenReturn(Optional.of(noPhone));
+        when(cipher.encrypt(VALID_PHONE)).thenReturn(new byte[]{4, 5, 6});
+
+        KycInitUseCase uc = createUseCase();
+        KycInitResponse resp = uc.execute("openid1", "meta-info-stub", "张三", VALID_ID, VALID_PHONE);
+
+        assertThat(resp.alreadyVerified()).isTrue();
+        assertThat(resp.realNameMask()).isEqualTo("张 **");
+        assertThat(resp.idCardMask()).isEqualTo("110*************34");
+        assertThat(resp.phoneMask()).isEqualTo("138****8000");
+
+        verify(cipher).encrypt(VALID_PHONE);
+        verify(kycRepo).save(noPhone);
+        verifyNoInteractions(kycClient);
     }
 
     @Test

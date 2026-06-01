@@ -26,4 +26,17 @@ public class AuthConfig {
         }
         return new StubWxAuthClient();
     }
+
+    /**
+     * 配置了真实小程序 appSecret（非空且非占位 "stub"）时启用真实 jscode2session，否则回退 stub。
+     */
+    @Bean
+    public WxMiniAuthClient wxMiniAuthClient(
+            @Value("${wx.miniprogram.app-id:stub}") String appId,
+            @Value("${wx.miniprogram.app-secret:}") String appSecret) {
+        if (appSecret != null && !appSecret.isBlank() && !"stub".equals(appSecret)) {
+            return new HttpWxMiniAuthClient(appId, appSecret);
+        }
+        return new StubWxMiniAuthClient();
+    }
 }

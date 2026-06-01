@@ -113,6 +113,12 @@ public class KycRecord {
         this.status = KycStatus.SUPERSEDED;
     }
 
+    /** 补充/更新手机号（用于早期已认证用户补录）。 */
+    public void updatePhone(byte[] phoneEnc, String phoneMask) {
+        this.phoneEnc = phoneEnc;
+        this.phoneMask = phoneMask;
+    }
+
     public Long getId() { return id; }
     public String getOpenid() { return openid; }
     public byte[] getRealName() { return realName; }

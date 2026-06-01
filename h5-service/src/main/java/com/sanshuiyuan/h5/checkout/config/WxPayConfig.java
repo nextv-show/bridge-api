@@ -20,6 +20,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 
 /**
  * 微信支付 V3 装配中枢。配齐真实凭证（mch-id / api-v3-key / 商户私钥 / 序列号）时启用 SDK 实现，
@@ -32,11 +33,13 @@ public class WxPayConfig {
     private static final Logger log = LoggerFactory.getLogger(WxPayConfig.class);
 
     @Value("${wxpay.app-id:stub}") private String appId;
+    @Value("${wxpay.mp-app-id:stub}") private String mpAppId;
     @Value("${wxpay.mch-id:stub}") private String mchId;
     @Value("${wxpay.api-v3-key:stub}") private String apiV3Key;
     @Value("${wxpay.private-key-path:}") private String privateKeyPath;
     @Value("${wxpay.merchant-serial-number:}") private String merchantSerialNumber;
     @Value("${wxpay.notify-url:}") private String notifyUrl;
+    @Value("${wxpay.mp-notify-url:}") private String mpNotifyUrl;
     @Value("${wxpay.refund-notify-url:}") private String refundNotifyUrl;
     @Value("${wxpay.public-key-path:}") private String publicKeyPath;
     @Value("${wxpay.public-key-id:}") private String publicKeyId;
@@ -88,6 +91,7 @@ public class WxPayConfig {
     }
 
     @Bean
+    @Primary
     public WxPayClient wxPayClient() {
         if (!isConfigured()) {
             log.warn("微信支付未配置，回退 StubWxPayClient");
@@ -100,6 +104,32 @@ public class WxPayConfig {
         } catch (Exception e) {
             log.error("微信支付 SDK 初始化失败，回退 StubWxPayClient（凭证或网络问题）: {}", e.getMessage());
             cachedConfig = null;
+            return new StubWxPayClient();
+        }
+    }
+
+    /**
+     * 小程序支付通道：商户凭证与公众号共用，仅 appId 换成小程序 appId、payer.openid 为小程序 openid。
+     * 复用同一 {@link SdkWxPayClient}（其按 appId 参数化）。主动查单/关单按 mchId+outTradeNo，与本 Bean 无关，
+     * 故对账兜底沿用 {@code @Primary} 公众号 client 即可，无需为小程序订单单独查单。
+     * notify-url 缺省回退公众号 notify-url（同一回调入口）。
+     */
+    @Bean
+    public WxPayClient mpWxPayClient() {
+        boolean mpConfigured = notBlankNotStub(mpAppId) && notBlankNotStub(mchId) && notBlankNotStub(apiV3Key)
+                && privateKeyPath != null && !privateKeyPath.isBlank()
+                && merchantSerialNumber != null && !merchantSerialNumber.isBlank();
+        if (!mpConfigured) {
+            log.warn("小程序支付未配置（wxpay.mp-app-id 或商户凭证缺失），回退 StubWxPayClient");
+            return new StubWxPayClient();
+        }
+        try {
+            JsapiServiceExtension jsapi = new JsapiServiceExtension.Builder().config(coreConfig()).build();
+            String mpNotify = (mpNotifyUrl != null && !mpNotifyUrl.isBlank()) ? mpNotifyUrl : notifyUrl;
+            log.info("启用小程序微信支付 V3 JSAPI（SdkWxPayClient）mpAppId={}", mpAppId);
+            return new SdkWxPayClient(jsapi, mpAppId, mchId, mpNotify);
+        } catch (Exception e) {
+            log.error("小程序微信支付 SDK 初始化失败，回退 StubWxPayClient: {}", e.getMessage());
             return new StubWxPayClient();
         }
     }
