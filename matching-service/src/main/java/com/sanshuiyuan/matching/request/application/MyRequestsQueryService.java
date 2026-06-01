@@ -1,0 +1,63 @@
+package com.sanshuiyuan.matching.request.application;
+
+import com.sanshuiyuan.matching.identity.MatchingUserResolver;
+import com.sanshuiyuan.matching.request.api.ApiException;
+import com.sanshuiyuan.matching.request.api.dto.RequestItem;
+import com.sanshuiyuan.matching.request.domain.MatchingRequest;
+import com.sanshuiyuan.matching.request.domain.RequestStatus;
+import com.sanshuiyuan.matching.request.infra.MatchingRequestRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+/** FR-2：我的需求列表 + 详情。本人看自己手机号明文。 */
+@Service
+public class MyRequestsQueryService {
+
+    private final MatchingRequestRepository repo;
+    private final MatchingUserResolver userResolver;
+    private final RequestItemMapper mapper;
+
+    public MyRequestsQueryService(MatchingRequestRepository repo,
+                                  MatchingUserResolver userResolver,
+                                  RequestItemMapper mapper) {
+        this.repo = repo;
+        this.userResolver = userResolver;
+        this.mapper = mapper;
+    }
+
+    @Transactional(readOnly = true)
+    public List<RequestItem> mine(String subject, String statusFilter) {
+        long userId = userResolver.resolveUserId(subject);
+        RequestStatus status = parseStatus(statusFilter);
+        List<MatchingRequest> rows = (status == null)
+                ? repo.findByUserIdOrderByCreatedAtDesc(userId)
+                : repo.findByUserIdAndStatusOrderByCreatedAtDesc(userId, status);
+        // 本人看自己 → 明文，distance_km=null。
+        return rows.stream().map(r -> mapper.toItem(r, true, null)).toList();
+    }
+
+    /**
+     * 详情：调用方是发起人或 locked_by 时手机号明文，否则脱敏。
+     */
+    @Transactional(readOnly = true)
+    public RequestItem detail(String subject, long requestId) {
+        long userId = userResolver.resolveUserId(subject);
+        MatchingRequest r = repo.findById(requestId)
+                .orElseThrow(() -> ApiException.notFound("NOT_FOUND", "需求不存在"));
+        boolean plain = userId == r.getUserId()
+                || (r.getLockedByUserId() != null && userId == r.getLockedByUserId());
+        return mapper.toItem(r, plain, null);
+    }
+
+    private RequestStatus parseStatus(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        try {
+            return RequestStatus.valueOf(raw.trim());
+        } catch (IllegalArgumentException e) {
+            throw ApiException.unprocessable("INVALID_STATUS",
+                    "status 必须是 OPEN/LOCKED/FULFILLED/CANCELLED/EXPIRED 之一");
+        }
+    }
+}
