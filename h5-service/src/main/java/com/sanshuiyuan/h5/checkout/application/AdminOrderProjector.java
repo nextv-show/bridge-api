@@ -75,6 +75,43 @@ public class AdminOrderProjector {
         } catch (Exception e) {
             log.error("admin orders 投影失败 orderNo={}: {}", order.getOrderNo(), e.getMessage(), e);
         }
+
+        // 024：认购支付完成（PAID）→ 资产入库 device_assets(PENDING_MATCH)，作为 002 撮合对象。
+        // 多渠道（H5/小程序/App）均经 completePaid → 本投影，故渠道无关。best-effort + 独立 try
+        // （与 admin orders 投影同哲学，不阻断支付主流程）；幂等靠 device_assets 的 UNIQUE(order_id)。
+        if (order.getStatus() == OrderStatus.PAID) {
+            try {
+                projectDeviceAsset(order);
+            } catch (Exception e) {
+                log.error("device_asset 投影失败 orderNo={}: {}", order.getOrderNo(), e.getMessage(), e);
+            }
+        }
+    }
+
+    /**
+     * 在 PAID 同事务内向 {@code device_assets}（h5_db 真表）建一条 PENDING_MATCH 资产。
+     * order_id 取刚投影的 admin {@code orders}.id（按 h5_order_no 反查）；sn 待绑定为 NULL；
+     * 收益列 0 为非空基线（不写收益，归 004）。幂等：UNIQUE(order_id) + ON DUPLICATE。
+     */
+    private void projectDeviceAsset(H5Order order) {
+        long userId = resolveUserId(order.getOpenid());
+        List<Long> ids = jdbc.queryForList(
+                "SELECT id FROM orders WHERE h5_order_no = ?", Long.class, order.getOrderNo());
+        if (ids.isEmpty()) {
+            log.error("device_asset 投影：未找到 admin order h5_order_no={}", order.getOrderNo());
+            return;
+        }
+        long adminOrderId = ids.get(0);
+        Timestamp purchasedAt = toTs(order.getPaidAt() != null ? order.getPaidAt() : LocalDateTime.now());
+        int n = jdbc.update(
+                "INSERT INTO device_assets (user_id, order_id, sn, model, purchased_at, stage, " +
+                        "cumulative_income_cents, roi_bp) VALUES (?, ?, NULL, ?, ?, 'PENDING_MATCH', 0, 0) " +
+                        "ON DUPLICATE KEY UPDATE order_id = order_id",
+                userId, adminOrderId, order.getModelCode(), purchasedAt);
+        if (n > 0) {
+            log.info("device_asset 入库 orderNo={} adminOrderId={} userId={}",
+                    order.getOrderNo(), adminOrderId, userId);
+        }
     }
 
     private long resolveUserId(String openid) {
