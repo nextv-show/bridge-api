@@ -1,10 +1,13 @@
 package com.sanshuiyuan.ess.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sanshuiyuan.ess.domain.Contract;
 import com.sanshuiyuan.ess.domain.Contract.ContractStatus;
 import com.sanshuiyuan.ess.domain.ContractAuditTrail;
 import com.sanshuiyuan.ess.domain.ContractSnBinding;
 import com.sanshuiyuan.ess.domain.EssFlowRecord;
+import com.sanshuiyuan.ess.exception.EssFlowException;
 import com.sanshuiyuan.ess.infra.repository.ContractRepository;
 import com.sanshuiyuan.ess.infra.repository.ContractSnBindingRepository;
 import org.slf4j.Logger;
@@ -28,19 +31,22 @@ public class ContractSigningService {
     private final ContractStateMachineService stateMachineService;
     private final ContractArchiveService archiveService;
     private final AuditTrailService auditTrailService;
+    private final ObjectMapper objectMapper;
 
     public ContractSigningService(ContractRepository contractRepository,
                                    ContractSnBindingRepository snBindingRepository,
                                    EssContractService essContractService,
                                    ContractStateMachineService stateMachineService,
                                    ContractArchiveService archiveService,
-                                   AuditTrailService auditTrailService) {
+                                   AuditTrailService auditTrailService,
+                                   ObjectMapper objectMapper) {
         this.contractRepository = contractRepository;
         this.snBindingRepository = snBindingRepository;
         this.essContractService = essContractService;
         this.stateMachineService = stateMachineService;
         this.archiveService = archiveService;
         this.auditTrailService = auditTrailService;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -56,7 +62,7 @@ public class ContractSigningService {
      */
     @Transactional
     public SigningInitiationResult initiateSigning(Long contractId, Long userId) {
-        return initiateSigning(contractId, userId, null);
+        return initiateSigning(contractId, userId, null, null);
     }
 
     /**
@@ -69,7 +75,8 @@ public class ContractSigningService {
      */
     @Transactional
     public SigningInitiationResult initiateSigning(Long contractId, Long userId,
-                                                    Contract.SignSource signSource) {
+                                                    Contract.SignSource signSource,
+                                                    String[] overrides) {
         Contract contract = stateMachineService.getContract(contractId);
 
         // 校验状态
@@ -79,15 +86,36 @@ public class ContractSigningService {
                             contract.getStatus(), contract.getContractNo()));
         }
 
-        log.info("发起签署流程 [contractId={}, contractNo={}, userId={}, signSource={}]",
-                contractId, contract.getContractNo(), userId, signSource);
+        log.info("发起签署流程 [contractId={}, contractNo={}, userId={}, signSource={}, hasOverrides={}]",
+                contractId, contract.getContractNo(), userId, signSource, overrides != null);
 
         // 调用腾讯电子签创建签署流程
         String contractNoStr = contract.getContractNo();
         String flowName = "三水元设备合同签署-" + contractNoStr;
 
+        // 如果传入了真实身份信息，覆盖签署方 JSON 中的脱敏字段
+        String signerJson = contract.getSignerInfoJson();
+        if (overrides != null) {
+            String phone = overrides[0];
+            String realName = overrides.length > 1 ? overrides[1] : null;
+            String idCard = overrides.length > 2 ? overrides[2] : null;
+            if (phone != null && !phone.isBlank() && phone.matches("^1[3-9]\\d{9}$")) {
+                signerJson = patchFieldInJson(signerJson, "phone", phone);
+            }
+            if (realName != null && !realName.isBlank()) {
+                signerJson = patchFieldInJson(signerJson, "userName", realName);
+            }
+            if (idCard != null && !idCard.isBlank()) {
+                signerJson = patchFieldInJson(signerJson, "idCardNo", idCard);
+            }
+            log.info("签署方信息已覆盖 [contractNo={}]", contract.getContractNo());
+        }
+
+        // 签署前验证：姓名必须为真实姓名，不能为脱敏值（含 *）或空
+        validateRealName(signerJson, contract.getContractNo());
+
         EssFlowRecord flowRecord = essContractService.createFlow(
-                contractNoStr, flowName, contract.getSignerInfoJson());
+                contractNoStr, flowName, signerJson);
 
         // 更新合同状态（带签署来源）
         if (signSource != null) {
@@ -184,6 +212,52 @@ public class ContractSigningService {
         public SigningInitiationResult(Long contractId, String contractNo,
                                         String essFlowId, ContractStatus status) {
             this(contractId, contractNo, essFlowId, status, null);
+        }
+    }
+
+    /**
+     * 在签署方信息 JSON 中覆盖指定字段。
+     * 用于修复旧合同脱敏数据：前端传真实身份信息 → 签署时动态覆盖。
+     */
+    static String patchFieldInJson(String json, String fieldName, String value) {
+        String escapedVal = value.replace("\\", "\\\\").replace("\"", "\\\"");
+        if (json.contains("\"" + fieldName + "\"")) {
+            return json.replaceAll("\"" + fieldName + "\"\\s*:\\s*\"[^\"]*\"",
+                    "\"" + fieldName + "\":\"" + escapedVal + "\"");
+        }
+        return json.replaceFirst("}$", ",\"" + fieldName + "\":\"" + escapedVal + "\"}");
+    }
+
+    /**
+     * 签署前验证：签署方姓名必须为真实姓名，不能为脱敏值（含 *）或空。
+     * <p>
+     * 腾讯电子签 CreateFlow 要求 ApproverName 为身份证件上的真实姓名，
+     * 脱敏姓名（如"张**"）或空值会导致 InvalidParameter.Name 错误。
+     */
+    private void validateRealName(String signerJson, String contractNo) {
+        try {
+            JsonNode root = objectMapper.readTree(signerJson);
+            JsonNode signers = root.isArray() ? root : objectMapper.createArrayNode().add(root);
+            for (JsonNode signer : signers) {
+                String name = signer.has("userName") ? signer.get("userName").asText() : "";
+                if (name.isBlank()) {
+                    throw new EssFlowException(contractNo, "签署方姓名为空，请重新完成实名认证后再试");
+                }
+                if (name.contains("*")) {
+                    throw new EssFlowException(contractNo,
+                            "签署方姓名为脱敏值（\"" + name + "\"），请重新完成实名认证获取真实姓名后再试");
+                }
+                // 姓名至少 2 个中文字符
+                if (!name.matches("[\\u4e00-\\u9fa5·]{2,}")) {
+                    throw new EssFlowException(contractNo,
+                            "签署方姓名格式不正确（\"" + name + "\"），需为真实中文姓名");
+                }
+            }
+        } catch (EssFlowException e) {
+            throw e;
+        } catch (Exception e) {
+            log.warn("解析签署方姓名验证失败 [contractNo={}]: {}", contractNo, e.getMessage());
+            throw new EssFlowException(contractNo, "签署方信息解析失败，请重新生成合同");
         }
     }
 }

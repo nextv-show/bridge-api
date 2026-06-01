@@ -50,17 +50,83 @@ public class ContractAdminController {
     private final ContractArchiveService archiveService;
     private final CertificateService certificateService;
     private final AuditTrailService auditTrailService;
+    private final com.sanshuiyuan.ess.service.ReconcileSigningContractsJob reconcileJob;
+    private final com.sanshuiyuan.ess.service.ContractCompletionBridge completionBridge;
+    private final com.sanshuiyuan.ess.service.EssContractService essContractService;
+    private final com.sanshuiyuan.ess.infra.repository.ContractRepository contractRepository;
 
     public ContractAdminController(ContractQueryService queryService,
                                     ContractAccessLogService accessLogService,
                                     ContractArchiveService archiveService,
                                     CertificateService certificateService,
-                                    AuditTrailService auditTrailService) {
+                                    AuditTrailService auditTrailService,
+                                    com.sanshuiyuan.ess.service.ReconcileSigningContractsJob reconcileJob,
+                                    com.sanshuiyuan.ess.service.ContractCompletionBridge completionBridge,
+                                    com.sanshuiyuan.ess.service.EssContractService essContractService,
+                                    com.sanshuiyuan.ess.infra.repository.ContractRepository contractRepository) {
         this.queryService = queryService;
         this.accessLogService = accessLogService;
         this.archiveService = archiveService;
         this.certificateService = certificateService;
         this.auditTrailService = auditTrailService;
+        this.reconcileJob = reconcileJob;
+        this.completionBridge = completionBridge;
+        this.essContractService = essContractService;
+        this.contractRepository = contractRepository;
+    }
+
+    // ========== 手动主动查单（运维兜底） ==========
+
+    /**
+     * 全量重放：扫描所有 SIGNING 合同，主动查询 ESS 并把已完成的推进到 SIGNED。
+     * 用于历史漂移合同的一次性修复。
+     */
+    @PostMapping("/reconcile-signing")
+    public ResponseEntity<Map<String, Object>> reconcileSigning() {
+        log.info("管理后台手动触发 SIGNING 合同主动查单兜底");
+        int scanned = reconcileJob.runOnce();
+        return ResponseEntity.ok(Map.of(
+                "code", 0,
+                "scanned", scanned,
+                "message", "已触发 SIGNING 合同主动查单兜底"
+        ));
+    }
+
+    /**
+     * 单合同强制重放：对指定合同主动查 ESS + 桥接。
+     * 用于个案排障（例如客服反馈用户卡在签署中）。
+     */
+    @PostMapping("/{id}/reconcile-signing")
+    public ResponseEntity<Map<String, Object>> reconcileOne(@PathVariable Long id) {
+        Contract contract = contractRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("合同不存在: id=" + id));
+        log.info("管理后台手动触发单合同主动查单 [contractNo={}]", contract.getContractNo());
+
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("contractId", id);
+        resp.put("contractNo", contract.getContractNo());
+        resp.put("statusBefore", contract.getStatus().name());
+
+        if (contract.getEssFlowId() == null) {
+            resp.put("code", -1);
+            resp.put("message", "合同尚未发起 ESS 流程");
+            return ResponseEntity.ok(resp);
+        }
+
+        try {
+            essContractService.describeFlowStatus(contract.getContractNo());
+        } catch (Exception e) {
+            log.warn("describeFlowStatus 失败 [contractNo={}]: {}",
+                    contract.getContractNo(), e.getMessage());
+        }
+        boolean bridged = completionBridge.bridgeToSigned(contract.getContractNo(), null);
+
+        Contract reloaded = contractRepository.findById(id).orElseThrow();
+        resp.put("code", 0);
+        resp.put("bridged", bridged);
+        resp.put("statusAfter", reloaded.getStatus().name());
+        resp.put("message", bridged ? "已推进到 SIGNED" : "无需推进（远端仍未完成或已是最终态）");
+        return ResponseEntity.ok(resp);
     }
 
     // ========== T20.9: GET /api/admin/contracts ==========

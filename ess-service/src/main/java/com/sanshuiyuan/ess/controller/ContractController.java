@@ -38,6 +38,10 @@ public class ContractController {
     private final MultiPlatformSignService multiPlatformSignService;
     private final SignStatusSyncService signStatusSyncService;
 
+    /** 小程序签署默认 appId（前端未显式传 wxAppId 时回退）。 */
+    @org.springframework.beans.factory.annotation.Value("${wx.miniprogram.app-id:}")
+    private String defaultMiniAppId;
+
     public ContractController(ContractGenerationService generationService,
                                ContractSigningService signingService,
                                ContractStateMachineService stateMachineService,
@@ -123,11 +127,20 @@ public class ContractController {
 
         Long userId = requireLong(request, "userId");
         ClientType clientType = resolveClientType(request, httpRequest);
+        String phoneOverride = request.get("phone");
+        String nameOverride = request.get("realName");
+        String idCardOverride = request.get("realIdCard");
 
-        log.info("发起签署 [contractId={}, userId={}, clientType={}]", id, userId, clientType);
+        log.info("发起签署 [contractId={}, userId={}, clientType={}, phoneOverride={}, nameOverride={}, idCardOverride={}]",
+                id, userId, clientType,
+                phoneOverride != null ? "***" : "null",
+                nameOverride != null ? "**" : "null",
+                idCardOverride != null ? "***" : "null");
 
         Contract.SignSource signSource = mapToSignSource(clientType);
-        SigningInitiationResult result = signingService.initiateSigning(id, userId, signSource);
+        String[] overrides = (phoneOverride != null || nameOverride != null || idCardOverride != null)
+                ? new String[]{phoneOverride, nameOverride, idCardOverride} : null;
+        SigningInitiationResult result = signingService.initiateSigning(id, userId, signSource, overrides);
 
         return ResponseEntity.ok(Map.of(
                 "code", 0,
@@ -159,6 +172,7 @@ public class ContractController {
     public ResponseEntity<Map<String, Object>> getSignParams(
             @PathVariable Long id,
             @RequestParam(required = false) String clientType,
+            @RequestParam(required = false) String wxAppId,
             HttpServletRequest httpRequest) {
 
         ClientType ct = clientType != null && !clientType.isBlank()
@@ -181,9 +195,18 @@ public class ContractController {
         String signerId = "1"; // 默认签署人 ID，实际应从合同签署方信息中获取
 
         java.util.Map<String, String> options = new java.util.HashMap<>();
-        options.put("jumpUrl", "/sign-complete?contractId=" + id);
+        // 使用绝对 URL，确保 ESS 回调能正确跳回 H5 页面
+        // CheckoutPage 会在挂载时从 URL 恢复签约状态
+        options.put("jumpUrl", "https://h5.sanshuiyuan.com/checkout?contractId=" + id);
         options.put("h5Type", "jump");
         options.put("appType", "android");
+        // 小程序签署：把小程序 appId 透传给 ESS CreateSchemeUrl（前端传 wxAppId 优先，否则用服务端默认配置）。
+        if (ct == ClientType.MINI) {
+            String mpAppId = (wxAppId != null && !wxAppId.isBlank()) ? wxAppId : defaultMiniAppId;
+            if (mpAppId != null && !mpAppId.isBlank()) {
+                options.put("wxAppId", mpAppId);
+            }
+        }
 
         MultiPlatformSignService.SignParamsResult result =
                 multiPlatformSignService.generateSignParams(contractId, signerId, ct, options);

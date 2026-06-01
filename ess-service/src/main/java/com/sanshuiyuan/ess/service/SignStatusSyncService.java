@@ -29,13 +29,19 @@ public class SignStatusSyncService {
     private final ContractRepository contractRepository;
     private final ContractStateMachineService stateMachineService;
     private final EssContractService essContractService;
+    private final com.sanshuiyuan.ess.infra.repository.EssFlowRecordRepository flowRecordRepository;
+    private final ContractCompletionBridge completionBridge;
 
     public SignStatusSyncService(ContractRepository contractRepository,
                                   ContractStateMachineService stateMachineService,
-                                  EssContractService essContractService) {
+                                  EssContractService essContractService,
+                                  com.sanshuiyuan.ess.infra.repository.EssFlowRecordRepository flowRecordRepository,
+                                  ContractCompletionBridge completionBridge) {
         this.contractRepository = contractRepository;
         this.stateMachineService = stateMachineService;
         this.essContractService = essContractService;
+        this.flowRecordRepository = flowRecordRepository;
+        this.completionBridge = completionBridge;
     }
 
     /**
@@ -73,6 +79,9 @@ public class SignStatusSyncService {
         if (contract.getStatus() == ContractStatus.SIGNING && contract.getEssFlowId() != null) {
             try {
                 essContractService.describeFlowStatus(contract.getContractNo());
+                // 远端同步成功后兜底桥接：处理"FlowRecord 已 COMPLETED 但 Contract 仍 SIGNING"
+                // 的存量数据漂移（历史 webhook 没桥接、或桥接失败）。
+                reconcileIfFlowCompleted(contract.getContractNo());
                 // 重新加载可能被更新的合同
                 contract = stateMachineService.getContract(contractId);
             } catch (Exception e) {
@@ -97,6 +106,24 @@ public class SignStatusSyncService {
     }
 
     /**
+     * 兜底回填：远端同步后若 EssFlowRecord 显示 COMPLETED 而 Contract 仍在 SIGNING，
+     * 触发桥接把 Contract 推到 SIGNED。
+     * <p>
+     * 出现场景：历史 webhook 在桥接代码上线前就到达过；或某次桥接因异常未生效。
+     */
+    private void reconcileIfFlowCompleted(String contractNo) {
+        try {
+            flowRecordRepository.findByContractId(contractNo).ifPresent(record -> {
+                if (record.getFlowStatus() == com.sanshuiyuan.ess.domain.FlowStatus.COMPLETED) {
+                    completionBridge.bridgeToSigned(contractNo, null);
+                }
+            });
+        } catch (Exception e) {
+            log.warn("兜底桥接检查失败 [contractNo={}]: {}", contractNo, e.getMessage());
+        }
+    }
+
+    /**
      * 通过合同编号查询跨端签署状态。
      */
     @Transactional
@@ -108,6 +135,7 @@ public class SignStatusSyncService {
         if (contract.getStatus() == ContractStatus.SIGNING && contract.getEssFlowId() != null) {
             try {
                 essContractService.describeFlowStatus(contractNo);
+                reconcileIfFlowCompleted(contractNo);
                 contract = stateMachineService.getContract(contract.getId());
             } catch (Exception e) {
                 log.warn("远端状态同步失败 [contractNo={}]: {}", contractNo, e.getMessage());

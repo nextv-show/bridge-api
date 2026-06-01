@@ -76,16 +76,21 @@ h5:
 wxpay:
   app-id: ${WXPAY_APP_ID:stub}
   app-secret: ${WX_APP_SECRET:}            # 公众号 appSecret，网页授权 code→openid 用
+  mp-app-id: ${WXPAY_MP_APP_ID:stub}       # 小程序 appId，小程序设备认购 JSAPI 预支付用（商户号等凭证与公众号共用）
   mch-id: ${WXPAY_MCH_ID:stub}
   api-v3-key: ${WXPAY_API_V3_KEY:stub}
   private-key-path: ${WXPAY_PRIVATE_KEY_PATH:}
   merchant-serial-number: ${WXPAY_MERCHANT_SERIAL_NUMBER:}
   notify-url: ${WXPAY_NOTIFY_URL:}         # 支付结果异步通知公网地址，如 https://api.example.com/api/h5/pay/callback
+  mp-notify-url: ${WXPAY_MP_NOTIFY_URL:}   # 小程序支付异步通知地址，缺省回退 notify-url（同一回调入口）
   refund-notify-url: ${WXPAY_REFUND_NOTIFY_URL:}  # 退款结果异步通知公网地址
   public-key-path: ${WXPAY_PUBLIC_KEY_PATH:}       # 微信支付公钥文件路径（新商户公钥模式必填）
   public-key-id: ${WXPAY_PUBLIC_KEY_ID:}           # 微信支付公钥 ID，如 PUB_KEY_ID_xxxxxxxxxx
 # Spec 106: 微信模板消息推送（服务号认证后在服务号后台申请，填入 templateId）
 wx:
+  miniprogram:
+    app-id: ${WX_MP_APP_ID:stub}           # 小程序 appId（jscode2session 登录用，与 wxpay.mp-app-id 同值）
+    app-secret: ${WX_MP_APP_SECRET:}       # 小程序 appSecret；未配置时 wx-mini-login 回退桩实现
   tpl:
     pay-success: ${WX_TPL_PAY_SUCCESS:}       # 支付成功通知模板 ID，空则降级不推送
     refund-success: ${WX_TPL_REFUND_SUCCESS:} # 退款成功通知模板 ID，空则降级不推送
@@ -105,6 +110,10 @@ aliyun:
     endpoint: ${ALIYUN_KYC_ENDPOINT:cloudauth.aliyuncs.com}  # 全局接入地址
     product-code: ${ALIYUN_KYC_PRODUCT_CODE:LR_FR}     # 活体检测方案（唯一取值 LR_FR）
     model: ${ALIYUN_KYC_MODEL:MOVE_ACTION}             # 活体类型：远近移动+眨眼（推荐）
+
+# 小程序设备认购签约：实名+人脸核身由腾讯电子签小程序承载，h5 经此 base-url 反代调 ess 合同接口。
+ess-service:
+  base-url: ${ESS_SERVICE_BASE_URL:http://localhost:8085}
 
 ---
 # ───────────────── dev（本地开发） ─────────────────

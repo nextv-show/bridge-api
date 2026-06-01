@@ -30,6 +30,11 @@ public class HttpWxAuthClient implements WxAuthClient {
 
     @Override
     public String code2openid(String code) {
+        return code2identity(code).openid();
+    }
+
+    @Override
+    public WxIdentity code2identity(String code) {
         // 微信 OAuth API 返回 Content-Type: text/plain，用 String 接收再手动解析
         String raw;
         try {
@@ -58,6 +63,8 @@ public class HttpWxAuthClient implements WxAuthClient {
         if (openid == null || openid.isBlank()) {
             throw new BizException(ErrorCode.WX_AUTH_FAILED, "未获取到 openid");
         }
-        return openid;
+        // unionid 仅在公众号已绑定开放平台时随 access_token 一并返回；未绑定为空，按 openid 兜底。
+        String unionid = body.path("unionid").asText(null);
+        return new WxIdentity(openid, (unionid == null || unionid.isBlank()) ? null : unionid);
     }
 }

@@ -9,6 +9,8 @@ import com.sanshuiyuan.h5.checkout.infra.crypto.MaskingUtils;
 import com.sanshuiyuan.h5.checkout.infra.repository.KycRecordRepository;
 import com.sanshuiyuan.h5.common.BizException;
 import com.sanshuiyuan.h5.common.ErrorCode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,6 +19,8 @@ import java.util.Optional;
 
 @Service
 public class KycInitUseCase {
+
+    private static final Logger log = LoggerFactory.getLogger(KycInitUseCase.class);
 
     private final KycRecordRepository kycRepo;
     private final AliyunKycClient kycClient;
@@ -39,6 +43,17 @@ public class KycInitUseCase {
         Optional<KycRecord> existing = kycRepo.findFirstByOpenidAndStatusOrderByVerifiedAtDesc(openid, KycStatus.PASS);
         if (existing.isPresent()) {
             KycRecord r = existing.get();
+            // 老用户补录手机号：DB 中无手机号但本次请求带了合法手机号 → 加密存储
+            String phoneTrim = phone == null ? "" : phone.trim();
+            if ((r.getPhoneMask() == null || r.getPhoneMask().isBlank())
+                    && !phoneTrim.isEmpty() && phoneTrim.matches("^1[3-9]\\d{9}$")) {
+                byte[] phoneEnc = cipher.encrypt(phoneTrim);
+                String phoneMask = MaskingUtils.maskPhone(phoneTrim);
+                r.updatePhone(phoneEnc, phoneMask);
+                kycRepo.save(r);
+                log.info("老用户补录手机号 openid={} phoneMask={}", openid, phoneMask);
+                return KycInitResponse.alreadyVerified(r.getRealNameMask(), r.getIdCardNoMask(), phoneMask);
+            }
             return KycInitResponse.alreadyVerified(r.getRealNameMask(), r.getIdCardNoMask(), r.getPhoneMask());
         }
 

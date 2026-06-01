@@ -26,6 +26,8 @@ public class PayController {
     @PostMapping("/jsapi")
     public ApiResponse<WxPayParamsResponse> jsapi(@Valid @RequestBody PayJsapiRequest req) {
         String openid = CurrentOpenid.require();
-        return ApiResponse.ok(payJsapiUseCase.execute(openid, req.orderId()));
+        boolean mini = CurrentOpenid.isMini();
+        String payOpenid = CurrentOpenid.requirePayOpenid();
+        return ApiResponse.ok(payJsapiUseCase.execute(openid, req.orderId(), mini, payOpenid));
     }
 }

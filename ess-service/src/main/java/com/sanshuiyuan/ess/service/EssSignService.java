@@ -73,9 +73,33 @@ public class EssSignService {
             params.put("H5Type", h5TypeInt);
 
             JsonNode response = apiClient.invoke("CreateSchemeUrl", params);
-            String signUrl = response.has("H5SignUrl") ? response.get("H5SignUrl").asText() : null;
 
-            log.info("H5 签署 URL 已生成 [contractId={}, signerId={}]", contractId, signerId);
+            // 腾讯 ESS API 多个版本字段名不同：
+            //   旧版 (legacy): H5SignUrl
+            //   新版 (2023+): SchemeUrl
+            //   合作伙伴: MultiSchemeUrl
+            // 历史只读 H5SignUrl → 实际响应是 SchemeUrl → 永远 null →
+            // 前端 if (signData.signUrl) 静默跳过，用户卡在"等待签署完成"无法进入 ESS。
+            String signUrl = null;
+            String fieldUsed = null;
+            for (String field : new String[]{"SchemeUrl", "H5SignUrl", "MultiSchemeUrl", "Url"}) {
+                if (response.has(field) && !response.get(field).asText("").isBlank()) {
+                    signUrl = response.get(field).asText();
+                    fieldUsed = field;
+                    break;
+                }
+            }
+
+            if (signUrl == null) {
+                // 未匹配到任何已知字段：把响应 JSON 节点名暴露出来便于排障
+                java.util.List<String> keys = new java.util.ArrayList<>();
+                response.fieldNames().forEachRemaining(keys::add);
+                log.warn("H5 签署 URL 字段缺失，响应字段={} [contractId={}, signerId={}, raw={}]",
+                        keys, contractId, signerId, response.toString());
+            } else {
+                log.info("H5 签署 URL 已生成 [contractId={}, signerId={}, field={}]",
+                        contractId, signerId, fieldUsed);
+            }
             return signUrl;
 
         } catch (EssFlowException e) {
@@ -114,7 +138,12 @@ public class EssSignService {
 
             JsonNode response = apiClient.invoke("CreateSchemeUrl", params);
 
-            log.info("小程序签署参数已生成 [contractId={}, signerId={}]", contractId, signerId);
+            // 核对用：打印腾讯 CreateSchemeUrl 小程序跳转响应的字段名与原始 JSON，
+            // 据此校准前端 resolveJump()（path 取哪个字段、是否需电子签 appId）。
+            java.util.List<String> keys = new java.util.ArrayList<>();
+            response.fieldNames().forEachRemaining(keys::add);
+            log.info("小程序签署参数已生成 [contractId={}, signerId={}, wxAppId={}, 响应字段={}, raw={}]",
+                    contractId, signerId, wxAppId, keys, response.toString());
             return response;
 
         } catch (EssFlowException e) {
