@@ -31,6 +31,9 @@ public interface MatchingRequestRepository extends JpaRepository<MatchingRequest
 
     List<MatchingRequest> findByUserIdAndStatusOrderByCreatedAtDesc(Long userId, RequestStatus status);
 
+    /** FR-5 超时回滚扫描：指定状态且 locked_at 早于阈值的需求（锁定超时候选）。 */
+    List<MatchingRequest> findByStatusAndLockedAtBefore(RequestStatus status, LocalDateTime lockedAtBefore);
+
     /**
      * nearby bbox 候选：status=OPEN + lat/lng 包围盒，排除调用方自己。走 idx_status_lat 的 lat 范围。
      * Haversine 精算与 min_price_tier 过滤在内存做。

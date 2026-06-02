@@ -21,8 +21,21 @@ public class RequestItemMapper {
      * @param distanceKm 可空（mine/详情为 null）
      */
     public RequestItem toItem(MatchingRequest r, boolean plainPhone, Double distanceKm) {
+        return toItem(r, plainPhone, distanceKm, null);
+    }
+
+    /**
+     * 带调用方身份的映射：据 {@code viewerUserId} 计算 is_owner / is_lock_owner，供详情页取消/释放按钮判定。
+     *
+     * @param viewerUserId 调用方 users.id；为空时两标记均 false（mine/nearby 列表无需此判定）
+     */
+    public RequestItem toItem(MatchingRequest r, boolean plainPhone, Double distanceKm, Long viewerUserId) {
         String plain = cipher.decrypt(r.getContactPhoneEnc());
         String phone = plainPhone ? plain : PhoneMasking.mask(plain);
+        boolean isOwner = viewerUserId != null && viewerUserId.equals(r.getUserId());
+        boolean isLockOwner = viewerUserId != null
+                && r.getLockedByUserId() != null
+                && viewerUserId.equals(r.getLockedByUserId());
         return new RequestItem(
                 r.getId(),
                 r.getContactName(),
@@ -36,6 +49,10 @@ public class RequestItemMapper {
                 r.getStatus().name(),
                 distanceKm,
                 r.getLockedAt(),
-                r.getCreatedAt());
+                r.getCreatedAt(),
+                r.getUserId(),
+                r.getLockedByUserId(),
+                isOwner,
+                isLockOwner);
     }
 }

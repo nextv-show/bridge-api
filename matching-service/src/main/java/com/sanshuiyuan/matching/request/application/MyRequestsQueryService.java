@@ -55,7 +55,8 @@ public class MyRequestsQueryService {
                 .orElseThrow(() -> ApiException.notFound("NOT_FOUND", "需求不存在"));
         boolean plain = userId == r.getUserId()
                 || (r.getLockedByUserId() != null && userId == r.getLockedByUserId());
-        return mapper.toItem(r, plain, null);
+        // 传 viewerUserId 以计算 is_owner / is_lock_owner，供详情页取消/释放按钮判定。
+        return mapper.toItem(r, plain, null, userId);
     }
 
     private RequestStatus parseStatus(String raw) {
