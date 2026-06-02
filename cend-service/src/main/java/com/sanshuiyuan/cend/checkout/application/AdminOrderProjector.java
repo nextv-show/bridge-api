@@ -141,10 +141,15 @@ public class AdminOrderProjector {
         final String finalNickname = nickname;
         final String finalAvatarUrl = avatarUrl;
         KeyHolder keyHolder = new GeneratedKeyHolder();
+        // 幂等插入（依赖 admin V080 的 users.openid 唯一键 uk_openid，见 #19）：
+        // ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id) —— 新插入返回新自增 id；
+        // 并发首触命中唯一键时 LAST_INSERT_ID 回到既有行 id，不产重复行、不抛 DuplicateKey。
+        // 唯一键未上线前该子句为无害空操作（openid 不冲突）。
         jdbc.update(con -> {
             PreparedStatement ps = con.prepareStatement(
                     "INSERT INTO users (openid, nickname, avatar_url, channel, tier, tags, status, kyc_status, " +
-                            "created_at, updated_at) VALUES (?, ?, ?, 'WECHAT_MP', 'NORMAL', '', 'ACTIVE', 'NONE', NOW(), NOW())",
+                            "created_at, updated_at) VALUES (?, ?, ?, 'WECHAT_MP', 'NORMAL', '', 'ACTIVE', 'NONE', NOW(), NOW()) " +
+                            "ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)",
                     Statement.RETURN_GENERATED_KEYS);
             ps.setString(1, openid);
             ps.setString(2, finalNickname);
@@ -152,10 +157,15 @@ public class AdminOrderProjector {
             return ps;
         }, keyHolder);
         Number key = keyHolder.getKey();
-        if (key == null) {
-            throw new IllegalStateException("插入 admin users 未返回自增主键 openid=" + openid);
+        if (key != null) {
+            return key.longValue();
         }
-        return key.longValue();
+        // 兜底：个别驱动在 ODKU 命中更新分支可能不回传 key → 直接回查（此时行必存在）。
+        List<Long> ids = jdbc.queryForList("SELECT id FROM users WHERE openid = ?", Long.class, openid);
+        if (ids.isEmpty()) {
+            throw new IllegalStateException("upsert admin users 后回查为空 openid=" + openid);
+        }
+        return ids.get(0);
     }
 
     private long resolveSkuId(String modelCode) {
