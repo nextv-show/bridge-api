@@ -1,0 +1,7 @@
+// matching-service — 撮合服务（002 Phase A 脚手架）。公共依赖由 root build.gradle 的 subprojects{} 注入。
+bootJar { duplicatesStrategy = DuplicatesStrategy.EXCLUDE }
+dependencies {
+    implementation 'org.flywaydb:flyway-mysql'
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0'
+    implementation 'com.bucket4j:bucket4j-core:8.10.1'   // 发需求/接单限频
+}
