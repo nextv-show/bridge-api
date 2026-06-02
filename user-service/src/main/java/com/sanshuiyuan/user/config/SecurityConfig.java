@@ -44,6 +44,7 @@ public class SecurityConfig {
                 .requestMatchers("/auth/**").permitAll()
                 .requestMatchers("/wxpay/callback").permitAll()
                 .requestMatchers("/actuator/health").permitAll()
+                .requestMatchers("/avatars/**").permitAll()
                 .requestMatchers("/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                 .requestMatchers("/internal/**").permitAll()
                 .anyRequest().authenticated()
@@ -89,6 +90,7 @@ public class SecurityConfig {
         protected boolean shouldNotFilter(HttpServletRequest request) {
             String path = request.getRequestURI();
             return path.startsWith("/auth/") || path.startsWith("/actuator") ||
+                   path.startsWith("/avatars/") ||
                    path.startsWith("/api-docs") || path.startsWith("/swagger-ui") ||
                    path.equals("/swagger-ui.html");
         }
