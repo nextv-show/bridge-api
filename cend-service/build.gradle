@@ -1,0 +1,15 @@
+// cend-service — 微信 H5 营销闭环后端（102 首次创建脚手架，103/104/105 复用）。
+// 公共依赖（web/jpa/security/validation/actuator/cache/caffeine/nimbus-jwt/mysql/test/testcontainers）
+// 由 root build.gradle 的 subprojects {} 注入；此处仅声明本模块特有依赖。
+bootJar {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+dependencies {
+    implementation 'org.flywaydb:flyway-mysql'
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0'
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    implementation 'com.bucket4j:bucket4j-core:8.10.1'   // 公开接口限频
+    implementation 'com.github.wechatpay-apiv3:wechatpay-java:0.2.14'  // 微信支付 V3 SDK
+    implementation 'com.aliyun:cloudauth20190307:2.7.2'  // 阿里云金融级实人认证 V2 SDK
+}

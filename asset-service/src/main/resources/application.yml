@@ -35,7 +35,7 @@ wxpay:
   # 小程序支付：payer appid 为小程序 appid（非公众号 app-id）；水费充值回调独立地址
   mp-app-id: ${WX_MP_APP_ID:}
   wallet-notify-url: ${WXPAY_WALLET_NOTIFY_URL:}
-  # 微信支付公钥模式（新商户必须，与 h5-service 一致）；未配置则回退平台证书自动下载
+  # 微信支付公钥模式（新商户必须，与 cend-service 一致）；未配置则回退平台证书自动下载
   public-key-path: ${WXPAY_PUBLIC_KEY_PATH:}
   public-key-id: ${WXPAY_PUBLIC_KEY_ID:}
   # 购机退款异步回调地址（微信 V3 退款 notify_url）；未配置则退款单不带回调，全靠主动查单兜底
