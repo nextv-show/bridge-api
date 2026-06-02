@@ -29,12 +29,12 @@ jobs:
         uses: gradle/actions/setup-gradle@v3
 
       - name: Build Services (skip tests, CI has executed)
-        run: ./gradlew :h5-service:assemble :admin-service:assemble :user-service:assemble :asset-service:assemble -x test
+        run: ./gradlew :cend-service:assemble :admin-service:assemble :user-service:assemble :asset-service:assemble -x test
 
       - name: Stage jars with stable names
         run: |
           mkdir -p staging
-          find h5-service/build/libs/ -name "h5-service-*.jar" ! -name "*-plain.jar" -exec cp {} staging/h5-service.jar \;
+          find cend-service/build/libs/ -name "cend-service-*.jar" ! -name "*-plain.jar" -exec cp {} staging/cend-service.jar \;
           find admin-service/build/libs/ -name "admin-service-*.jar" ! -name "*-plain.jar" -exec cp {} staging/admin-service.jar \;
           find user-service/build/libs/ -name "user-service-*.jar" ! -name "*-plain.jar" -exec cp {} staging/user-service.jar \;
           find asset-service/build/libs/ -name "asset-service-*.jar" ! -name "*-plain.jar" -exec cp {} staging/asset-service.jar \;
@@ -46,11 +46,11 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
-          source: "staging/h5-service.jar,staging/admin-service.jar,staging/user-service.jar,staging/asset-service.jar"
+          source: "staging/cend-service.jar,staging/admin-service.jar,staging/user-service.jar,staging/asset-service.jar"
           target: "/tmp/"
 
-      # NOTE: admin-service 先于 h5-service 部署 —— admin 的 Flyway 迁移（如 V078 给
-      # orders 加 h5_order_no 列）必须先生效，h5-service 的 AdminOrderProjector 才能写该列。
+      # NOTE: admin-service 先于 cend-service 部署 —— admin 的 Flyway 迁移（如 V078 给
+      # orders 加 h5_order_no 列）必须先生效，cend-service 的 AdminOrderProjector 才能写该列。
       - name: Activate & Restart bridge-admin-service (Port 8084)
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -151,7 +151,7 @@ jobs:
 
             echo "[deploy] success: $SERVICE running and UP"
 
-      - name: Activate & Restart bridge-h5-service (Port 8083)
+      - name: Activate & Restart bridge-cend-service (Port 8083)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DEPLOY_HOST }}
@@ -163,12 +163,29 @@ jobs:
           script: |
             set -euo pipefail
 
-            APP_DIR="/opt/bridge-h5-service"
+            APP_DIR="/opt/bridge-cend-service"
             REL_DIR="$APP_DIR/releases"
-            INCOMING="/tmp/staging/h5-service.jar"
+            INCOMING="/tmp/staging/cend-service.jar"
             ENV_FILE="$APP_DIR/app.env"
-            SERVICE="bridge-h5-service"
+            SERVICE="bridge-cend-service"
             NEW_JAR="app-${{ github.sha }}.jar"
+
+            # 一次性迁移：bridge-h5-service → bridge-cend-service
+            OLD_SERVICE="bridge-h5-service"
+            OLD_DIR="/opt/bridge-h5-service"
+            if systemctl is-active --quiet "$OLD_SERVICE" 2>/dev/null; then
+              echo "[migrate] stopping old service $OLD_SERVICE"
+              sudo systemctl stop "$OLD_SERVICE"
+              sudo systemctl disable "$OLD_SERVICE"
+            fi
+            if [ -d "$OLD_DIR" ] && [ ! -d "$APP_DIR" ]; then
+              echo "[migrate] renaming $OLD_DIR → $APP_DIR"
+              sudo mv "$OLD_DIR" "$APP_DIR"
+              if [ -f "/etc/systemd/system/$OLD_SERVICE.service" ]; then
+                sudo rm "/etc/systemd/system/$OLD_SERVICE.service"
+                sudo systemctl daemon-reload
+              fi
+            fi
 
             # 首次自动生成示例配置文件（防首次运行挂掉，运营可在服务器手动覆写）
             sudo mkdir -p "$APP_DIR" "$REL_DIR"
