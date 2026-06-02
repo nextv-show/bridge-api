@@ -67,4 +67,18 @@ public class DeviceAssetGateway {
                 DeviceStage.LOCKED.name()
         );
     }
+
+    /** 当前用户名下处于 {@code PENDING_MATCH}（可接单）的设备列表，按 id 升序。 */
+    public List<PendingMatchDevice> findPendingMatchByOwner(long ownerUserId) {
+        return jdbcTemplate.query(
+                "SELECT id, sn, stage FROM device_assets WHERE user_id = ? AND stage = ? ORDER BY id ASC",
+                (rs, rowNum) -> new PendingMatchDevice(
+                        rs.getLong("id"), rs.getString("sn"), rs.getString("stage")),
+                ownerUserId,
+                DeviceStage.PENDING_MATCH.name()
+        );
+    }
+
+    /** 受限网关读取投影：device_assets 的 {id, sn, stage} 三列。 */
+    public record PendingMatchDevice(long id, String sn, String stage) {}
 }

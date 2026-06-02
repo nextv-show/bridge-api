@@ -76,4 +76,27 @@ class DeviceAssetGatewayTest {
 
         assertThat(rows).isZero();
     }
+
+    @Test
+    void findPendingMatchByOwner_readsIdSnStage_scopedToOwnerAndPendingMatch() {
+        DeviceAssetGateway.PendingMatchDevice row =
+                new DeviceAssetGateway.PendingMatchDevice(42L, "SN-001", "PENDING_MATCH");
+        when(jdbc.query(anyString(), any(org.springframework.jdbc.core.RowMapper.class), any(), any()))
+                .thenReturn(java.util.List.of(row));
+        DeviceAssetGateway gateway = new DeviceAssetGateway(jdbc);
+
+        var result = gateway.findPendingMatchByOwner(7L);
+
+        assertThat(result).containsExactly(row);
+
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<Object> args = ArgumentCaptor.forClass(Object.class);
+        verify(jdbc).query(sql.capture(), any(org.springframework.jdbc.core.RowMapper.class),
+                args.capture(), args.capture());
+
+        // 只读三列、按 owner 归属 + PENDING_MATCH 前置态过滤。
+        String upper = sql.getValue().toUpperCase(Locale.ROOT);
+        assertThat(upper).contains("SELECT ID, SN, STAGE").contains("USER_ID = ?").contains("STAGE = ?");
+        assertThat(args.getAllValues()).containsExactly(7L, DeviceStage.PENDING_MATCH.name());
+    }
 }
