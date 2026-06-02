@@ -6,6 +6,8 @@ import com.sanshuiyuan.asset.domain.WalletRecharge;
 import com.sanshuiyuan.asset.infra.client.UserServiceClient;
 import com.sanshuiyuan.asset.infra.wxpay.MpPrepayResult;
 import com.sanshuiyuan.asset.infra.wxpay.MpWxPayClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -21,6 +23,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/wallet/recharge")
 public class WalletPayController {
+
+    private static final Logger log = LoggerFactory.getLogger(WalletPayController.class);
 
     static final String OUT_TRADE_PREFIX = "WR";
 
@@ -57,6 +61,10 @@ public class WalletPayController {
             p = mpWxPayClient.jsapiPrepay(outTradeNo, openid, r.getAmountCents(), "三水元水费充值");
         } catch (RuntimeException e) {
             return ResponseEntity.status(502).body(Map.of("error", "发起微信支付失败：" + e.getMessage()));
+        }
+
+        if (!mpWxPayClient.isReal()) {
+            log.warn("充值单 {} 走 stub 支付（微信支付未配置），请检查 WXPAY_* 环境变量", rechargeId);
         }
 
         Map<String, Object> body = new LinkedHashMap<>();
