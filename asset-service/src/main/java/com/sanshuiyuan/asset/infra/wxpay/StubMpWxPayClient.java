@@ -24,6 +24,13 @@ public class StubMpWxPayClient implements MpWxPayClient {
     }
 
     @Override
+    public TradeQueryResult queryOrder(String outTradeNo) {
+        // dev/CI 不打微信：返回非 SUCCESS，避免对账任务误入账（dev 入账走 WalletSimulateController）。
+        log.info("[stub] 小程序 JSAPI queryOrder outTradeNo={} -> STUB", outTradeNo);
+        return new TradeQueryResult("STUB", null, null);
+    }
+
+    @Override
     public boolean isReal() {
         return false;
     }
