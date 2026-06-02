@@ -1,0 +1,52 @@
+name: CI
+
+# 最小 CI：每个面向 main 的 PR 跑 `./gradlew check`（编译 + 单测 + Testcontainers 集成测试）。
+# 背景：CD(deploy.yml) 以 `-x test` 跳过测试并注释「CI has executed」，但此前并无 CI 接住，
+# 导致如 JPA ddl-validate 不齐这类只有真实 DB 才暴露的问题漏到部署。本工作流补上该门禁。
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Build & Test (gradle check)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      # Testcontainers 需 Docker。ubuntu runner 自带；但 build.gradle 的 test 任务在 DOCKER_HOST
+      # 未设时回退到 macOS 套接字路径，故 CI 必须显式指向 Linux 套接字，并把 DOCKER_API_VERSION
+      # 动态钉到 runner 实际 Engine 版本（避免 docker-java 回退到过旧的 1.32 协商失败）。
+      - name: Resolve Docker API version
+        run: echo "DOCKER_API_VERSION=$(docker version --format '{{.Server.APIVersion}}')" >> "$GITHUB_ENV"
+
+      - name: Build & test (unit + Testcontainers integration)
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+        run: ./gradlew check --no-daemon --stacktrace
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: '**/build/reports/tests/**'
+          if-no-files-found: ignore
+          retention-days: 7

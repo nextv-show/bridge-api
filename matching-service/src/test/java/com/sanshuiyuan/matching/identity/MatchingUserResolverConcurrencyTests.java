@@ -35,7 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 @Tag("integration")
 @SpringBootTest
-class MatchingUserResolverConcurrencyIT {
+class MatchingUserResolverConcurrencyTests {
 
     @SuppressWarnings("resource")
     static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0")
