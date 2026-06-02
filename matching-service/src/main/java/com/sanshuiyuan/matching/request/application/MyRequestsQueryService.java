@@ -29,7 +29,13 @@ public class MyRequestsQueryService {
 
     @Transactional(readOnly = true)
     public List<RequestItem> mine(String subject, String statusFilter) {
-        long userId = userResolver.resolveUserId(subject);
+        // 只读解析，不创建 users 行（避免 readOnly 事务内写库 + 浏览污染表）。
+        // 没有 users 行的用户不可能发过需求 → 空列表。
+        var uid = userResolver.findUserId(subject);
+        if (uid.isEmpty()) {
+            return List.of();
+        }
+        long userId = uid.get();
         RequestStatus status = parseStatus(statusFilter);
         List<MatchingRequest> rows = (status == null)
                 ? repo.findByUserIdOrderByCreatedAtDesc(userId)
@@ -43,7 +49,8 @@ public class MyRequestsQueryService {
      */
     @Transactional(readOnly = true)
     public RequestItem detail(String subject, long requestId) {
-        long userId = userResolver.resolveUserId(subject);
+        // 只读解析；无 users 行（-1 哨兵，不匹配任何真实 id）→ 必然脱敏。
+        long userId = userResolver.findUserId(subject).orElse(-1L);
         MatchingRequest r = repo.findById(requestId)
                 .orElseThrow(() -> ApiException.notFound("NOT_FOUND", "需求不存在"));
         boolean plain = userId == r.getUserId()

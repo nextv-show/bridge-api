@@ -41,7 +41,9 @@ public class NearbyQueryService {
     @Transactional(readOnly = true)
     public List<RequestItem> nearby(String subject, double lat, double lng,
                                     Double radiusKmParam, String minPriceTierParam) {
-        long userId = userResolver.resolveUserId(subject);
+        // 只读解析，不创建 users 行。无 users 行者必然无 device_assets → 非 owner。
+        long userId = userResolver.findUserId(subject)
+                .orElseThrow(() -> ApiException.forbidden("NOT_OWNER", "仅持机用户可查看附近需求"));
         if (!userResolver.isOwner(userId)) {
             throw ApiException.forbidden("NOT_OWNER", "仅持机用户可查看附近需求");
         }

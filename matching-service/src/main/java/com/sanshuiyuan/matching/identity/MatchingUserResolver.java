@@ -11,6 +11,7 @@ import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * 把 JWT subject（openid/unionid）解析为 h5_db.users.id（= device_assets.user_id）。
@@ -28,7 +29,16 @@ public class MatchingUserResolver {
         this.jdbc = jdbc;
     }
 
-    /** 解析 openid→users.id；缺则懒创建 users 行（昵称/头像取自 h5_users，缺省 'H5用户'）。 */
+    /**
+     * 只读解析 openid→users.id，**不创建**（供 GET/只读事务用，避免在 readOnly 事务内写库 + 浏览即污染 users 表）。
+     * 未建过 users 行的用户必然没有需求单、也不可能是 owner，故返回空即可。
+     */
+    public Optional<Long> findUserId(String openid) {
+        List<Long> ids = jdbc.queryForList("SELECT id FROM users WHERE openid = ?", Long.class, openid);
+        return ids.isEmpty() ? Optional.empty() : Optional.of(ids.get(0));
+    }
+
+    /** 解析 openid→users.id；缺则懒创建 users 行（昵称/头像取自 h5_users，缺省 'H5用户'）。仅写路径（发布需求）调用。 */
     public long resolveUserId(String openid) {
         List<Long> ids = jdbc.queryForList("SELECT id FROM users WHERE openid = ?", Long.class, openid);
         if (!ids.isEmpty()) {
