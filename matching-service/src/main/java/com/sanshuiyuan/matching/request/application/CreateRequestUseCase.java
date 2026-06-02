@@ -56,16 +56,17 @@ public class CreateRequestUseCase {
         }
         String phoneHash = cipher.idCardHash(normalizedPhone);
 
+        // B.2.5 防刷：同手机号 24h 内 status=OPEN ≤3，**原子**（FOR UPDATE 间隙锁，见 repo 方法注释）。
+        // 先于限频令牌消费做：被 TOO_MANY_OPEN 拒绝不应白白扣掉手机号 5/日 配额。
+        long openCount = repo.lockOpenIdsByPhoneSince(
+                phoneHash, RequestStatus.OPEN, LocalDateTime.now().minusHours(24)).size();
+        if (openCount >= MAX_OPEN_PER_PHONE_24H) {
+            throw ApiException.tooManyRequests("TOO_MANY_OPEN", "该手机号 24 小时内待撮合需求过多");
+        }
+
         // B.2.4 按手机号限频（60s 1 次 + 24h 5 次）。
         if (!phoneRateLimiter.tryConsume(phoneHash)) {
             throw ApiException.tooManyRequests("RATE_LIMITED", "操作过于频繁，请稍后再试");
-        }
-
-        // B.2.5 防刷：同手机号 24h 内 status=OPEN 计数 >= 3 拒绝。
-        long openCount = repo.countByPhoneHashAndStatusAndCreatedAfter(
-                phoneHash, RequestStatus.OPEN, LocalDateTime.now().minusHours(24));
-        if (openCount >= MAX_OPEN_PER_PHONE_24H) {
-            throw ApiException.tooManyRequests("TOO_MANY_OPEN", "该手机号 24 小时内待撮合需求过多");
         }
 
         long userId = userResolver.resolveUserId(subject);

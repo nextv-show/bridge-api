@@ -1,5 +1,7 @@
 package com.sanshuiyuan.matching.config;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.Refill;
@@ -13,7 +15,6 @@ import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import java.time.Duration;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * B.2.4 IP 兜底限频：POST /matching/requests 同 IP 60 次/分钟。
@@ -26,7 +27,12 @@ public class RateLimitConfig implements WebMvcConfigurer {
     @Value("${rate-limit.matching.ip-per-minute:60}")
     private int ipPerMinute;
 
-    private final ConcurrentHashMap<String, Bucket> buckets = new ConcurrentHashMap<>();
+    // 有界 Caffeine 替代裸 Map：按 IP（可被伪造的 XFF）无限增长会内存泄漏/DoS。
+    // 闲置 >2min 淘汰即可（窗口 1min，重建为满桶等价）。
+    private final Cache<String, Bucket> buckets = Caffeine.newBuilder()
+            .maximumSize(200_000)
+            .expireAfterAccess(Duration.ofMinutes(2))
+            .build();
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
@@ -47,7 +53,7 @@ public class RateLimitConfig implements WebMvcConfigurer {
                 return true;
             }
             String ip = clientIp(request);
-            Bucket bucket = buckets.computeIfAbsent(ip, k -> createBucket());
+            Bucket bucket = buckets.get(ip, k -> createBucket());
             if (bucket.tryConsume(1)) {
                 return true;
             }
