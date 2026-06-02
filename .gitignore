@@ -19,3 +19,4 @@ build/
 .env.local
 *.env
 .omc/
+.omc/
