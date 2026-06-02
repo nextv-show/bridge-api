@@ -1,6 +1,9 @@
-// logistics-service — 物流工单服务（002 Phase A 脚手架）。公共依赖由 root subprojects{} 注入。
+// logistics-service — 物流工单服务（002 Phase D）。
 bootJar { duplicatesStrategy = DuplicatesStrategy.EXCLUDE }
 dependencies {
     implementation 'org.flywaydb:flyway-mysql'
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0'
+    // Phase D: Spring Retry for outbox consumer & S2S fulfill retry
+    implementation 'org.springframework.retry:spring-retry'
+    implementation 'org.springframework:spring-aspects'
 }

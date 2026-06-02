@@ -38,3 +38,7 @@ rate-limit:
     ip-per-minute: 60
     phone-per-minute: 1
     phone-per-day: 5
+
+# Phase D: S2S shared token（与 logistics-service 共享，用于 /internal/** 端点）。
+s2s:
+  token: ${S2S_TOKEN:dev-s2s-shared-token}

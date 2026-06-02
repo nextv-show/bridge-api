@@ -24,3 +24,22 @@ spring:
 springdoc:
   api-docs:
     path: /api-docs
+
+# E-1：复用 h5-service 的 H5 JWT 密钥（HS256）。
+h5:
+  jwt-secret: ${H5_JWT_SECRET:dev-h5-jwt-secret-please-override-in-prod-0001}
+
+# S2S token（与匹配服务共享，用于内部端点通信）。
+s2s:
+  token: ${S2S_TOKEN:dev-s2s-shared-token}
+
+# matching-service 内部端点地址（跨服务 fulfill 调用）。
+matching:
+  internal-url: ${MATCHING_INTERNAL_URL:http://localhost:8086}
+
+# webhook provider 密钥（V1 骨架，第三方接入留 V2）。
+webhook:
+  shunfeng:
+    secret: ${WEBHOOK_SF_SECRET:}
+  jd:
+    secret: ${WEBHOOK_JD_SECRET:}
