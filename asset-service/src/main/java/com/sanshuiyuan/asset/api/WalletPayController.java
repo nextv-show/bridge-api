@@ -28,6 +28,14 @@ public class WalletPayController {
 
     static final String OUT_TRADE_PREFIX = "WR";
 
+    /**
+     * 充值单 → 微信商户订单号。微信要求 out_trade_no 6~32 位，故对 rechargeId 左补零至 10 位
+     * （回调/查单侧 {@code Long.valueOf(no.substring(2))} 可还原）。下单与主动查单必须用同一构造。
+     */
+    public static String outTradeNo(Long rechargeId) {
+        return OUT_TRADE_PREFIX + String.format("%010d", rechargeId);
+    }
+
     private final WalletService walletService;
     private final UserServiceClient userServiceClient;
     private final MpWxPayClient mpWxPayClient;
@@ -54,8 +62,7 @@ public class WalletPayController {
         if (openid == null || openid.isBlank()) {
             return ResponseEntity.status(400).body(Map.of("error", "无法获取微信支付身份(openid)，请重新登录"));
         }
-        // 微信要求 out_trade_no 6~32 位，故对 rechargeId 左补零（回调侧 Long.valueOf 可还原）
-        String outTradeNo = OUT_TRADE_PREFIX + String.format("%010d", r.getId());
+        String outTradeNo = outTradeNo(r.getId());
         MpPrepayResult p;
         try {
             p = mpWxPayClient.jsapiPrepay(outTradeNo, openid, r.getAmountCents(), "三水元水费充值");
