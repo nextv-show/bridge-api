@@ -118,6 +118,7 @@ public class ContractController {
     public ResponseEntity<Map<String, Object>> previewContract(@PathVariable Long id) {
         log.debug("合同预览请求 [contractId={}]", id);
 
+        ownershipGuard.requireAuthenticated();
         ownershipGuard.assertOwner(loadContractOrThrow(id).getUserId());
 
         GenerateContractResult result = generationService.getContractContent(id);
@@ -149,6 +150,7 @@ public class ContractController {
             @RequestBody Map<String, String> request,
             HttpServletRequest httpRequest) {
 
+        ownershipGuard.requireAuthenticated();
         ownershipGuard.assertOwner(loadContractOrThrow(id).getUserId());
 
         Long userId = requireLong(request, "userId");
@@ -207,6 +209,7 @@ public class ContractController {
 
         log.info("获取签署参数 [contractId={}, clientType={}]", id, ct);
 
+        ownershipGuard.requireAuthenticated();
         Contract contract = stateMachineService.getContract(id);
 
         ownershipGuard.assertOwner(contract.getUserId());
@@ -306,6 +309,7 @@ public class ContractController {
      */
     @GetMapping("/{id}/status")
     public ResponseEntity<Map<String, Object>> getContractStatus(@PathVariable Long id) {
+        ownershipGuard.requireAuthenticated();
         ownershipGuard.assertOwner(loadContractOrThrow(id).getUserId());
 
         SignStatusSyncService.SyncStatusResult syncResult = signStatusSyncService.getSyncedStatus(id);
