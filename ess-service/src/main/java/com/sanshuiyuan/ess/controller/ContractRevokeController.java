@@ -58,6 +58,9 @@ public class ContractRevokeController {
             @PathVariable Long id,
             @RequestBody Map<String, String> request) {
 
+        // 鉴权先于存在性/幂等：未登录 → 401（不暴露合同是否存在）。见 issue #35。
+        ownershipGuard.requireAuthenticated();
+
         // owner 校验：仅合同归属人可撤销。先于幂等检查，防止非属主探测他人合同状态。
         var contract = contractRepository.findById(id)
                 .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(

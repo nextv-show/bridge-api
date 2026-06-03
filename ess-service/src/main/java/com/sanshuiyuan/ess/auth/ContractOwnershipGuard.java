@@ -25,6 +25,16 @@ public class ContractOwnershipGuard {
     }
 
     /**
+     * 仅校验"已登录"（未登录 → 401）。
+     * <p>
+     * 用于在加载合同（可能 404）之前先行鉴权，避免未鉴权者通过 404/401 差异探测合同是否存在
+     * （正确次序：401 鉴权 → 404 存在性 → 403 归属）。见 issue #35。
+     */
+    public void requireAuthenticated() {
+        CurrentOpenid.require();
+    }
+
+    /**
      * 断言当前会话用户为该合同归属人。
      *
      * @param contractUserId 合同归属 userId（{@code Contract#getUserId()}）

@@ -82,6 +82,7 @@ public class ContractViewController {
         log.info("合同查看请求 [contractId={}]，clientType={}", id,
                 ClientTypeInterceptor.resolve(request));
 
+        ownershipGuard.requireAuthenticated();
         ownershipGuard.assertOwner(queryService.getContractDetail(id).getUserId());
 
         // 获取跨端统一的合同查看信息
@@ -134,6 +135,7 @@ public class ContractViewController {
 
         log.info("跨端哈希校验请求 [contractId={}]", id);
 
+        ownershipGuard.requireAuthenticated();
         ownershipGuard.assertOwner(queryService.getContractDetail(id).getUserId());
 
         CrossPlatformConsistencyService.HashVerificationResult result =
@@ -167,6 +169,7 @@ public class ContractViewController {
 
         log.info("合同下载请求 [contractId={}]", id);
 
+        ownershipGuard.requireAuthenticated();
         ownershipGuard.assertOwner(queryService.getContractDetail(id).getUserId());
 
         // 获取下载 URL
@@ -207,6 +210,8 @@ public class ContractViewController {
     @GetMapping("/devices/{sn}/contract")
     public ResponseEntity<Map<String, Object>> getDeviceContract(@PathVariable String sn) {
         log.info("通过 SN 查询合同 [sn={}]", sn);
+
+        ownershipGuard.requireAuthenticated();
 
         // 先通过 SN 绑定查找合同
         var bindings = snBindingRepository.findByDeviceSn(sn);

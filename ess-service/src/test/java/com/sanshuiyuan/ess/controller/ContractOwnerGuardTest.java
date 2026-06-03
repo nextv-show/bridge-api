@@ -68,6 +68,16 @@ class ContractOwnerGuardTest {
     }
 
     @Test
+    void view_withoutToken_nonexistentContract_returns401NotError() throws Exception {
+        // issue #35：鉴权应先于存在性校验。无 token 访问"不存在"的合同也应 401（而非 404/500），
+        // 不暴露合同是否存在。getContractDetail 抛错；若鉴权在加载之后，会先抛错暴露存在性。
+        when(queryService.getContractDetail(404L))
+                .thenThrow(new IllegalArgumentException("合同不存在: id=404"));
+        mockMvc.perform(get("/api/h5/contracts/404/view"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void view_byNonOwner_returns403() throws Exception {
         Contract contract = Contract.createDraft("CT-OWNER-001", 1L, 100L, "ORD-OWN", "SN-OWN");
         when(queryService.getContractDetail(1L)).thenReturn(contract); // 合同归属 userId=100
