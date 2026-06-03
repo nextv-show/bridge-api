@@ -41,6 +41,10 @@ public class SubscribeSigningService {
     private final EssServiceClient essClient;
     private final String wxMpAppId;
 
+    public record SignStartResult(Long contractId, String contractNo, Object signParams) {}
+    public record KycStatusResult(boolean passed, String realNameMask, String idCardMask, String phoneMask) {}
+    private record Identity(String realName, String idCardNo, String phone) {}
+
     public SubscribeSigningService(KycRecordRepository kycRepo, DeviceSpecRepository specRepo,
                                    IdCardCipher cipher, EssServiceClient essClient,
                                    @Value("${wx.miniprogram.app-id:}") String wxMpAppId) {
@@ -51,22 +55,12 @@ public class SubscribeSigningService {
         this.wxMpAppId = wxMpAppId;
     }
 
-    public record SignStartResult(Long contractId, String contractNo, Object signParams) {}
-
     public SignStartResult start(String openid, String bearer, Long userId, String specId,
                                  String realName, String idCardNo, String phone) {
-        String name = realName == null ? "" : realName.trim();
-        String idNo = idCardNo == null ? "" : idCardNo.trim().toUpperCase();
-        String phoneTrim = phone == null ? "" : phone.trim();
-        if (name.isEmpty() || name.length() > 64) {
-            throw new BizException(ErrorCode.VALIDATION_FAILED, "请填写真实姓名");
-        }
-        if (!IdCardValidator.isValid(idNo)) {
-            throw new BizException(ErrorCode.VALIDATION_FAILED, "身份证号格式不正确");
-        }
-        if (!phoneTrim.matches("^1[3-9]\\d{9}$")) {
-            throw new BizException(ErrorCode.VALIDATION_FAILED, "请填写正确的 11 位手机号");
-        }
+        Identity identity = resolveIdentity(openid, realName, idCardNo, phone);
+        String name = identity.realName();
+        String idNo = identity.idCardNo();
+        String phoneTrim = identity.phone();
 
         // 一证一号：同一身份证已在其他 openid 下 PASS 则拒绝。
         String idCardHash = cipher.idCardHash(idNo);
@@ -92,6 +86,55 @@ public class SubscribeSigningService {
         return new SignStartResult(gen.contractId(), gen.contractNo(), signParams);
     }
 
+    @Transactional(readOnly = true)
+    public KycStatusResult currentKycStatus(String openid) {
+        return kycRepo.findFirstByOpenidAndStatusOrderByVerifiedAtDesc(openid, KycStatus.PASS)
+                .map(r -> new KycStatusResult(true,
+                        maskRealName(r),
+                        maskIdCard(r),
+                        maskPhone(r)))
+                .orElse(new KycStatusResult(false, null, null, null));
+    }
+
+    private Identity resolveIdentity(String openid, String realName, String idCardNo, String phone) {
+        Optional<KycRecord> passOpt = kycRepo.findFirstByOpenidAndStatusOrderByVerifiedAtDesc(openid, KycStatus.PASS);
+        if (passOpt.isPresent()) {
+            KycRecord record = passOpt.get();
+            String name = decryptOrNull(record.getRealName());
+            String idNo = decryptOrNull(record.getIdCardNoEnc());
+            String phoneTrim = decryptOrNull(record.getPhoneEnc());
+            if (name == null || name.isBlank()) {
+                name = realName == null ? "" : realName.trim();
+            }
+            if (idNo == null || idNo.isBlank()) {
+                idNo = idCardNo == null ? "" : idCardNo.trim().toUpperCase();
+            }
+            if (phoneTrim == null || phoneTrim.isBlank()) {
+                phoneTrim = phone == null ? "" : phone.trim();
+            }
+            validateIdentity(name, idNo, phoneTrim);
+            return new Identity(name, idNo, phoneTrim);
+        }
+
+        String name = realName == null ? "" : realName.trim();
+        String idNo = idCardNo == null ? "" : idCardNo.trim().toUpperCase();
+        String phoneTrim = phone == null ? "" : phone.trim();
+        validateIdentity(name, idNo, phoneTrim);
+        return new Identity(name, idNo, phoneTrim);
+    }
+
+    private void validateIdentity(String name, String idNo, String phoneTrim) {
+        if (name.isEmpty() || name.length() > 64) {
+            throw new BizException(ErrorCode.VALIDATION_FAILED, "请填写真实姓名");
+        }
+        if (!IdCardValidator.isValid(idNo)) {
+            throw new BizException(ErrorCode.VALIDATION_FAILED, "身份证号格式不正确");
+        }
+        if (!phoneTrim.matches("^1[3-9]\\d{9}$")) {
+            throw new BizException(ErrorCode.VALIDATION_FAILED, "请填写正确的 11 位手机号");
+        }
+    }
+
     private void saveInit(String openid, String name, String idNo, String idCardHash,
                           String phone, String certifyId) {
         // 同一 contract 重复发起：清掉旧 INIT，避免堆积。
@@ -103,6 +146,37 @@ public class SubscribeSigningService {
                 certifyId, CHANNEL,
                 cipher.encrypt(phone), MaskingUtils.maskPhone(phone));
         kycRepo.save(init);
+    }
+
+    private String decryptOrNull(byte[] ciphertext) {
+        return ciphertext == null ? null : cipher.decrypt(ciphertext);
+    }
+
+    private String maskRealName(KycRecord record) {
+        String mask = record.getRealNameMask();
+        if (mask != null && !mask.isBlank()) {
+            return mask;
+        }
+        String plain = decryptOrNull(record.getRealName());
+        return plain == null ? null : MaskingUtils.maskRealName(plain);
+    }
+
+    private String maskIdCard(KycRecord record) {
+        String mask = record.getIdCardNoMask();
+        if (mask != null && !mask.isBlank()) {
+            return mask;
+        }
+        String plain = decryptOrNull(record.getIdCardNoEnc());
+        return plain == null ? null : MaskingUtils.maskIdCard(plain);
+    }
+
+    private String maskPhone(KycRecord record) {
+        String mask = record.getPhoneMask();
+        if (mask != null && !mask.isBlank()) {
+            return mask;
+        }
+        String plain = decryptOrNull(record.getPhoneEnc());
+        return plain == null ? null : MaskingUtils.maskPhone(plain);
     }
 
     /**
