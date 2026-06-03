@@ -43,7 +43,6 @@ public class KycInitUseCase {
         Optional<KycRecord> existing = kycRepo.findFirstByOpenidAndStatusOrderByVerifiedAtDesc(openid, KycStatus.PASS);
         if (existing.isPresent()) {
             KycRecord r = existing.get();
-            // 老用户补录手机号：DB 中无手机号但本次请求带了合法手机号 → 加密存储
             String phoneTrim = phone == null ? "" : phone.trim();
             if ((r.getPhoneMask() == null || r.getPhoneMask().isBlank())
                     && !phoneTrim.isEmpty() && phoneTrim.matches("^1[3-9]\\d{9}$")) {

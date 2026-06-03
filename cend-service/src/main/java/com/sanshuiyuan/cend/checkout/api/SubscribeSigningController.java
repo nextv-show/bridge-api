@@ -1,6 +1,7 @@
 package com.sanshuiyuan.cend.checkout.api;
 
 import com.sanshuiyuan.cend.auth.CurrentOpenid;
+import com.sanshuiyuan.cend.checkout.api.dto.SubscribeKycStatusResponse;
 import com.sanshuiyuan.cend.checkout.application.SubscribeSigningService;
 import com.sanshuiyuan.cend.common.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -30,6 +31,14 @@ public class SubscribeSigningController {
         this.service = service;
     }
 
+    @GetMapping("/kyc-status")
+    @Operation(summary = "查询当前用户 KYC 状态")
+    public ApiResponse<SubscribeKycStatusResponse> kycStatus() {
+        String openid = CurrentOpenid.require();
+        var r = service.currentKycStatus(openid);
+        return ApiResponse.ok(new SubscribeKycStatusResponse(r.passed(), r.realNameMask(), r.idCardMask(), r.phoneMask()));
+    }
+
     @PostMapping("/sign-start")
     @Operation(summary = "发起认购签约：生成合同并返回腾讯电子签跳转参数")
     public ApiResponse<SignStartResponse> signStart(@Valid @RequestBody SignStartRequest req,
@@ -52,9 +61,9 @@ public class SubscribeSigningController {
     public record SignStartRequest(
             @NotBlank String specId,
             Long userId,
-            @NotBlank String realName,
-            @NotBlank String idCardNo,
-            @NotBlank String phone) {}
+            String realName,
+            String idCardNo,
+            String phone) {}
 
     public record SignStartResponse(Long contractId, String contractNo, Object signParams) {}
 
