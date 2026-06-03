@@ -397,6 +397,35 @@ public class ContractAdminController {
         return ResponseEntity.ok(response);
     }
 
+    // ========== #38: GET /api/admin/contracts/{id}/pdf — 合同 PDF 代理预览 ==========
+
+    /**
+     * 管理后台合同 PDF 代理预览/下载（spec 006 #38）。
+     * <p>
+     * 服务端从 OSS 拉取字节并透传，不向前端暴露 OSS 直链；访问计入 ContractAccessLog + 审计轨迹。
+     * 仅对已归档合同可用（未归档 → 409，不存在 → 404）。
+     */
+    @GetMapping("/{id}/pdf")
+    public ResponseEntity<byte[]> contractPdf(@PathVariable Long id) {
+        log.info("管理后台合同 PDF 代理 [contractId={}]", id);
+        try {
+            byte[] pdf = archiveService.getContractPdfBytes(id);
+            accessLogService.logAccess(id, null, ContractAccessLog.AccessType.VIEW,
+                    ContractAccessLog.AccessSource.API, null, "admin-bff");
+            auditTrailService.recordEvent(id, ContractAuditTrail.Action.VIEW,
+                    null, ContractAuditTrail.ActorType.ADMIN, "{\"type\":\"contract-pdf\"}", null);
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_TYPE, "application/pdf")
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"contract-" + id + ".pdf\"")
+                    .body(pdf);
+        } catch (IllegalStateException e) {
+            log.warn("合同 PDF 不可用 [contractId={}]: {}", id, e.getMessage());
+            return ResponseEntity.status(409).build();
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
     // ========== T22.10: GET /api/admin/contracts/search ==========
 
     /**

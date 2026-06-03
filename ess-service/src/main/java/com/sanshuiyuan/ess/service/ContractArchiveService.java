@@ -272,6 +272,26 @@ public class ContractArchiveService {
     }
 
     /**
+     * 读取合同 PDF 的原始字节（管理后台代理预览/下载用，spec 006 #38）。
+     * <p>
+     * 服务端经签名 URL 从 OSS 拉取字节，由 admin BFF 透传给浏览器，不向前端暴露 OSS 直链。
+     *
+     * @param contractId 合同 ID
+     * @return PDF 字节
+     */
+    @Transactional(readOnly = true)
+    public byte[] getContractPdfBytes(Long contractId) {
+        Contract contract = contractRepository.findById(contractId)
+                .orElseThrow(() -> new IllegalArgumentException("合同不存在: id=" + contractId));
+        if (contract.getArchiveStatus() != ArchiveStatus.ARCHIVED) {
+            throw new IllegalStateException("合同尚未归档，无 PDF 可读 [contractNo=" + contract.getContractNo() + "]");
+        }
+        String objectKey = ossProperties.contractPathPrefix() + contract.getContractNo() + ".pdf";
+        String url = ossStorageClient.generatePresignedUrl(objectKey, 180);
+        return downloadPdf(url);
+    }
+
+    /**
      * 归档结果。
      */
     public record ArchiveResult(
