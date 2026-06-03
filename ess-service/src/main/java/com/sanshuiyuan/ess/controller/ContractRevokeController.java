@@ -1,8 +1,10 @@
 package com.sanshuiyuan.ess.controller;
 
+import com.sanshuiyuan.ess.auth.ContractOwnershipGuard;
 import com.sanshuiyuan.ess.domain.ContractCooldownRecord;
 import com.sanshuiyuan.ess.domain.ContractCooldownRecord.CooldownStatus;
 import com.sanshuiyuan.ess.infra.repository.ContractCooldownRecordRepository;
+import com.sanshuiyuan.ess.infra.repository.ContractRepository;
 import com.sanshuiyuan.ess.service.ContractRevokeService;
 import com.sanshuiyuan.ess.service.ContractRevokeService.RevokeResult;
 import com.sanshuiyuan.ess.service.IdempotentService;
@@ -27,13 +29,19 @@ public class ContractRevokeController {
     private final ContractRevokeService revokeService;
     private final ContractCooldownRecordRepository cooldownRecordRepository;
     private final IdempotentService idempotentService;
+    private final ContractRepository contractRepository;
+    private final ContractOwnershipGuard ownershipGuard;
 
     public ContractRevokeController(ContractRevokeService revokeService,
                                      ContractCooldownRecordRepository cooldownRecordRepository,
-                                     IdempotentService idempotentService) {
+                                     IdempotentService idempotentService,
+                                     ContractRepository contractRepository,
+                                     ContractOwnershipGuard ownershipGuard) {
         this.revokeService = revokeService;
         this.cooldownRecordRepository = cooldownRecordRepository;
         this.idempotentService = idempotentService;
+        this.contractRepository = contractRepository;
+        this.ownershipGuard = ownershipGuard;
     }
 
     /**
@@ -49,6 +57,12 @@ public class ContractRevokeController {
     public ResponseEntity<Map<String, Object>> revokeContract(
             @PathVariable Long id,
             @RequestBody Map<String, String> request) {
+
+        // owner 校验：仅合同归属人可撤销。先于幂等检查，防止非属主探测他人合同状态。
+        var contract = contractRepository.findById(id)
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND, "合同不存在: id=" + id));
+        ownershipGuard.assertOwner(contract.getUserId());
 
         String idempotentKey = id + ":REVOKE";
 

@@ -1,8 +1,11 @@
 package com.sanshuiyuan.ess.controller;
 
+import com.sanshuiyuan.ess.auth.ContractOwnershipGuard;
+import com.sanshuiyuan.ess.auth.CurrentOpenid;
 import com.sanshuiyuan.ess.domain.Contract;
 import com.sanshuiyuan.ess.config.ClientTypeInterceptor;
 import com.sanshuiyuan.ess.config.ClientTypeInterceptor.ClientType;
+import com.sanshuiyuan.ess.infra.client.UserServiceClient;
 import com.sanshuiyuan.ess.infra.repository.ContractRepository;
 import com.sanshuiyuan.ess.service.ContractGenerationService;
 import com.sanshuiyuan.ess.service.ContractGenerationService.GenerateContractRequest;
@@ -37,6 +40,8 @@ public class ContractController {
     private final ContractRepository contractRepository;
     private final MultiPlatformSignService multiPlatformSignService;
     private final SignStatusSyncService signStatusSyncService;
+    private final ContractOwnershipGuard ownershipGuard;
+    private final UserServiceClient userServiceClient;
 
     /** 小程序签署默认 appId（前端未显式传 wxAppId 时回退）。 */
     @org.springframework.beans.factory.annotation.Value("${wx.miniprogram.app-id:}")
@@ -47,13 +52,24 @@ public class ContractController {
                                ContractStateMachineService stateMachineService,
                                ContractRepository contractRepository,
                                MultiPlatformSignService multiPlatformSignService,
-                               SignStatusSyncService signStatusSyncService) {
+                               SignStatusSyncService signStatusSyncService,
+                               ContractOwnershipGuard ownershipGuard,
+                               UserServiceClient userServiceClient) {
         this.generationService = generationService;
         this.signingService = signingService;
         this.stateMachineService = stateMachineService;
         this.contractRepository = contractRepository;
         this.multiPlatformSignService = multiPlatformSignService;
         this.signStatusSyncService = signStatusSyncService;
+        this.ownershipGuard = ownershipGuard;
+        this.userServiceClient = userServiceClient;
+    }
+
+    /** 加载合同；不存在抛 404。owner 校验前先确定合同归属。 */
+    private Contract loadContractOrThrow(Long id) {
+        return contractRepository.findById(id)
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND, "合同不存在: id=" + id));
     }
 
     // ========== T17.9: POST /generate ==========
@@ -62,7 +78,13 @@ public class ContractController {
     public ResponseEntity<Map<String, Object>> generateContract(
             @RequestBody Map<String, String> request) {
 
-        Long userId = requireLong(request, "userId");
+        // 不信任 body 的 userId：以当前 H5 会话 openid 解析出的 userId 为准，防止替他人生成合同。
+        String openid = CurrentOpenid.require();
+        Long userId = userServiceClient.resolveUserId(openid);
+        if (userId == null) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.FORBIDDEN, "无法解析当前用户身份");
+        }
         String orderId = request.getOrDefault("orderId", "");
         String deviceSn = request.get("deviceSn");
         String deviceModel = requireParam(request, "deviceModel");
@@ -96,6 +118,8 @@ public class ContractController {
     public ResponseEntity<Map<String, Object>> previewContract(@PathVariable Long id) {
         log.debug("合同预览请求 [contractId={}]", id);
 
+        ownershipGuard.assertOwner(loadContractOrThrow(id).getUserId());
+
         GenerateContractResult result = generationService.getContractContent(id);
 
         Map<String, Object> resp = new java.util.LinkedHashMap<>();
@@ -124,6 +148,8 @@ public class ContractController {
             @PathVariable Long id,
             @RequestBody Map<String, String> request,
             HttpServletRequest httpRequest) {
+
+        ownershipGuard.assertOwner(loadContractOrThrow(id).getUserId());
 
         Long userId = requireLong(request, "userId");
         ClientType clientType = resolveClientType(request, httpRequest);
@@ -182,6 +208,8 @@ public class ContractController {
         log.info("获取签署参数 [contractId={}, clientType={}]", id, ct);
 
         Contract contract = stateMachineService.getContract(id);
+
+        ownershipGuard.assertOwner(contract.getUserId());
 
         if (contract.getStatus() != Contract.ContractStatus.SIGNING) {
             return ResponseEntity.badRequest().body(Map.of(
@@ -278,6 +306,8 @@ public class ContractController {
      */
     @GetMapping("/{id}/status")
     public ResponseEntity<Map<String, Object>> getContractStatus(@PathVariable Long id) {
+        ownershipGuard.assertOwner(loadContractOrThrow(id).getUserId());
+
         SignStatusSyncService.SyncStatusResult syncResult = signStatusSyncService.getSyncedStatus(id);
         return ResponseEntity.ok(SignStatusSyncService.toResponseMap(syncResult));
     }

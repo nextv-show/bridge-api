@@ -61,6 +61,21 @@ public class InternalUserController {
     }
 
     /**
+     * S2S：按 openid 取 userId（供 ess-service 在 H5 合同 owner 校验时把会话 openid 解析为 userId）。
+     * 只读、无副作用。/internal/** 已由 S2sTokenFilter 鉴权。
+     * 返回 {"userId": <Long or null>}；查不到时 userId 为 null（200，调用方据此降级/拒绝）。
+     */
+    @GetMapping("/by-openid")
+    public ResponseEntity<Map<String, Object>> getByOpenid(@RequestParam("openid") String openid) {
+        Long userId = userRepository.findByOpenidWx(openid)
+                .map(User::getId)
+                .orElse(null);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("userId", userId);
+        return ResponseEntity.ok(body);
+    }
+
+    /**
      * S2S：按 userId 取买家关系链（供 asset-service 在购机支付成功时分账定位 L1/L2）。
      * /internal/** 已由 S2sTokenFilter 鉴权。返回 {inviterId, grandInviterId}（均可为 null）；
      * 用户不存在返回 404。
