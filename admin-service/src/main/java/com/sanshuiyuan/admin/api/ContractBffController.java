@@ -81,6 +81,16 @@ public class ContractBffController {
         return essContractClient.reconcileOne(id);
     }
 
+    @PostMapping("/{id}/retry-archive")
+    public ResponseEntity<Map<String, Object>> retryArchive(@PathVariable Long id) {
+        return essContractClient.retryArchive(id);
+    }
+
+    @PostMapping("/{id}/retry-certificate")
+    public ResponseEntity<Map<String, Object>> retryCertificate(@PathVariable Long id) {
+        return essContractClient.retryCertificate(id);
+    }
+
     /** @RequestParam MultiValueMap 不含 path 变量，这里仅作防御性拷贝以免透传意外键。 */
     private MultiValueMap<String, String> stripPathVars(MultiValueMap<String, String> params) {
         MultiValueMap<String, String> copy = new LinkedMultiValueMap<>();

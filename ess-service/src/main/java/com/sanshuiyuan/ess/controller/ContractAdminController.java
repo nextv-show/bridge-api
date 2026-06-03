@@ -129,6 +129,56 @@ public class ContractAdminController {
         return ResponseEntity.ok(resp);
     }
 
+    // ========== 失败重试：归档 / 出证（spec 006 Phase E） ==========
+
+    /**
+     * 手动重试归档（archiveStatus=FAILED 的存量处理）。
+     */
+    @PostMapping("/{id}/retry-archive")
+    public ResponseEntity<Map<String, Object>> retryArchive(@PathVariable Long id) {
+        log.info("管理后台手动重试归档 [contractId={}]", id);
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("contractId", id);
+        try {
+            ContractArchiveService.ArchiveResult r = archiveService.archiveContract(id);
+            resp.put("code", r.success() ? 0 : -1);
+            resp.put("contractNo", r.contractNo());
+            resp.put("success", r.success());
+            resp.put("message", r.message());
+        } catch (Exception e) {
+            // archiveContract 失败会抛 RuntimeException；统一捕获为 200 + {code:-1}，便于 BFF 透传错误。
+            log.warn("重试归档失败 [contractId={}]: {}", id, e.getMessage());
+            resp.put("code", -1);
+            resp.put("success", false);
+            resp.put("message", "归档重试失败：" + e.getMessage());
+        }
+        return ResponseEntity.ok(resp);
+    }
+
+    /**
+     * 手动重试出证（certificateStatus=FAILED 的存量处理）。
+     */
+    @PostMapping("/{id}/retry-certificate")
+    public ResponseEntity<Map<String, Object>> retryCertificate(@PathVariable Long id) {
+        log.info("管理后台手动重试出证 [contractId={}]", id);
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("contractId", id);
+        try {
+            CertificateService.CertificateResult r = certificateService.certifyContract(id);
+            resp.put("code", r.success() ? 0 : -1);
+            resp.put("contractNo", r.contractNo());
+            resp.put("certificateNo", r.certificateNo());
+            resp.put("status", r.status());
+            resp.put("success", r.success());
+        } catch (Exception e) {
+            log.warn("重试出证失败 [contractId={}]: {}", id, e.getMessage());
+            resp.put("code", -1);
+            resp.put("success", false);
+            resp.put("message", "出证重试失败：" + e.getMessage());
+        }
+        return ResponseEntity.ok(resp);
+    }
+
     // ========== T20.9: GET /api/admin/contracts ==========
 
     /**
