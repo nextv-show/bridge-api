@@ -129,6 +129,41 @@ public class ContractAdminController {
         return ResponseEntity.ok(resp);
     }
 
+    // ========== 失败重试：归档 / 出证（spec 006 Phase E） ==========
+
+    /**
+     * 手动重试归档（archiveStatus=FAILED 的存量处理）。
+     */
+    @PostMapping("/{id}/retry-archive")
+    public ResponseEntity<Map<String, Object>> retryArchive(@PathVariable Long id) {
+        log.info("管理后台手动重试归档 [contractId={}]", id);
+        ContractArchiveService.ArchiveResult r = archiveService.archiveContract(id);
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("code", r.success() ? 0 : -1);
+        resp.put("contractId", r.contractId());
+        resp.put("contractNo", r.contractNo());
+        resp.put("success", r.success());
+        resp.put("message", r.message());
+        return ResponseEntity.ok(resp);
+    }
+
+    /**
+     * 手动重试出证（certificateStatus=FAILED 的存量处理）。
+     */
+    @PostMapping("/{id}/retry-certificate")
+    public ResponseEntity<Map<String, Object>> retryCertificate(@PathVariable Long id) {
+        log.info("管理后台手动重试出证 [contractId={}]", id);
+        CertificateService.CertificateResult r = certificateService.certifyContract(id);
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("code", r.success() ? 0 : -1);
+        resp.put("contractId", r.contractId());
+        resp.put("contractNo", r.contractNo());
+        resp.put("certificateNo", r.certificateNo());
+        resp.put("status", r.status());
+        resp.put("success", r.success());
+        return ResponseEntity.ok(resp);
+    }
+
     // ========== T20.9: GET /api/admin/contracts ==========
 
     /**

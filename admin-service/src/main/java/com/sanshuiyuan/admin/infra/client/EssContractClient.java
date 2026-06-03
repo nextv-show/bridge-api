@@ -81,6 +81,16 @@ public class EssContractClient {
         return postJson("/api/admin/contracts/" + id + "/reconcile-signing");
     }
 
+    // ========== 失败重试（归档 / 出证） ==========
+
+    public ResponseEntity<Map<String, Object>> retryArchive(Long id) {
+        return postJson("/api/admin/contracts/" + id + "/retry-archive");
+    }
+
+    public ResponseEntity<Map<String, Object>> retryCertificate(Long id) {
+        return postJson("/api/admin/contracts/" + id + "/retry-certificate");
+    }
+
     // ========== 内部辅助 ==========
 
     private ResponseEntity<Map<String, Object>> getJson(String path, MultiValueMap<String, String> query) {
