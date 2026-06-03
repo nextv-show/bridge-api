@@ -113,11 +113,24 @@ public class EssContractClient {
     }
 
     private ResponseEntity<Map<String, Object>> getJson(String path, MultiValueMap<String, String> query) {
-        return restTemplate.exchange(build(path, query), HttpMethod.GET, authEntity(), MAP_TYPE);
+        return repackage(restTemplate.exchange(build(path, query), HttpMethod.GET, authEntity(), MAP_TYPE));
     }
 
     private ResponseEntity<Map<String, Object>> postJson(String path) {
-        return restTemplate.exchange(build(path, null), HttpMethod.POST, authEntity(), MAP_TYPE);
+        return repackage(restTemplate.exchange(build(path, null), HttpMethod.POST, authEntity(), MAP_TYPE));
+    }
+
+    /**
+     * 只保留下游的状态码与 JSON body，丢弃其传输层响应头。
+     * <p>
+     * RestTemplate 返回的 ResponseEntity 携带 ess 的 {@code Transfer-Encoding: chunked} 等 hop-by-hop 头，
+     * 若直接透传，Spring MVC 会把它写到本服务响应上，Tomcat 再追加一个自己的 chunked 头 →
+     * 重复 {@code Transfer-Encoding} 属非法分块帧，nginx 判为 "invalid chunked response" 并重置 HTTP/2 流，
+     * 浏览器侧表现为状态 200 但 {@code ERR_HTTP2_PROTOCOL_ERROR}、body 为空。Content-Type 由本服务的
+     * Jackson 转换器重新写出，无需透传。
+     */
+    private ResponseEntity<Map<String, Object>> repackage(ResponseEntity<Map<String, Object>> downstream) {
+        return ResponseEntity.status(downstream.getStatusCode()).body(downstream.getBody());
     }
 
     private String build(String path, MultiValueMap<String, String> query) {
