@@ -1,5 +1,6 @@
 package com.sanshuiyuan.ess.controller;
 
+import com.sanshuiyuan.ess.auth.ContractOwnershipGuard;
 import com.sanshuiyuan.ess.domain.Contract;
 import com.sanshuiyuan.ess.domain.ContractAccessLog.AccessType;
 import com.sanshuiyuan.ess.domain.ContractAccessLog.AccessSource;
@@ -43,19 +44,22 @@ public class ContractViewController {
     private final ContractSnBindingRepository snBindingRepository;
     private final AuditTrailService auditTrailService;
     private final CrossPlatformConsistencyService consistencyService;
+    private final ContractOwnershipGuard ownershipGuard;
 
     public ContractViewController(ContractArchiveService archiveService,
                                    ContractQueryService queryService,
                                    ContractAccessLogService accessLogService,
                                    ContractSnBindingRepository snBindingRepository,
                                    AuditTrailService auditTrailService,
-                                   CrossPlatformConsistencyService consistencyService) {
+                                   CrossPlatformConsistencyService consistencyService,
+                                   ContractOwnershipGuard ownershipGuard) {
         this.archiveService = archiveService;
         this.queryService = queryService;
         this.accessLogService = accessLogService;
         this.snBindingRepository = snBindingRepository;
         this.auditTrailService = auditTrailService;
         this.consistencyService = consistencyService;
+        this.ownershipGuard = ownershipGuard;
     }
 
     // ========== T20.6: GET /contracts/{id}/view ==========
@@ -77,6 +81,8 @@ public class ContractViewController {
 
         log.info("合同查看请求 [contractId={}]，clientType={}", id,
                 ClientTypeInterceptor.resolve(request));
+
+        ownershipGuard.assertOwner(queryService.getContractDetail(id).getUserId());
 
         // 获取跨端统一的合同查看信息
         CrossPlatformConsistencyService.ContractViewResult viewResult =
@@ -128,6 +134,8 @@ public class ContractViewController {
 
         log.info("跨端哈希校验请求 [contractId={}]", id);
 
+        ownershipGuard.assertOwner(queryService.getContractDetail(id).getUserId());
+
         CrossPlatformConsistencyService.HashVerificationResult result =
                 consistencyService.verifyPdfHash(id, expectedHash);
 
@@ -158,6 +166,8 @@ public class ContractViewController {
             HttpServletRequest request) {
 
         log.info("合同下载请求 [contractId={}]", id);
+
+        ownershipGuard.assertOwner(queryService.getContractDetail(id).getUserId());
 
         // 获取下载 URL
         String downloadUrl = archiveService.getDownloadUrl(id);
@@ -212,6 +222,8 @@ public class ContractViewController {
         Long contractId = binding.getContractId();
 
         Contract contract = queryService.getContractDetail(contractId);
+
+        ownershipGuard.assertOwner(contract.getUserId());
 
         // 检查是否已归档，如已归档返回查看 URL
         String viewUrl = "";

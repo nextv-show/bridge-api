@@ -42,8 +42,24 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ExtendWith(MockitoExtension.class)
 class ContractAdminControllerTest {
 
-    @Autowired
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.web.context.WebApplicationContext webApplicationContext;
+
     private MockMvc mockMvc;
+
+    /**
+     * /api/admin/* 现由 S2sTokenFilter 保护：默认给每个请求带上正确的 X-S2S-Token
+     * （application.yml 默认 local-dev-static-token），让既有业务断言继续聚焦在 controller 行为。
+     * S2S 鉴权拒绝路径（缺/错 token → 401）在 S2sTokenFilterTest 中独立断言。
+     */
+    @org.junit.jupiter.api.BeforeEach
+    void setUpMockMvc() {
+        this.mockMvc = org.springframework.test.web.servlet.setup.MockMvcBuilders
+                .webAppContextSetup(webApplicationContext)
+                .defaultRequest(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/")
+                        .header("X-S2S-Token", "local-dev-static-token"))
+                .build();
+    }
 
     @MockBean
     private ContractQueryService queryService;

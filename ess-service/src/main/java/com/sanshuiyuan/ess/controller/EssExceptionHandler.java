@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
 
@@ -61,6 +62,20 @@ public class EssExceptionHandler {
                 "code", -3,
                 "error", "CallbackVerificationError",
                 "message", ex.getMessage()
+        ));
+    }
+
+    /**
+     * 显式状态码异常（鉴权/owner 校验等）——honor 其 HttpStatus，勿被兜底吞成 500。
+     * spec 006 的 401（未登录）/ 403（非属主）经此返回。
+     */
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<Map<String, Object>> handleResponseStatusException(ResponseStatusException ex) {
+        log.warn("请求被拒绝 [status={}]: {}", ex.getStatusCode(), ex.getReason());
+        return ResponseEntity.status(ex.getStatusCode()).body(Map.of(
+                "code", -1,
+                "error", "RequestRejected",
+                "message", ex.getReason() != null ? ex.getReason() : "请求被拒绝"
         ));
     }
 

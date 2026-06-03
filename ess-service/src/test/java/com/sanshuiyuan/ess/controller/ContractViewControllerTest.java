@@ -60,6 +60,11 @@ class ContractViewControllerTest {
     @MockBean
     private CrossPlatformConsistencyService consistencyService;
 
+    // owner 校验作为协作者注入；这里 mock 成 no-op，本类专注查看/下载链路本身。
+    // owner 校验拒绝路径（403）在 ContractOwnerGuardTest 中独立断言。
+    @MockBean
+    private com.sanshuiyuan.ess.auth.ContractOwnershipGuard ownershipGuard;
+
     // ========== T20.6: GET /api/h5/contracts/{id}/view ==========
 
     @Test

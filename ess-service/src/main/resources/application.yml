@@ -45,6 +45,20 @@ wx:
   miniprogram:
     app-id: ${WX_MP_APP_ID:}
 
+# H5 会话 JWT：与 cend-service 同密钥（H5_JWT_SECRET），仅用于校验 /api/h5/* 会话 token。
+h5:
+  jwt-secret: ${H5_JWT_SECRET:dev-h5-jwt-secret-please-override-in-prod-0001}
+  jwt-ttl-hours: ${H5_JWT_TTL_HOURS:72}
+
+# 服务间（S2S）token：保护 /api/admin/*（admin-service BFF 携带），并用于出站调 user-service。
+# 与各服务共享同一 S2S_TOKEN 环境变量 / 默认值。
+s2s-token: ${S2S_TOKEN:local-dev-static-token}
+
+# 出站调 user-service 内部接口（按 openid 解析 userId，合同 owner 校验）。
+user-service:
+  base-url: ${USER_SERVICE_BASE_URL:http://localhost:8081}
+  s2s-token: ${S2S_TOKEN:local-dev-static-token}
+
 springdoc:
   api-docs:
     path: /api-docs

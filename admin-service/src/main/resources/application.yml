@@ -31,6 +31,11 @@ user-service:
   base-url: ${USER_SERVICE_BASE_URL:http://localhost:8081}
   s2s-token: ${S2S_TOKEN:local-dev-static-token}
 
+# 合同管理 BFF：admin-service 透传到 ess-service /api/admin/contracts/*（携带 X-S2S-Token）。
+ess-service:
+  base-url: ${ESS_SERVICE_BASE_URL:http://localhost:8085}
+  s2s-token: ${S2S_TOKEN:local-dev-static-token}
+
 springdoc:
   api-docs:
     path: /api-docs
