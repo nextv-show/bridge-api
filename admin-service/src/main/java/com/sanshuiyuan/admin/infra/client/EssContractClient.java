@@ -8,6 +8,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
@@ -67,14 +68,12 @@ public class EssContractClient {
 
     /** 出证 PDF 下载（透传二进制）。 */
     public ResponseEntity<byte[]> certificateDownload(Long contractId) {
-        String url = build("/api/admin/contracts/certificate/" + contractId + "/download", null);
-        return restTemplate.exchange(url, HttpMethod.GET, authEntity(), byte[].class);
+        return proxyBytes("/api/admin/contracts/certificate/" + contractId + "/download");
     }
 
     /** 合同 PDF 代理预览（透传二进制，#38）。 */
     public ResponseEntity<byte[]> contractPdf(Long id) {
-        String url = build("/api/admin/contracts/" + id + "/pdf", null);
-        return restTemplate.exchange(url, HttpMethod.GET, authEntity(), byte[].class);
+        return proxyBytes("/api/admin/contracts/" + id + "/pdf");
     }
 
     // ========== 主动查单（运维兜底） ==========
@@ -98,6 +97,20 @@ public class EssContractClient {
     }
 
     // ========== 内部辅助 ==========
+
+    /**
+     * 二进制透传：把 ess 的非 2xx 状态（如合同 PDF 未归档 409、不存在 404）原样透传，
+     * 而非被 RestTemplate 默认错误处理抛成 500（#44）。
+     */
+    private ResponseEntity<byte[]> proxyBytes(String path) {
+        String url = build(path, null);
+        try {
+            return restTemplate.exchange(url, HttpMethod.GET, authEntity(), byte[].class);
+        } catch (RestClientResponseException e) {
+            return ResponseEntity.status(e.getStatusCode())
+                    .body(e.getResponseBodyAsByteArray());
+        }
+    }
 
     private ResponseEntity<Map<String, Object>> getJson(String path, MultiValueMap<String, String> query) {
         return restTemplate.exchange(build(path, query), HttpMethod.GET, authEntity(), MAP_TYPE);
