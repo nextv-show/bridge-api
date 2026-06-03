@@ -32,6 +32,7 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /**
@@ -372,5 +373,55 @@ class ContractAdminControllerTest {
 
         mockMvc.perform(get("/api/admin/contracts/9999/audit-trail"))
                 .andExpect(status().is5xxServerError());
+    }
+
+    // ========== Phase E：失败重试端点 ==========
+
+    @Test
+    void retryArchive_success_shouldReturnCode0() throws Exception {
+        when(archiveService.archiveContract(7L))
+                .thenReturn(ContractArchiveService.ArchiveResult.success(7L, "CT-7", "tc://x", "oss://x", "hash"));
+
+        mockMvc.perform(post("/api/admin/contracts/7/retry-archive"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.contractNo").value("CT-7"));
+    }
+
+    @Test
+    void retryArchive_whenServiceThrows_shouldReturn200WithCodeMinus1() throws Exception {
+        when(archiveService.archiveContract(8L))
+                .thenThrow(new RuntimeException("OSS 上传失败"));
+
+        mockMvc.perform(post("/api/admin/contracts/8/retry-archive"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(-1))
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").exists());
+    }
+
+    @Test
+    void retryCertificate_success_shouldReturnCode0() throws Exception {
+        when(certificateService.certifyContract(7L))
+                .thenReturn(CertificateService.CertificateResult.success(7L, "CT-7", "CERT-7", "oss://cert"));
+
+        mockMvc.perform(post("/api/admin/contracts/7/retry-certificate"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.certificateNo").value("CERT-7"));
+    }
+
+    @Test
+    void retryCertificate_whenServiceThrows_shouldReturn200WithCodeMinus1() throws Exception {
+        when(certificateService.certifyContract(8L))
+                .thenThrow(new RuntimeException("ESS 出证接口异常"));
+
+        mockMvc.perform(post("/api/admin/contracts/8/retry-certificate"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(-1))
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").exists());
     }
 }

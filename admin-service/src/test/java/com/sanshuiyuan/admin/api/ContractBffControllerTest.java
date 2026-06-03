@@ -14,6 +14,7 @@ import java.util.Map;
 
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /**
@@ -51,5 +52,36 @@ class ContractBffControllerTest {
         mockMvc.perform(get("/admin/contracts").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));
+    }
+
+    // ========== Phase E：失败重试委托 ==========
+
+    @Test
+    void retryArchive_withoutToken_returns401() throws Exception {
+        mockMvc.perform(post("/admin/contracts/7/retry-archive"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void retryArchive_withToken_delegatesToEss() throws Exception {
+        when(essContractClient.retryArchive(7L))
+                .thenReturn(ResponseEntity.ok(Map.of("code", 0, "success", true)));
+
+        String token = TOKEN_FACTORY.generateToken(1L, "admin", "SUPER_ADMIN");
+        mockMvc.perform(post("/admin/contracts/7/retry-archive").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.success").value(true));
+    }
+
+    @Test
+    void retryCertificate_withToken_delegatesToEss() throws Exception {
+        when(essContractClient.retryCertificate(7L))
+                .thenReturn(ResponseEntity.ok(Map.of("code", 0, "certificateNo", "CERT-7")));
+
+        String token = TOKEN_FACTORY.generateToken(1L, "admin", "SUPER_ADMIN");
+        mockMvc.perform(post("/admin/contracts/7/retry-certificate").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.certificateNo").value("CERT-7"));
     }
 }
