@@ -71,6 +71,12 @@ public class EssContractClient {
         return restTemplate.exchange(url, HttpMethod.GET, authEntity(), byte[].class);
     }
 
+    /** 合同 PDF 代理预览（透传二进制，#38）。 */
+    public ResponseEntity<byte[]> contractPdf(Long id) {
+        String url = build("/api/admin/contracts/" + id + "/pdf", null);
+        return restTemplate.exchange(url, HttpMethod.GET, authEntity(), byte[].class);
+    }
+
     // ========== 主动查单（运维兜底） ==========
 
     public ResponseEntity<Map<String, Object>> reconcileSigning() {

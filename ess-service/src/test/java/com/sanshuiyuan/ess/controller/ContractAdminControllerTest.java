@@ -424,4 +424,33 @@ class ContractAdminControllerTest {
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.message").exists());
     }
+
+    // ========== #38: GET /api/admin/contracts/{id}/pdf — 合同 PDF 代理 ==========
+
+    @Test
+    void contractPdf_success_returnsPdfBytes() throws Exception {
+        when(archiveService.getContractPdfBytes(7L)).thenReturn("%PDF-1.4 fake".getBytes());
+
+        mockMvc.perform(get("/api/admin/contracts/7/pdf"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "application/pdf"));
+    }
+
+    @Test
+    void contractPdf_whenNotArchived_returns409() throws Exception {
+        when(archiveService.getContractPdfBytes(8L))
+                .thenThrow(new IllegalStateException("合同尚未归档"));
+
+        mockMvc.perform(get("/api/admin/contracts/8/pdf"))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void contractPdf_whenNotFound_returns404() throws Exception {
+        when(archiveService.getContractPdfBytes(404L))
+                .thenThrow(new IllegalArgumentException("合同不存在"));
+
+        mockMvc.perform(get("/api/admin/contracts/404/pdf"))
+                .andExpect(status().isNotFound());
+    }
 }

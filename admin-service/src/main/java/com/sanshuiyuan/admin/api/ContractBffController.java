@@ -71,6 +71,19 @@ public class ContractBffController {
         return new ResponseEntity<>(resp.getBody(), headers, resp.getStatusCode());
     }
 
+    @GetMapping("/{id}/pdf")
+    public ResponseEntity<byte[]> contractPdf(@PathVariable Long id) {
+        ResponseEntity<byte[]> resp = essContractClient.contractPdf(id);
+        MediaType contentType = resp.getHeaders().getContentType();
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(contentType != null ? contentType : MediaType.APPLICATION_PDF);
+        String disposition = resp.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION);
+        if (disposition != null) {
+            headers.set(HttpHeaders.CONTENT_DISPOSITION, disposition);
+        }
+        return new ResponseEntity<>(resp.getBody(), headers, resp.getStatusCode());
+    }
+
     @PostMapping("/reconcile-signing")
     public ResponseEntity<Map<String, Object>> reconcileSigning() {
         return essContractClient.reconcileSigning();
