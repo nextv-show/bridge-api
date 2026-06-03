@@ -31,7 +31,7 @@ public class AdminUser {
     private LocalDateTime updatedAt;
 
     public enum Role {
-        SUPER_ADMIN, FINANCE, OPS, READONLY
+        SUPER_ADMIN, FINANCE, OPS, READONLY, LEGAL
     }
 
     public Long getId() { return id; }
