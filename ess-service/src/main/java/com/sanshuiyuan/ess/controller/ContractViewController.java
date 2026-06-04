@@ -33,7 +33,7 @@ import java.util.Map;
  * T20.8: GET /api/c/devices/{sn}/contract — 通过 SN 查询关联合同
  */
 @RestController
-@RequestMapping("/api/h5")
+@RequestMapping("/api/c")
 public class ContractViewController {
 
     private static final Logger log = LoggerFactory.getLogger(ContractViewController.class);
