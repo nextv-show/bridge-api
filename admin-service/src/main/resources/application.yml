@@ -26,6 +26,11 @@ spring:
 admin:
   jwt-secret: ${ADMIN_JWT_SECRET:dev-admin-secret-key-change-in-prod}
   jwt-ttl-hours: 8
+  # 用户花名册对账：周期从 user-service 拉取真实注册用户 upsert 到 admin users 表（UserSyncScheduler）。
+  user-sync:
+    enabled: ${ADMIN_USER_SYNC_ENABLED:true}
+    interval-ms: ${ADMIN_USER_SYNC_INTERVAL_MS:600000}      # 默认 10min
+    initial-delay-ms: ${ADMIN_USER_SYNC_INITIAL_DELAY_MS:60000}  # 启动后延迟 60s 首跑
 
 user-service:
   base-url: ${USER_SERVICE_BASE_URL:http://localhost:8081}
