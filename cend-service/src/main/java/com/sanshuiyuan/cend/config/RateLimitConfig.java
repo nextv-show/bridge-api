@@ -17,7 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 公开接口限频（bucket4j，按 IP 令牌桶）。plan §5.1：同 IP 120 次/分钟。
  * 越限返回 429 + {@link com.sanshuiyuan.cend.common.ApiResponse} 形态的 JSON。
- * 沿用 user-service 既有模式，作用于 /api/h5/**。
+ * 沿用 user-service 既有模式，作用于 /api/c/**。
  */
 @Configuration
 public class RateLimitConfig implements WebMvcConfigurer {
@@ -33,7 +33,7 @@ public class RateLimitConfig implements WebMvcConfigurer {
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(new RateLimitInterceptor())
-                .addPathPatterns("/api/h5/**");
+                .addPathPatterns("/api/c/**");
     }
 
     private Bucket createBucket() {

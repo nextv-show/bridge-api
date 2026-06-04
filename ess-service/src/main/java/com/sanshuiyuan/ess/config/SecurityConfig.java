@@ -21,7 +21,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  *       {@code /api-docs/**}：permitAll。</li>
  *   <li>{@code /api/admin/**}：由 {@link S2sTokenFilter} 强制校验 {@code X-S2S-Token}
  *       （admin-service BFF 携带）。</li>
- *   <li>{@code /api/h5/**}：由 {@link H5JwtFilter} 解析 H5 JWT 注入 SecurityContext；
+ *   <li>{@code /api/c/**}：由 {@link H5JwtFilter} 解析 H5 JWT 注入 SecurityContext；
  *       <b>不在过滤器层拒绝</b>，由 controller 的 owner guard / CurrentOpenid.require 决定拒绝，
  *       便于线上定位「未带 token」与「非属主」两类失败。</li>
  *   <li>其余 permitAll（鉴权交给上述两个 filter，沿用项目「Spring Security 放行 + 自定义 filter」风格，

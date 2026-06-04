@@ -21,10 +21,10 @@ import java.util.Map;
  * - 接收核验结果回调
  * - 查询核验状态
  * <p>
- * 所有端点在 /api/h5/contracts/{contractId}/identity-* 路径下。
+ * 所有端点在 /api/c/contracts/{contractId}/identity-* 路径下。
  */
 @RestController
-@RequestMapping("/api/h5/contracts")
+@RequestMapping("/api/c/contracts")
 public class ContractIdentityController {
 
     private static final Logger log = LoggerFactory.getLogger(ContractIdentityController.class);
@@ -166,7 +166,7 @@ public class ContractIdentityController {
      * 腾讯电子签身份核验结果回调。
      * <p>
      * 腾讯电子签在完成人脸识别后回调此端点。
-     * 注意：此端点在 /api/h5/ 路径下，需要在 SecurityConfig 中放行。
+     * 注意：此端点在 /api/c/ 路径下，需要在 SecurityConfig 中放行。
      *
      * @param contractId     合同 ID
      * @param callbackData   回调数据

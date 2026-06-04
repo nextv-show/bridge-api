@@ -7,7 +7,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 /**
  * Web MVC 配置。
  * <p>
- * 注册客户端类型识别拦截器，应用于所有 /api/h5/** 和 /api/ess/** 路径。
+ * 注册客户端类型识别拦截器，应用于所有 /api/c/** 和 /api/ess/** 路径。
  */
 @Configuration
 public class WebMvcConfig implements WebMvcConfigurer {
@@ -21,7 +21,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(clientTypeInterceptor)
-                .addPathPatterns("/api/h5/**", "/api/ess/**")
+                .addPathPatterns("/api/c/**", "/api/ess/**")
                 .excludePathPatterns("/api-docs/**", "/actuator/**");
     }
 }

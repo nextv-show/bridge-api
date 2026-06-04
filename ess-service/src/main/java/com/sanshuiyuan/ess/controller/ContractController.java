@@ -29,7 +29,7 @@ import java.util.Map;
  * 提供 H5 端合同生成、预览、签署发起、回调、状态查询等全流程端点。
  */
 @RestController
-@RequestMapping("/api/h5/contracts")
+@RequestMapping("/api/c/contracts")
 public class ContractController {
 
     private static final Logger log = LoggerFactory.getLogger(ContractController.class);

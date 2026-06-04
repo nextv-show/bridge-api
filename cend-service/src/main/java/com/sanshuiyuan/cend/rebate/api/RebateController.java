@@ -23,7 +23,7 @@ import java.util.Optional;
  * 金额可见性收敛在 {@link PendingRebateItem#from} 统一裁剪。只读受益人本人记录，不暴露关系链层级。
  */
 @RestController
-@RequestMapping("/api/h5/rebates")
+@RequestMapping("/api/c/rebates")
 @Tag(name = "Rebate", description = "冷静期返利（登录态）")
 public class RebateController {
 

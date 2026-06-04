@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
  * P1 落地页配置只读接口。公开（无鉴权，决策门 G-8）、限频 120/min/IP（{@link com.sanshuiyuan.cend.config.RateLimitConfig}）。
  */
 @RestController
-@RequestMapping("/api/h5/landing")
+@RequestMapping("/api/c/landing")
 @Tag(name = "Landing", description = "P1 资产预售首页落地页配置")
 public class LandingController {
 

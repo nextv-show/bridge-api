@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
  * h5 经 {@link SubscribeSigningService} 调 ess 生成/发起/查询合同，并在签署完成时落实名（KYC PASS）。
  */
 @RestController
-@RequestMapping("/api/h5/subscribe")
+@RequestMapping("/api/c/subscribe")
 @Tag(name = "Subscribe")
 public class SubscribeSigningController {
 

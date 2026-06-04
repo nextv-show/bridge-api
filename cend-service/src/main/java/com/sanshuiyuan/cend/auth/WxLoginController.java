@@ -19,7 +19,7 @@ import jakarta.validation.Valid;
  * 后续受保护接口（KYC / 下单 / 支付）携带该 token，后端从中解析 openid。
  */
 @RestController
-@RequestMapping("/api/h5/auth")
+@RequestMapping("/api/c/auth")
 @Tag(name = "Auth")
 public class WxLoginController {
 

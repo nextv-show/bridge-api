@@ -25,7 +25,8 @@ public enum ErrorCode {
     FORBIDDEN(HttpStatus.FORBIDDEN, "FORBIDDEN", "无权操作此订单"),
     COOLDOWN_EXPIRED(HttpStatus.CONFLICT, "COOLDOWN_EXPIRED", "冷静期已结束，无法申请退款"),
     ORDER_NOT_REFUNDABLE(HttpStatus.CONFLICT, "ORDER_NOT_REFUNDABLE", "当前订单状态不允许退款"),
-    KYC_ID_CARD_CONFLICT(HttpStatus.CONFLICT, "KYC_ID_CARD_CONFLICT", "该身份证已绑定其他账号，无法重复实名");
+    KYC_ID_CARD_CONFLICT(HttpStatus.CONFLICT, "KYC_ID_CARD_CONFLICT", "该身份证已绑定其他账号，无法重复实名"),
+    WX_API_ERROR(HttpStatus.BAD_GATEWAY, "WX_API_ERROR", "微信接口调用失败");
 
     private final HttpStatus httpStatus;
     private final String code;

@@ -19,7 +19,7 @@ import java.util.Map;
  * 提供补充协议生成、签署发起、回调、状态查询端点。
  */
 @RestController
-@RequestMapping("/api/h5/refunds")
+@RequestMapping("/api/c/refunds")
 public class SupplementaryContractController {
 
     private static final Logger log = LoggerFactory.getLogger(SupplementaryContractController.class);

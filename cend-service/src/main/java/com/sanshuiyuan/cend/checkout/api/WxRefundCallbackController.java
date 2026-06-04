@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/h5/pay")
+@RequestMapping("/api/c/pay")
 @Tag(name = "WxRefundCallback")
 public class WxRefundCallbackController {
 

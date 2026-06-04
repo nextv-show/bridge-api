@@ -29,17 +29,17 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 // 公开只读 / 第三方回调 / 登录：无需 H5 JWT
                 .requestMatchers(
-                    "/api/h5/landing/**",
-                    "/api/h5/specs",
-                    "/api/h5/auth/**",
-                    // 微信 JS-SDK 签名 / 分享文案：公开只读（009）。注意 /api/h5/referral/** 其余仍需登录态。
-                    "/api/h5/wx/**",
+                    "/api/c/landing/**",
+                    "/api/c/specs",
+                    "/api/c/auth/**",
+                    // 微信 JS-SDK 签名 / 分享文案：公开只读（009）。注意 /api/c/referral/** 其余仍需登录态。
+                    "/api/c/wx/**",
                     // 邀请确认页解析推荐人脱敏资料：公开只读（014），仅脱敏昵称+头像，零可定位 PII。
-                    "/api/h5/referral/resolve-inviter",
-                    "/api/h5/pay/callback",
-                    "/api/h5/pay/refund-callback",
-                    "/api/h5/pay/simulate-callback",
-                    "/api/h5/pay/simulate-refund-callback",
+                    "/api/c/referral/resolve-inviter",
+                    "/api/c/pay/callback",
+                    "/api/c/pay/refund-callback",
+                    "/api/c/pay/simulate-callback",
+                    "/api/c/pay/simulate-refund-callback",
                     "/api-docs/**",
                     "/swagger-ui/**",
                     "/actuator/**"

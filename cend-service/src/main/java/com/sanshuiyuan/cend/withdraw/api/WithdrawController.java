@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 当前仅提供门控，不暴露任何资金结算能力。
  */
 @RestController
-@RequestMapping("/api/h5/withdraw")
+@RequestMapping("/api/c/withdraw")
 public class WithdrawController {
 
     private final KycVerifyUseCase kycVerifyUseCase;

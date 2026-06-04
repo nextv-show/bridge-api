@@ -81,7 +81,7 @@ wxpay:
   api-v3-key: ${WXPAY_API_V3_KEY:stub}
   private-key-path: ${WXPAY_PRIVATE_KEY_PATH:}
   merchant-serial-number: ${WXPAY_MERCHANT_SERIAL_NUMBER:}
-  notify-url: ${WXPAY_NOTIFY_URL:}         # 支付结果异步通知公网地址，如 https://api.example.com/api/h5/pay/callback
+  notify-url: ${WXPAY_NOTIFY_URL:}         # 支付结果异步通知公网地址，如 https://api.example.com/api/c/pay/callback
   mp-notify-url: ${WXPAY_MP_NOTIFY_URL:}   # 小程序支付异步通知地址，缺省回退 notify-url（同一回调入口）
   refund-notify-url: ${WXPAY_REFUND_NOTIFY_URL:}  # 退款结果异步通知公网地址
   public-key-path: ${WXPAY_PUBLIC_KEY_PATH:}       # 微信支付公钥文件路径（新商户公钥模式必填）

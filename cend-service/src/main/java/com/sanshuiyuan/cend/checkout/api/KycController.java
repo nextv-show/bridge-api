@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/h5/kyc")
+@RequestMapping("/api/c/kyc")
 @Tag(name = "KYC")
 public class KycController {
 

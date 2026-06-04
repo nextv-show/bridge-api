@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/h5/pay")
+@RequestMapping("/api/c/pay")
 public class PayCallbackController {
 
     private static final Logger log = LoggerFactory.getLogger(PayCallbackController.class);

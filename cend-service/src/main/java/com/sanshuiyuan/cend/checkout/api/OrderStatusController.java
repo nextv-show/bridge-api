@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 命中 SUCCESS 即走 {@link OrderPaymentCompletionService} 完成落账，避免前端等定时任务 30s+。
  */
 @RestController
-@RequestMapping("/api/h5/order")
+@RequestMapping("/api/c/order")
 @Tag(name = "Order")
 public class OrderStatusController {
 
