@@ -121,6 +121,27 @@ public class ReferralController {
         return ApiResponse.ok(new WxacodeResponse(dataUrl));
     }
 
+    @Operation(summary = "查询我的邀请人",
+            description = "登录态。返回当前用户的直接邀请人（L1）脱敏资料；自然流量用户返回 null。"
+                    + "仅展示脱敏昵称+头像+绑定时间，零可定位 PII，不暴露层级。")
+    @GetMapping("/my-inviter")
+    public ApiResponse<MyInviterResponse> myInviter() {
+        String openid = CurrentOpenid.require();
+        CendUser me = userRepo.findByOpenid(openid)
+                .orElseThrow(() -> new BizException(ErrorCode.UNAUTHORIZED));
+        if (me.getInviterId() == null) {
+            return ApiResponse.ok(null); // 自然流量：无邀请人
+        }
+        CendUser inviter = userRepo.findById(me.getInviterId()).orElse(null);
+        if (inviter == null) {
+            return ApiResponse.ok(null); // 邀请人记录不存在（数据一致性问题，静默）
+        }
+        return ApiResponse.ok(new MyInviterResponse(
+                NicknameMasker.mask(inviter.getNickname()),
+                inviter.getAvatarUrl(),
+                me.getCreatedAt() != null ? me.getCreatedAt().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd")) : null));
+    }
+
     /**
      * 邀请确认页推荐人脱敏资料（014）。
      *
