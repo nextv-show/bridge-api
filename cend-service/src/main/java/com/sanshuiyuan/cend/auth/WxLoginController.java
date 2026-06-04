@@ -1,10 +1,10 @@
 package com.sanshuiyuan.cend.auth;
 
 import com.sanshuiyuan.cend.common.ApiResponse;
-import com.sanshuiyuan.cend.infra.client.UserServiceClient;
 import com.sanshuiyuan.cend.referral.InvalidRefIdException;
 import com.sanshuiyuan.cend.referral.RefIdCodec;
 import com.sanshuiyuan.cend.referral.ReferralBindingService;
+import com.sanshuiyuan.cend.usersync.H5UserSyncService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -27,18 +27,18 @@ public class WxLoginController {
     private final WxMiniAuthClient wxMiniAuthClient;
     private final H5JwtService jwtService;
     private final ReferralBindingService referralBindingService;
-    private final UserServiceClient userServiceClient;
+    private final H5UserSyncService h5UserSyncService;
     private final RefIdCodec refIdCodec;
 
     public WxLoginController(WxAuthClient wxAuthClient, WxMiniAuthClient wxMiniAuthClient,
                              H5JwtService jwtService,
                              ReferralBindingService referralBindingService,
-                             UserServiceClient userServiceClient, RefIdCodec refIdCodec) {
+                             H5UserSyncService h5UserSyncService, RefIdCodec refIdCodec) {
         this.wxAuthClient = wxAuthClient;
         this.wxMiniAuthClient = wxMiniAuthClient;
         this.jwtService = jwtService;
         this.referralBindingService = referralBindingService;
-        this.userServiceClient = userServiceClient;
+        this.h5UserSyncService = h5UserSyncService;
         this.refIdCodec = refIdCodec;
     }
 
@@ -53,7 +53,8 @@ public class WxLoginController {
         // 公众号网页支付的 payer 仍是公众号 openid（subject 可能已是 unionid，不能直接当 payer）。
         String token = jwtService.generate(canonicalId, id.openid(), "H5");
         // spec 012: 并入统一用户体系。inviterId 由 RefIdCodec 解密后下传（解码失败按自然流量）。
-        userServiceClient.syncH5(canonicalId, id.unionid(), decodeInviterIdQuietly(req.refId()));
+        // 失败（user-service 降级）自动入队，由 ReconcileH5UserSyncJob 周期重试，不阻断登录。
+        h5UserSyncService.sync(canonicalId, id.unionid(), decodeInviterIdQuietly(req.refId()));
         return ApiResponse.ok(new WxLoginResponse(token));
     }
 
@@ -67,7 +68,7 @@ public class WxLoginController {
         String canonicalId = canonical(s.unionid(), s.openid());
         referralBindingService.onWxLogin(canonicalId, req.nickname(), req.avatarUrl());
         String token = jwtService.generate(canonicalId, s.openid(), "MINI");
-        userServiceClient.syncH5(canonicalId, s.unionid(), decodeInviterIdQuietly(req.refId()));
+        h5UserSyncService.sync(canonicalId, s.unionid(), decodeInviterIdQuietly(req.refId()));
         return ApiResponse.ok(new WxLoginResponse(token));
     }
 
