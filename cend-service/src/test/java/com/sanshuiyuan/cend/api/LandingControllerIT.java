@@ -23,7 +23,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * B.2.5：GET /api/h5/landing/config 返回 PUBLISHED seed；缓存命中第二次不打库。
+ * B.2.5：GET /api/c/landing/config 返回 PUBLISHED seed；缓存命中第二次不打库。
  */
 @Tag("integration")
 @DisabledIfEnvironmentVariable(named = "CI_SKIP_IT", matches = "true")
@@ -50,7 +50,7 @@ class LandingControllerIT extends AbstractMysqlContainerTest {
 
     @Test
     void getConfig_returnsPublishedSeed() throws Exception {
-        mockMvc.perform(get("/api/h5/landing/config"))
+        mockMvc.perform(get("/api/c/landing/config"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("OK"))
                 .andExpect(jsonPath("$.data.version").value(1))
@@ -66,8 +66,8 @@ class LandingControllerIT extends AbstractMysqlContainerTest {
 
     @Test
     void getConfig_secondCall_hitsCache_doesNotQueryDb() throws Exception {
-        mockMvc.perform(get("/api/h5/landing/config")).andExpect(status().isOk());
-        mockMvc.perform(get("/api/h5/landing/config")).andExpect(status().isOk());
+        mockMvc.perform(get("/api/c/landing/config")).andExpect(status().isOk());
+        mockMvc.perform(get("/api/c/landing/config")).andExpect(status().isOk());
 
         // Redis 在测试中不可用 → 仅 Caffeine L1 命中；DB 查询只应发生一次。
         verify(configRepo, times(1))

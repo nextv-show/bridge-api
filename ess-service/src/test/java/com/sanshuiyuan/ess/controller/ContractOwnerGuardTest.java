@@ -63,7 +63,7 @@ class ContractOwnerGuardTest {
         Contract contract = Contract.createDraft("CT-OWNER-401", 1L, 100L, "ORD-401", "SN-401");
         when(queryService.getContractDetail(1L)).thenReturn(contract);
         // 无 Authorization 头：H5JwtFilter 不注入身份，assertOwner→CurrentOpenid.require()→401。
-        mockMvc.perform(get("/api/h5/contracts/1/view"))
+        mockMvc.perform(get("/api/c/contracts/1/view"))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -73,7 +73,7 @@ class ContractOwnerGuardTest {
         // 不暴露合同是否存在。getContractDetail 抛错；若鉴权在加载之后，会先抛错暴露存在性。
         when(queryService.getContractDetail(404L))
                 .thenThrow(new IllegalArgumentException("合同不存在: id=404"));
-        mockMvc.perform(get("/api/h5/contracts/404/view"))
+        mockMvc.perform(get("/api/c/contracts/404/view"))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -84,7 +84,7 @@ class ContractOwnerGuardTest {
         when(userServiceClient.resolveUserId("openid-other")).thenReturn(999L); // 会话是别人
 
         String token = TOKEN_FACTORY.generate("openid-other");
-        mockMvc.perform(get("/api/h5/contracts/1/view").header("Authorization", "Bearer " + token))
+        mockMvc.perform(get("/api/c/contracts/1/view").header("Authorization", "Bearer " + token))
                 .andExpect(status().isForbidden());
     }
 
@@ -109,7 +109,7 @@ class ContractOwnerGuardTest {
                         com.sanshuiyuan.ess.domain.ContractAccessLog.AccessSource.H5, "127.0.0.1", "test"));
 
         String token = TOKEN_FACTORY.generate("openid-owner");
-        mockMvc.perform(get("/api/h5/contracts/2/view").header("Authorization", "Bearer " + token))
+        mockMvc.perform(get("/api/c/contracts/2/view").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk());
     }
 }

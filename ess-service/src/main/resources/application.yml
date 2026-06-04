@@ -45,7 +45,7 @@ wx:
   miniprogram:
     app-id: ${WX_MP_APP_ID:}
 
-# H5 会话 JWT：与 cend-service 同密钥（H5_JWT_SECRET），仅用于校验 /api/h5/* 会话 token。
+# H5 会话 JWT：与 cend-service 同密钥（H5_JWT_SECRET），仅用于校验 /api/c/* 会话 token。
 h5:
   jwt-secret: ${H5_JWT_SECRET:dev-h5-jwt-secret-please-override-in-prod-0001}
   jwt-ttl-hours: ${H5_JWT_TTL_HOURS:72}

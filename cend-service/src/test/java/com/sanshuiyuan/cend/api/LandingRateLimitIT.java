@@ -33,9 +33,9 @@ class LandingRateLimitIT extends AbstractMysqlContainerTest {
     @Test
     void landingConfig_exceedingLimit_returns429() throws Exception {
         for (int i = 0; i < 2; i++) {
-            mockMvc.perform(get("/api/h5/landing/config")).andExpect(status().isOk());
+            mockMvc.perform(get("/api/c/landing/config")).andExpect(status().isOk());
         }
-        mockMvc.perform(get("/api/h5/landing/config"))
+        mockMvc.perform(get("/api/c/landing/config"))
                 .andExpect(status().is(429))
                 .andExpect(jsonPath("$.code").value("RATE_LIMITED"));
     }

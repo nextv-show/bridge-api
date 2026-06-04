@@ -28,9 +28,9 @@ import java.util.Map;
 /**
  * 合同查看与下载控制器（H5 端）。
  * <p>
- * T20.6: GET /api/h5/contracts/{id}/view — 从 OSS 读取合同 PDF（<3s）
- * T20.7: GET /api/h5/contracts/{id}/download — 下载合同 PDF + 记录访问日志
- * T20.8: GET /api/h5/devices/{sn}/contract — 通过 SN 查询关联合同
+ * T20.6: GET /api/c/contracts/{id}/view — 从 OSS 读取合同 PDF（<3s）
+ * T20.7: GET /api/c/contracts/{id}/download — 下载合同 PDF + 记录访问日志
+ * T20.8: GET /api/c/devices/{sn}/contract — 通过 SN 查询关联合同
  */
 @RestController
 @RequestMapping("/api/h5")

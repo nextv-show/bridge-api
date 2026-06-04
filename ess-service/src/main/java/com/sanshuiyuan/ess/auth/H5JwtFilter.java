@@ -19,7 +19,7 @@ import java.io.IOException;
  * {@link CurrentOpenid#require()} / {@link ContractOwnershipGuard} 决定是否拒绝。
  * 这样线上若个别 H5 请求没带 token，错误会落在「业务层 401/403」而非「过滤器静默」，便于定位。
  * <p>
- * 仅对 {@code /api/h5/} 前缀生效。
+ * 仅对 {@code /api/c/} 前缀生效。
  */
 public class H5JwtFilter extends OncePerRequestFilter {
 
@@ -31,7 +31,7 @@ public class H5JwtFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !request.getRequestURI().startsWith("/api/h5/");
+        return !request.getRequestURI().startsWith("/api/c/");
     }
 
     @Override

@@ -3,7 +3,7 @@ package com.sanshuiyuan.cend.api.dto;
 import java.util.List;
 
 /**
- * GET /api/h5/landing/config 的 data 体（plan §5.1 契约）。
+ * GET /api/c/landing/config 的 data 体（plan §5.1 契约）。
  */
 public record LandingConfigResponse(
         int version,

@@ -18,7 +18,7 @@ import java.util.Map;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/h5/pay")
+@RequestMapping("/api/c/pay")
 @Profile("dev")
 public class SimulateCallbackController {
 

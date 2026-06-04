@@ -21,7 +21,7 @@ import java.util.Map;
  * 冷静期内撤销合同端点，含全局幂等处理。
  */
 @RestController
-@RequestMapping("/api/h5/contracts")
+@RequestMapping("/api/c/contracts")
 public class ContractRevokeController {
 
     private static final Logger log = LoggerFactory.getLogger(ContractRevokeController.class);

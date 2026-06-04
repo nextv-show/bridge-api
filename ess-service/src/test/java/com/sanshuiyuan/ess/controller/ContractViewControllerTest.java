@@ -65,7 +65,7 @@ class ContractViewControllerTest {
     @MockBean
     private com.sanshuiyuan.ess.auth.ContractOwnershipGuard ownershipGuard;
 
-    // ========== T20.6: GET /api/h5/contracts/{id}/view ==========
+    // ========== T20.6: GET /api/c/contracts/{id}/view ==========
 
     @Test
     void viewContract_shouldReturnViewUrl() throws Exception {
@@ -87,7 +87,7 @@ class ContractViewControllerTest {
                 .thenReturn(ContractAccessLog.create(1L, null,
                         ContractAccessLog.AccessType.VIEW, ContractAccessLog.AccessSource.H5, "127.0.0.1", "test"));
 
-        mockMvc.perform(get("/api/h5/contracts/1/view"))
+        mockMvc.perform(get("/api/c/contracts/1/view"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.contractId").value(1))
@@ -100,11 +100,11 @@ class ContractViewControllerTest {
         when(consistencyService.getUnifiedContractView(999L))
                 .thenThrow(new IllegalStateException("合同尚未归档，无法查看"));
 
-        mockMvc.perform(get("/api/h5/contracts/999/view"))
+        mockMvc.perform(get("/api/c/contracts/999/view"))
                 .andExpect(status().is5xxServerError());
     }
 
-    // ========== T20.7: GET /api/h5/contracts/{id}/download ==========
+    // ========== T20.7: GET /api/c/contracts/{id}/download ==========
 
     @Test
     void downloadContract_shouldReturnDownloadUrl() throws Exception {
@@ -120,14 +120,14 @@ class ContractViewControllerTest {
                 .thenReturn(ContractAccessLog.create(2L, null,
                         ContractAccessLog.AccessType.DOWNLOAD, ContractAccessLog.AccessSource.H5, "127.0.0.1", "test"));
 
-        mockMvc.perform(get("/api/h5/contracts/2/download"))
+        mockMvc.perform(get("/api/c/contracts/2/download"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.downloadUrl").exists())
                 .andExpect(jsonPath("$.pdfHash").value("hash456"));
     }
 
-    // ========== T20.8: GET /api/h5/devices/{sn}/contract ==========
+    // ========== T20.8: GET /api/c/devices/{sn}/contract ==========
 
     @Test
     void getDeviceContract_shouldReturnContract() throws Exception {
@@ -149,7 +149,7 @@ class ContractViewControllerTest {
         when(queryService.getContractDetail(10L)).thenReturn(contract);
         when(archiveService.getViewUrl(10L)).thenReturn("https://oss.example.com/view");
 
-        mockMvc.perform(get("/api/h5/devices/SN-TEST-001/contract"))
+        mockMvc.perform(get("/api/c/devices/SN-TEST-001/contract"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.contractId").value(10))
@@ -161,7 +161,7 @@ class ContractViewControllerTest {
         when(snBindingRepository.findByDeviceSn("SN-NOTEXIST"))
                 .thenReturn(Collections.emptyList());
 
-        mockMvc.perform(get("/api/h5/devices/SN-NOTEXIST/contract"))
+        mockMvc.perform(get("/api/c/devices/SN-NOTEXIST/contract"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(1))
                 .andExpect(jsonPath("$.message").value("未找到该设备关联合同"));

@@ -11,6 +11,7 @@ import com.sanshuiyuan.cend.referral.NicknameMasker;
 import com.sanshuiyuan.cend.referral.RefIdCodec;
 import com.sanshuiyuan.cend.referral.ReferralBindingService;
 import com.sanshuiyuan.cend.referral.ReferralQueryService;
+import com.sanshuiyuan.cend.referral.WxMiniCodeClient;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,13 +25,13 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Map;
 
 /**
- * 推广关系链查询接口（009 T9.5）。<b>需登录态</b>（区别于公开的 /api/h5/wx/**）。
+ * 推广关系链查询接口（009 T9.5）。<b>需登录态</b>（区别于公开的 /api/c/wx/**）。
  *
  * <p><b>合规铁律</b>：分享链接携带的是后端加密下发的当前用户 ref_id（RefIdCodec），
  * 前端不自行拼装明文 user_id；本接口只读自身、不暴露关系链层级。
  */
 @RestController
-@RequestMapping("/api/h5/referral")
+@RequestMapping("/api/c/referral")
 @Tag(name = "Referral", description = "H5 推广关系链（登录态）")
 public class ReferralController {
 
@@ -38,17 +39,20 @@ public class ReferralController {
     private final RefIdCodec refIdCodec;
     private final ReferralBindingService referralBindingService;
     private final ReferralQueryService referralQueryService;
+    private final WxMiniCodeClient wxMiniCodeClient;
     private final String linkBase;
 
     public ReferralController(CendUserRepository userRepo,
                               RefIdCodec refIdCodec,
                               ReferralBindingService referralBindingService,
                               ReferralQueryService referralQueryService,
+                              WxMiniCodeClient wxMiniCodeClient,
                               @Value("${h5.public-base-url:}") String publicBaseUrl) {
         this.userRepo = userRepo;
         this.refIdCodec = refIdCodec;
         this.referralBindingService = referralBindingService;
         this.referralQueryService = referralQueryService;
+        this.wxMiniCodeClient = wxMiniCodeClient;
         this.linkBase = publicBaseUrl == null ? "" : publicBaseUrl.replaceAll("/+$", "");
     }
 
@@ -104,6 +108,19 @@ public class ReferralController {
         return ApiResponse.ok(Map.of("bound", bound));
     }
 
+    @Operation(summary = "生成小程序码图片",
+            description = "用当前登录用户的 ref_id 作为 scene 参数，调用微信 wxacode.getUnlimited 返回小程序码图片（data URL 格式）。"
+                    + "page 默认 \"pages/index/index\"，envVersion 默认 \"release\"（可选 trial/develop）。")
+    @PostMapping("/wxacode")
+    public ApiResponse<WxacodeResponse> wxacode(@RequestBody WxacodeRequest req) {
+        String openid = CurrentOpenid.require();
+        CendUser user = userRepo.findByOpenid(openid)
+                .orElseThrow(() -> new BizException(ErrorCode.UNAUTHORIZED));
+        String scene = refIdCodec.encode(user.getId());
+        String dataUrl = wxMiniCodeClient.getUnlimitedWxaCode(scene, req.page());
+        return ApiResponse.ok(new WxacodeResponse(dataUrl));
+    }
+
     /**
      * 邀请确认页推荐人脱敏资料（014）。
      *
@@ -118,4 +135,28 @@ public class ReferralController {
      * @param refId 推广 ref_id（推广者 user_id 的 HMAC 签名形式）。
      */
     public record ConfirmBindingRequest(String refId) {}
+
+    /**
+     * 小程序码生成请求体。
+     *
+     * @param page       小程序页面路径，默认 "pages/index/index"
+     * @param envVersion 小程序版本，默认 "release"（可选 "trial"/"develop"）
+     */
+    public record WxacodeRequest(String page, String envVersion) {
+        public WxacodeRequest {
+            if (page == null || page.isBlank()) {
+                page = "pages/index/index";
+            }
+            if (envVersion == null || envVersion.isBlank()) {
+                envVersion = "release";
+            }
+        }
+    }
+
+    /**
+     * 小程序码生成响应体。
+     *
+     * @param dataUrl Base64 编码的 JPEG data URL（data:image/jpeg;base64,...）
+     */
+    public record WxacodeResponse(String dataUrl) {}
 }

@@ -15,7 +15,7 @@ import java.util.Map;
  * 提供冷静期状态查询端点。
  */
 @RestController
-@RequestMapping("/api/h5/contracts")
+@RequestMapping("/api/c/contracts")
 public class CooldownController {
 
     private static final Logger log = LoggerFactory.getLogger(CooldownController.class);

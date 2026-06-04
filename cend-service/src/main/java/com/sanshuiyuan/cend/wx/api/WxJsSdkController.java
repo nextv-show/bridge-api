@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
  * {@code wx.config} 与读取合规分享文案。
  */
 @RestController
-@RequestMapping("/api/h5/wx")
+@RequestMapping("/api/c/wx")
 @Tag(name = "WeChat JS-SDK", description = "微信 JS-SDK 签名 / 分享配置")
 public class WxJsSdkController {
 

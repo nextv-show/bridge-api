@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/h5/orders")
+@RequestMapping("/api/c/orders")
 @Tag(name = "MyOrders")
 public class MyOrdersController {
 

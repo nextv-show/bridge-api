@@ -15,7 +15,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
  * H5 实时推送入口：EventSource + Authorization Bearer token。
  */
 @RestController
-@RequestMapping("/api/h5/realtime")
+@RequestMapping("/api/c/realtime")
 public class H5RealtimeController {
 
     private final H5JwtService jwtService;
