@@ -24,11 +24,11 @@ VALUES (
     'networkBonusBp', 400,
     'bonusThresholdLiters', 12,
     'unit', '升 / 日',
-    'outputLabel', '预估年度服务返利',
+    'outputLabel', '预估年度运营服务分成',
     'disclaimer', '※ 合规提示：模拟结果基于物理用水量模型测算，不构成任何收益保证，亦不代表本金回报或利息约定。'
   ),
   JSON_OBJECT(
-    'disclaimer', '本平台为水机产品销售平台，服务返利来自设备运营场景下的真实分润，不构成投资建议或理财产品。',
+    'disclaimer', '本平台为水机产品销售平台，运营服务分成来自设备运营场景下的真实分润，不构成投资建议或理财产品。',
     'icpNumber', '粤 ICP 备 2024XXXXXX 号 · 增值电信业务许可证'
   ),
   'system-seed',
@@ -40,7 +40,7 @@ SET @cfg := LAST_INSERT_ID();
 INSERT INTO landing_feature (config_id, sort, title, subtitle, descr, icon_key) VALUES
   (@cfg, 0, '远程水质回传', 'REMOTE TDS',     '毫秒级脉冲流量与 TDS 实时回传，数据真实可验证。', 'water-return'),
   (@cfg, 1, '故障自检',     'SELF DIAGNOSIS', '设备健康自检与远程告警，主动运维。',             'self-check'),
-  (@cfg, 2, '服务返利',     'SERVICE REBATE', '按月返还运营场景下的真实服务分润。',             'rebate'),
+  (@cfg, 2, '运营服务分成', 'SERVICE SHARE',  '按月返还运营场景下的真实服务分成。',             'rebate'),
   (@cfg, 3, '24h 冷静期',   'COOL-OFF',       '下单 24 小时内无理由退款。',                     'cooldown');
 
 INSERT INTO landing_trust_badge (config_id, sort, title, subtitle, icon_key) VALUES

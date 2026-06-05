@@ -29,7 +29,7 @@ class ComplianceTextValidatorTest {
     void mandatedDisclaimers_areAllowed() {
         // 法定免责声明在「否定语境」下含 投资/理财/收益，必须放行。
         assertThat(validator.scanText(
-                "本平台为水机产品销售平台，服务返利来自设备运营场景下的真实分润，不构成投资建议或理财产品。"))
+                "本平台为水机产品销售平台，运营服务分成来自设备运营场景下的真实分润，不构成投资建议或理财产品。"))
                 .isEmpty();
         assertThat(validator.scanText(
                 "※ 合规提示：模拟结果基于物理用水量模型测算，不构成任何收益保证，亦不代表本金回报或利息约定。"))
