@@ -1,9 +1,11 @@
 package com.sanshuiyuan.admin.application;
 
 import com.sanshuiyuan.admin.api.dto.UserUpsertRequest;
+import com.sanshuiyuan.admin.domain.KycRecord;
 import com.sanshuiyuan.admin.domain.User;
 import com.sanshuiyuan.admin.infra.client.UserDirectoryClient;
 import com.sanshuiyuan.admin.infra.repository.DeviceAssetRepository;
+import com.sanshuiyuan.admin.infra.repository.KycRecordRepository;
 import com.sanshuiyuan.admin.infra.repository.OrderRepository;
 import com.sanshuiyuan.admin.infra.repository.SkuRepository;
 import com.sanshuiyuan.admin.infra.repository.UserRepository;
@@ -35,6 +37,7 @@ class AdminUserServiceTest {
     @Mock private OrderRepository orderRepo;
     @Mock private DeviceAssetRepository deviceRepo;
     @Mock private SkuRepository skuRepo;
+    @Mock private KycRecordRepository kycRepo;
     @Mock private AuditLogService auditLog;
     @Mock private UserDirectoryClient userDirectoryClient;
     @Mock private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
@@ -42,8 +45,17 @@ class AdminUserServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AdminUserService(userRepo, orderRepo, deviceRepo, skuRepo, auditLog,
+        service = new AdminUserService(userRepo, orderRepo, deviceRepo, skuRepo, kycRepo, auditLog,
                 userDirectoryClient, jdbcTemplate);
+    }
+
+    /** 构造一条 KYC 记录（反射写私有字段），供实名派生测试。 */
+    private KycRecord kycRecord(String openid, KycRecord.Status status, LocalDateTime verifiedAt) {
+        KycRecord k = new KycRecord();
+        setField(k, "openid", openid);
+        setField(k, "status", status);
+        setField(k, "verifiedAt", verifiedAt);
+        return k;
     }
 
     private User user(Long id, String status, String kyc) {
@@ -83,11 +95,15 @@ class AdminUserServiceTest {
     void list_mapsSummaryFieldsAndAggregations() {
         User u = user(14821L, "ACTIVE", "PASS");
         Page<User> page = new PageImpl<>(List.of(u), Pageable.ofSize(20), 1);
-        when(userRepo.search(any(), any(), any(), any(), any(), any(), any(), any())).thenReturn(page);
+        when(userRepo.search(any(), any(), any(), any(), any(), any(), any(), any(), any(), any())).thenReturn(page);
         when(orderRepo.aggregateByUserIds(anyList()))
                 .thenReturn(List.<Object[]>of(new Object[]{14821L, 2L, 899700L}));
         when(deviceRepo.countByUserIds(anyList()))
                 .thenReturn(List.<Object[]>of(new Object[]{14821L, 2L}));
+        // 实名按 kyc_records 实时派生：该用户 openid 有一条 PASS 记录。
+        when(kycRepo.findByOpenidIn(anyList()))
+                .thenReturn(List.of(kycRecord("oWxMp_test", KycRecord.Status.PASS,
+                        LocalDateTime.of(2026, 5, 26, 16, 43))));
 
         Map<String, Object> body = service.list(0, 20, "ALL", null, null, null, "last_active");
 
@@ -108,6 +124,7 @@ class AdminUserServiceTest {
         assertEquals("WECHAT_MP", item.get("channel"));
         assertEquals("ACTIVE", item.get("status"));
         assertEquals("PASS", item.get("kyc"));
+        assertEquals("2026-05-26 16:43", item.get("kycVerifiedAt"));
         assertEquals("VIP", item.get("tier"));
         assertEquals(List.of("REPEAT", "HIGH_GMV"), item.get("tags"));
         assertEquals(2, item.get("orders"));
@@ -122,7 +139,7 @@ class AdminUserServiceTest {
     @Test
     void list_defaultsZeroWhenNoAggregation() {
         User u = user(14808L, "ACTIVE", "NONE");
-        when(userRepo.search(any(), any(), any(), any(), any(), any(), any(), any()))
+        when(userRepo.search(any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(u), Pageable.ofSize(20), 1));
         when(orderRepo.aggregateByUserIds(anyList())).thenReturn(List.of());
         when(deviceRepo.countByUserIds(anyList())).thenReturn(List.of());
@@ -140,8 +157,8 @@ class AdminUserServiceTest {
     @Test
     void counts_returnsAllTabKeys() {
         when(userRepo.count()).thenReturn(14L);
-        when(userRepo.countByKycStatus("PASS")).thenReturn(6L);
-        when(userRepo.countByKycStatus("PENDING")).thenReturn(3L);
+        when(userRepo.countKycPass(KycRecord.Status.PASS)).thenReturn(6L);
+        when(userRepo.countKycPending(KycRecord.Status.PENDING, KycRecord.Status.PASS)).thenReturn(3L);
         when(userRepo.countByTagLike("RISK")).thenReturn(2L);
         when(userRepo.countByStatusIn(List.of("FROZEN", "BANNED"))).thenReturn(2L);
 
