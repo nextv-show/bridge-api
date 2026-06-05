@@ -2,10 +2,12 @@ package com.sanshuiyuan.admin.application;
 
 import com.sanshuiyuan.admin.api.dto.UserUpsertRequest;
 import com.sanshuiyuan.admin.domain.DeviceAsset;
+import com.sanshuiyuan.admin.domain.KycRecord;
 import com.sanshuiyuan.admin.domain.Order;
 import com.sanshuiyuan.admin.domain.Sku;
 import com.sanshuiyuan.admin.domain.User;
 import com.sanshuiyuan.admin.infra.repository.DeviceAssetRepository;
+import com.sanshuiyuan.admin.infra.repository.KycRecordRepository;
 import com.sanshuiyuan.admin.infra.repository.OrderRepository;
 import com.sanshuiyuan.admin.infra.repository.SkuRepository;
 import com.sanshuiyuan.admin.infra.repository.UserRepository;
@@ -47,6 +49,7 @@ public class AdminUserService {
     private final OrderRepository orderRepo;
     private final DeviceAssetRepository deviceRepo;
     private final SkuRepository skuRepo;
+    private final KycRecordRepository kycRepo;
     private final AuditLogService auditLog;
     private final UserDirectoryClient userDirectoryClient;
     private final JdbcTemplate jdbcTemplate;
@@ -55,6 +58,7 @@ public class AdminUserService {
                             OrderRepository orderRepo,
                             DeviceAssetRepository deviceRepo,
                             SkuRepository skuRepo,
+                            KycRecordRepository kycRepo,
                             AuditLogService auditLog,
                             UserDirectoryClient userDirectoryClient,
                             JdbcTemplate jdbcTemplate) {
@@ -62,6 +66,7 @@ public class AdminUserService {
         this.orderRepo = orderRepo;
         this.deviceRepo = deviceRepo;
         this.skuRepo = skuRepo;
+        this.kycRepo = kycRepo;
         this.auditLog = auditLog;
         this.userDirectoryClient = userDirectoryClient;
         this.jdbcTemplate = jdbcTemplate;
@@ -76,12 +81,12 @@ public class AdminUserService {
         // tab → 过滤条件
         String status = null;
         Collection<String> statusIn = null;
-        String kycStatus = null;
+        String kycFilter = null;
         String tagLike = null;
         String tabKey = tab == null ? "ALL" : tab.toUpperCase();
         switch (tabKey) {
-            case "KYC_PASS" -> kycStatus = "PASS";
-            case "KYC_PEND" -> kycStatus = "PENDING";
+            case "KYC_PASS" -> kycFilter = "PASS";
+            case "KYC_PEND" -> kycFilter = "PENDING";
             case "RISK" -> tagLike = "%RISK%";
             case "FROZEN" -> statusIn = FROZEN_STATUSES;
             default -> { /* ALL: 无过滤 */ }
@@ -92,18 +97,20 @@ public class AdminUserService {
         String tierParam = (tier != null && !tier.isBlank()) ? tier : null;
 
         Page<User> result = userRepo.search(status, statusIn, channelParam, tierParam,
-                kycStatus, tagLike, keyword, pageable);
+                kycFilter, KycRecord.Status.PASS, KycRecord.Status.PENDING, tagLike, keyword, pageable);
 
         List<User> users = result.getContent();
         List<Long> ids = users.stream().map(User::getId).toList();
 
         Map<Long, long[]> orderAgg = aggregateOrders(ids);   // userId → [count, gmvCents]
         Map<Long, Long> deviceAgg = aggregateDevices(ids);   // userId → count
+        Map<String, KycView> kycAgg = aggregateKyc(           // openid → 有效实名状态
+                users.stream().map(User::getOpenid).toList());
 
         List<Map<String, Object>> items = users.stream().map(u -> {
             long[] oa = orderAgg.getOrDefault(u.getId(), new long[]{0L, 0L});
             long dc = deviceAgg.getOrDefault(u.getId(), 0L);
-            return toSummary(u, oa[0], oa[1], dc);
+            return toSummary(u, oa[0], oa[1], dc, kycAgg.get(u.getOpenid()));
         }).toList();
 
         Map<String, Object> body = new LinkedHashMap<>();
@@ -132,8 +139,8 @@ public class AdminUserService {
         LocalDateTime sevenDaysAgo = LocalDateTime.now().minusDays(7);
         Map<String, Long> counts = new LinkedHashMap<>();
         counts.put("ALL", userRepo.count());
-        counts.put("KYC_PASS", userRepo.countByKycStatus("PASS"));
-        counts.put("KYC_PEND", userRepo.countByKycStatus("PENDING"));
+        counts.put("KYC_PASS", userRepo.countKycPass(KycRecord.Status.PASS));
+        counts.put("KYC_PEND", userRepo.countKycPending(KycRecord.Status.PENDING, KycRecord.Status.PASS));
         counts.put("RISK", userRepo.countByTagLike("RISK"));
         counts.put("FROZEN", userRepo.countByStatusIn(FROZEN_STATUSES));
         counts.put("TODAY_NEW", userRepo.countByCreatedAtGreaterThanEqual(todayStart));
@@ -151,7 +158,7 @@ public class AdminUserService {
         long[] oa = aggregateOrders(ids).getOrDefault(id, new long[]{0L, 0L});
         long dc = aggregateDevices(ids).getOrDefault(id, 0L);
 
-        Map<String, Object> dto = toSummary(u, oa[0], oa[1], dc);
+        Map<String, Object> dto = toSummary(u, oa[0], oa[1], dc, kycViewFor(u));
 
         // 订单列表
         List<Order> orders = orderRepo.findByUserIdOrderByCreatedAtDesc(id);
@@ -217,7 +224,7 @@ public class AdminUserService {
 
         auditLog.log(adminId, "USER_CREATE", "user", String.valueOf(saved.getId()),
                 "{\"name\":\"" + escapeJson(dto.name()) + "\"}");
-        return toSummary(saved, 0L, 0L, 0L);
+        return toSummary(saved, 0L, 0L, 0L, kycViewFor(saved));
     }
 
     /* ========== 编辑 ========== */
@@ -246,7 +253,7 @@ public class AdminUserService {
         List<Long> ids = List.of(id);
         long[] oa = aggregateOrders(ids).getOrDefault(id, new long[]{0L, 0L});
         long dc = aggregateDevices(ids).getOrDefault(id, 0L);
-        return toSummary(u, oa[0], oa[1], dc);
+        return toSummary(u, oa[0], oa[1], dc, kycViewFor(u));
     }
 
     /* ========== 冻结 / 解冻 ========== */
@@ -402,7 +409,12 @@ public class AdminUserService {
 
     /* ========== 共享摘要映射（前端依赖的字段名） ========== */
 
-    private Map<String, Object> toSummary(User u, long orderCount, long gmvCents, long deviceCount) {
+    private Map<String, Object> toSummary(User u, long orderCount, long gmvCents, long deviceCount,
+                                          KycView kyc) {
+        // 实名状态/时间按权威 kyc_records 实时派生（openid 关联），不读已废弃的 users.kyc_status。
+        String kycStatus = kyc != null ? kyc.status() : "NONE";
+        LocalDateTime kycVerifiedAt = kyc != null ? kyc.verifiedAt() : null;
+
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", u.getId());
         m.put("name", u.getRealNameMask() != null ? u.getRealNameMask() : u.getNickname());
@@ -412,7 +424,7 @@ public class AdminUserService {
         m.put("openid", u.getOpenid());
         m.put("channel", u.getChannel());
         m.put("status", u.getStatus());
-        m.put("kyc", u.getKycStatus());
+        m.put("kyc", kycStatus);
         m.put("tier", u.getTier());
         m.put("tags", u.tagList());
         m.put("orders", (int) orderCount);
@@ -422,9 +434,79 @@ public class AdminUserService {
         m.put("registeredAt", u.getCreatedAt() != null ? u.getCreatedAt().format(DATE_FMT) : "");
         m.put("lastActiveAt", u.getLastActiveAt() != null ? u.getLastActiveAt().format(DATETIME_FMT) : "");
         m.put("city", u.getCity());
-        m.put("kycVerifiedAt", u.getKycVerifiedAt() != null ? u.getKycVerifiedAt().format(DATETIME_FMT) : null);
+        m.put("kycVerifiedAt", kycVerifiedAt != null ? kycVerifiedAt.format(DATETIME_FMT) : null);
         m.put("frozenReason", u.getFrozenReason());
         return m;
+    }
+
+    /* ========== 实名状态实时派生（按 openid 从权威 kyc_records 聚合） ========== */
+
+    /** 用户列表/详情用的有效实名视图：4 值态（PASS/PENDING/REJECT/NONE）+ 通过时间。 */
+    private record KycView(String status, LocalDateTime verifiedAt) {}
+
+    /**
+     * 批量按 openid 从 kyc_records 派生有效实名状态。
+     * 同一 openid 可有多条记录（INIT→PASS、被 SUPERSEDED 等），按优先级取最强态：
+     * PASS &gt; PENDING &gt; REJECT &gt; NONE；PASS 同时带上其 verified_at（多条 PASS 取最新）。
+     */
+    /** 单用户实名视图（openid 为空返回 null → NONE）。 */
+    private KycView kycViewFor(User u) {
+        if (u.getOpenid() == null) return null;
+        return aggregateKyc(List.of(u.getOpenid())).get(u.getOpenid());
+    }
+
+    /**
+     * 单个 openid 的有效实名态（PASS/PENDING/REJECT/NONE），按权威 kyc_records 实时派生。
+     * 供订单管理等其它模块复用同一口径，避免各处读已废弃的 users.kyc_status 出现不一致。
+     */
+    public String effectiveKycStatus(String openid) {
+        if (openid == null) return "NONE";
+        KycView v = aggregateKyc(List.of(openid)).get(openid);
+        return v != null ? v.status() : "NONE";
+    }
+
+    private Map<String, KycView> aggregateKyc(Collection<String> openids) {
+        Map<String, KycView> map = new HashMap<>();
+        if (openids == null || openids.isEmpty()) return map;
+        List<String> distinct = openids.stream().filter(Objects::nonNull).distinct().toList();
+        if (distinct.isEmpty()) return map;
+        for (KycRecord k : kycRepo.findByOpenidIn(distinct)) {
+            map.merge(k.getOpenid(), toKycView(k), AdminUserService::strongerKyc);
+        }
+        return map;
+    }
+
+    private static KycView toKycView(KycRecord k) {
+        return switch (k.getStatus()) {
+            case PASS -> new KycView("PASS", k.getVerifiedAt());
+            case PENDING -> new KycView("PENDING", null);
+            case REJECT -> new KycView("REJECT", null);
+            // INIT / FAIL / SUPERSEDED 不构成有效实名态
+            default -> new KycView("NONE", null);
+        };
+    }
+
+    private static int kycRank(String s) {
+        return switch (s) {
+            case "PASS" -> 3;
+            case "PENDING" -> 2;
+            case "REJECT" -> 1;
+            default -> 0;
+        };
+    }
+
+    /** 取更强的实名态；两者同为 PASS 时保留较新的 verified_at。 */
+    private static KycView strongerKyc(KycView a, KycView b) {
+        int ra = kycRank(a.status());
+        int rb = kycRank(b.status());
+        if (rb > ra) return b;
+        if (ra > rb) return a;
+        if ("PASS".equals(a.status())) {
+            LocalDateTime va = a.verifiedAt();
+            LocalDateTime vb = b.verifiedAt();
+            if (vb != null && (va == null || vb.isAfter(va))) return b;
+        }
+        return a;
     }
 
     private String joinTags(List<String> tags) {

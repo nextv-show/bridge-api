@@ -4,6 +4,7 @@ import com.sanshuiyuan.admin.api.dto.OrderCancelRequest;
 import com.sanshuiyuan.admin.api.dto.OrderCreateRequest;
 import com.sanshuiyuan.admin.api.dto.OrderShipRequest;
 import com.sanshuiyuan.admin.api.dto.OrderTimelineDto;
+import com.sanshuiyuan.admin.application.AdminUserService;
 import com.sanshuiyuan.admin.application.OrderAdminService;
 import com.sanshuiyuan.admin.domain.DeviceAsset;
 import com.sanshuiyuan.admin.domain.Order;
@@ -41,17 +42,20 @@ public class OrderAdminController {
     private final DeviceAssetRepository deviceAssetRepo;
     private final SkuRepository skuRepo;
     private final OrderAdminService orderService;
+    private final AdminUserService userService;
 
     public OrderAdminController(OrderRepository orderRepo,
                                 UserRepository userRepo,
                                 DeviceAssetRepository deviceAssetRepo,
                                 SkuRepository skuRepo,
-                                OrderAdminService orderService) {
+                                OrderAdminService orderService,
+                                AdminUserService userService) {
         this.orderRepo = orderRepo;
         this.userRepo = userRepo;
         this.deviceAssetRepo = deviceAssetRepo;
         this.skuRepo = skuRepo;
         this.orderService = orderService;
+        this.userService = userService;
     }
 
     @GetMapping
@@ -250,7 +254,8 @@ public class OrderAdminController {
                     dto.put("city", u.getCity());
                     dto.put("channel", u.getChannel());
                     dto.put("tier", u.getTier());
-                    dto.put("kycStatus", u.getKycStatus());
+                    // 实名按权威 kyc_records 实时派生，与用户管理口径一致（不读已废弃 users.kyc_status）。
+                    dto.put("kycStatus", userService.effectiveKycStatus(u.getOpenid()));
                     return dto;
                 })
                 .orElseGet(() -> {
