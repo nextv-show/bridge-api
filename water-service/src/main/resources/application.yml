@@ -28,6 +28,8 @@ h5:
   aes-master-key: ${H5_AES_MASTER_KEY:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}
 s2s:
   token: ${S2S_TOKEN:dev-s2s-shared-token}
+iot-gateway:
+  base-url: ${IOT_GATEWAY_BASE_URL:http://localhost:8089}
 wxpay:
   mp-app-id: ${WXPAY_MP_APP_ID:stub}
   mch-id: ${WXPAY_MCH_ID:stub}
