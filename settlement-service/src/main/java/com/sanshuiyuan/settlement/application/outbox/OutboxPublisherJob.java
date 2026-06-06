@@ -25,12 +25,15 @@ public class OutboxPublisherJob {
     private final SettlementOutboxRepository outboxRepository;
     private final RestTemplate restTemplate;
     private final String waterServiceBaseUrl;
+    private final String s2sToken;
 
     public OutboxPublisherJob(SettlementOutboxRepository outboxRepository,
-                              @Value("${water-service.base-url:http://localhost:8088}") String waterServiceBaseUrl) {
+                              @Value("${water-service.base-url:http://localhost:8088}") String waterServiceBaseUrl,
+                              @Value("${s2s.token:dev-s2s-shared-token}") String s2sToken) {
         this.outboxRepository = outboxRepository;
         this.restTemplate = new RestTemplate();
         this.waterServiceBaseUrl = waterServiceBaseUrl;
+        this.s2sToken = s2sToken;
     }
 
     @Scheduled(fixedDelay = 1000)
@@ -63,9 +66,7 @@ public class OutboxPublisherJob {
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-
-        // TODO Phase C.2: 后续实现 S2S token header，当前 003 只落日志接受任何请求
-        // headers.setBearerAuth(s2sToken);
+        headers.setBearerAuth(s2sToken);
 
         HttpEntity<String> request = new HttpEntity<>(outbox.getPayloadJson(), headers);
 
