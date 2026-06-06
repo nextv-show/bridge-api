@@ -57,9 +57,9 @@ public class TopupUseCase {
 
         log.info("充值下单成功 topupId={} userId={} amount={} outTradeNo={}",
                 topup.getId(), userId, amountCents, outTradeNo);
-        return new TopupResult(topup.getId(), prepay);
+        return new TopupResult(topup.getId(), outTradeNo, prepay);
     }
 
-    /** 充值下单结果：充值单 id + 前端拉起微信支付所需参数。 */
-    public record TopupResult(Long topupId, WxPayClient.PrepayResult wxPrepayParams) {}
+    /** 充值下单结果：充值单 id + 商户订单号 + 前端拉起微信支付所需参数。 */
+    public record TopupResult(Long topupId, String outTradeNo, WxPayClient.PrepayResult wxPrepayParams) {}
 }
