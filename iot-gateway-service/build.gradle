@@ -1,0 +1,7 @@
+// iot-gateway-service — IoT 网关：MQTT 接入/设备认证/遥测解析（003 Phase A 脚手架）。公共依赖由 root build.gradle 的 subprojects{} 注入。
+bootJar { duplicatesStrategy = DuplicatesStrategy.EXCLUDE }
+dependencies {
+    implementation 'org.flywaydb:flyway-mysql'
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0'
+    implementation 'org.springframework.integration:spring-integration-mqtt'   // MQTT 集成
+}
