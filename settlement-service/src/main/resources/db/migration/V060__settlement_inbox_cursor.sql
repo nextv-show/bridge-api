@@ -1,0 +1,7 @@
+CREATE TABLE settlement_inbox_cursor (
+  id         BIGINT PRIMARY KEY AUTO_INCREMENT,
+  name       VARCHAR(64) NOT NULL UNIQUE,
+  last_id    BIGINT NOT NULL DEFAULT 0,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+INSERT INTO settlement_inbox_cursor (name) VALUES ('water_bill');
