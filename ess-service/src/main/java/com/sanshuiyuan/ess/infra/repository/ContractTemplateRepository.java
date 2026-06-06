@@ -15,4 +15,6 @@ public interface ContractTemplateRepository extends JpaRepository<ContractTempla
     List<ContractTemplate> findByTemplateCodeOrderByVersionDesc(String templateCode);
 
     List<ContractTemplate> findByTemplateType(ContractTemplate.TemplateType templateType);
+
+    List<ContractTemplate> findByTemplateTypeAndIsDeprecatedFalse(ContractTemplate.TemplateType templateType);
 }

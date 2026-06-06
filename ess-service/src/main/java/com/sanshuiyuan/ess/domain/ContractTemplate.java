@@ -20,7 +20,9 @@ public class ContractTemplate {
         /** 主合同 */
         MAIN,
         /** 附件 */
-        ATTACHMENT
+        ATTACHMENT,
+        /** 协议/条款/政策 */
+        AGREEMENT
     }
 
     @Id
