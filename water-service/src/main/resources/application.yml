@@ -4,7 +4,7 @@ spring:
   application:
     name: water-service
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/h5_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai}
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/water_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai}
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:root}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -28,3 +28,14 @@ h5:
   aes-master-key: ${H5_AES_MASTER_KEY:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}
 s2s:
   token: ${S2S_TOKEN:dev-s2s-shared-token}
+wxpay:
+  mp-app-id: ${WXPAY_MP_APP_ID:stub}
+  mch-id: ${WXPAY_MCH_ID:stub}
+  api-v3-key: ${WXPAY_API_V3_KEY:stub}
+  private-key-path: ${WXPAY_PRIVATE_KEY_PATH:}
+  merchant-serial-number: ${WXPAY_MERCHANT_SERIAL_NUMBER:}
+  notify-url: ${WXPAY_NOTIFY_URL:}
+  public-key-path: ${WXPAY_PUBLIC_KEY_PATH:}
+  public-key-id: ${WXPAY_PUBLIC_KEY_ID:}
+wallet:
+  min-topup-cents: ${WALLET_MIN_TOPUP_CENTS:500}

@@ -4,4 +4,5 @@ dependencies {
     implementation 'org.flywaydb:flyway-mysql'
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0'
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'   // 钱包余额缓存
+    implementation 'com.github.wechatpay-apiv3:wechatpay-java:0.2.14'           // 微信支付 V3（充值）
 }

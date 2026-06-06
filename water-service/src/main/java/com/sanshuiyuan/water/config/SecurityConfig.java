@@ -36,6 +36,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers("/api/w/public/**").permitAll()
+                .requestMatchers("/api/w/wallet/topup/callback").permitAll()
                 .requestMatchers("/actuator/**", "/api-docs/**", "/swagger-ui/**").permitAll()
                 .anyRequest().authenticated())
             .addFilterBefore(new H5JwtFilter(jwtService), UsernamePasswordAuthenticationFilter.class)
