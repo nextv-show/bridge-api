@@ -10,4 +10,5 @@ import java.util.List;
 public interface WithdrawalSplitRepository extends JpaRepository<WithdrawalSplit, Long> {
     List<WithdrawalSplit> findByOrderId(Long orderId);
     List<WithdrawalSplit> findByStatusAndNextRunAtBefore(SplitStatus status, LocalDateTime before);
+    List<WithdrawalSplit> findByExternalId(String externalId);
 }
