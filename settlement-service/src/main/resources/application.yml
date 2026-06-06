@@ -27,6 +27,8 @@ h5:
   jwt-secret: ${H5_JWT_SECRET:dev-h5-jwt-secret-please-override-in-prod-0001}
 s2s:
   token: ${S2S_TOKEN:dev-s2s-shared-token}
+water-service:
+  base-url: ${WATER_SERVICE_BASE_URL:http://localhost:8088}
 wxpay:
   mp-app-id: ${WXPAY_MP_APP_ID:stub}
   mch-id: ${WXPAY_MCH_ID:stub}
