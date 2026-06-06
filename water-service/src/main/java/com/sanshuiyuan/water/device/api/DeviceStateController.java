@@ -4,6 +4,7 @@ import com.sanshuiyuan.water.common.ApiResponse;
 import com.sanshuiyuan.water.common.H5UserResolver;
 import com.sanshuiyuan.water.device.domain.DevicePermission;
 import com.sanshuiyuan.water.device.infra.DevicePermissionRepository;
+import com.sanshuiyuan.water.device.infra.IotDeviceSummaryClient;
 import com.sanshuiyuan.water.session.application.PriceTierGateway;
 import com.sanshuiyuan.water.wallet.infra.ConsumerWalletRepository;
 import org.slf4j.Logger;
@@ -31,15 +32,18 @@ public class DeviceStateController {
     private final PriceTierGateway priceTierGateway;
     private final ConsumerWalletRepository walletRepo;
     private final H5UserResolver userResolver;
+    private final IotDeviceSummaryClient iotSummaryClient;
     private final long minStartAmountCents;
 
     public DeviceStateController(DevicePermissionRepository permRepo, PriceTierGateway priceTierGateway,
                                 ConsumerWalletRepository walletRepo, H5UserResolver userResolver,
+                                IotDeviceSummaryClient iotSummaryClient,
                                 @Value("${water.min-start-amount-cents:50}") long minStartAmountCents) {
         this.permRepo = permRepo;
         this.priceTierGateway = priceTierGateway;
         this.walletRepo = walletRepo;
         this.userResolver = userResolver;
+        this.iotSummaryClient = iotSummaryClient;
         this.minStartAmountCents = minStartAmountCents;
     }
 
@@ -68,6 +72,13 @@ public class DeviceStateController {
         data.put("price_per_liter_cents", price);
         data.put("current_balance_cents", balance);
         return ApiResponse.ok(data);
+    }
+
+    /** C 端设备监控汇总。委托 iot-gateway 经 S2S 聚合遥测（在线/TDS/流量/滤芯/告警）。V1 不做资产归属校验。 */
+    @GetMapping("/{sn}/summary")
+    public Map<String, Object> getDeviceSummary(@PathVariable String sn) {
+        Map<String, Object> summary = iotSummaryClient.getSummary(sn);
+        return ApiResponse.ok(summary);
     }
 
     /** 综合判断出水阻塞原因：未安装/锁定/离线/余额不足，均通过返回 null。 */
