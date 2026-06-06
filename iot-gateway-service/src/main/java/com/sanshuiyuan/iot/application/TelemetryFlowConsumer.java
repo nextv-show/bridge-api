@@ -20,10 +20,13 @@ public class TelemetryFlowConsumer {
 
     private final TelemetryFlowRepository repo;
     private final ObjectMapper objectMapper;
+    private final WaterServiceClient waterServiceClient;
 
-    public TelemetryFlowConsumer(TelemetryFlowRepository repo, ObjectMapper objectMapper) {
+    public TelemetryFlowConsumer(TelemetryFlowRepository repo, ObjectMapper objectMapper,
+                                  WaterServiceClient waterServiceClient) {
         this.repo = repo;
         this.objectMapper = objectMapper;
+        this.waterServiceClient = waterServiceClient;
     }
 
     public void onFlow(String sn, byte[] payload) {
@@ -36,6 +39,11 @@ public class TelemetryFlowConsumer {
 
             var sample = new TelemetrySampleFlow(sn, sessionId, litersMilli, deltaMilli, LocalDateTime.now());
             repo.save(sample);
+
+            // Push flow tick to water-service for WebSocket broadcast
+            if (sessionId != null) {
+                waterServiceClient.pushFlowTick(sessionId, litersMilli, deltaMilli);
+            }
         } catch (Exception e) {
             log.error("[MQTT] Failed to parse flow telemetry from sn={}: {}", sn, e.getMessage());
         }

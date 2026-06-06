@@ -25,16 +25,19 @@ public class MqttSubscriberService implements InitializingBean, DisposableBean {
     private final TelemetryFilterConsumer filterConsumer;
     private final DeviceStatusConsumer statusConsumer;
     private final AlarmConsumer alarmConsumer;
+    private final StopEventConsumer stopEventConsumer;
 
     public MqttSubscriberService(Mqtt5AsyncClient mqttClient, TelemetryFlowConsumer flowConsumer,
                                  TelemetryTdsConsumer tdsConsumer, TelemetryFilterConsumer filterConsumer,
-                                 DeviceStatusConsumer statusConsumer, AlarmConsumer alarmConsumer) {
+                                 DeviceStatusConsumer statusConsumer, AlarmConsumer alarmConsumer,
+                                 StopEventConsumer stopEventConsumer) {
         this.mqttClient = mqttClient;
         this.flowConsumer = flowConsumer;
         this.tdsConsumer = tdsConsumer;
         this.filterConsumer = filterConsumer;
         this.statusConsumer = statusConsumer;
         this.alarmConsumer = alarmConsumer;
+        this.stopEventConsumer = stopEventConsumer;
     }
 
     @Override
@@ -58,6 +61,10 @@ public class MqttSubscriberService implements InitializingBean, DisposableBean {
         subscribe("device/+/event/alarm", (topic, payload) -> {
             String sn = extractSn(topic);
             alarmConsumer.onAlarm(sn, payload);
+        });
+        subscribe("device/+/event/stop", (topic, payload) -> {
+            String sn = extractSn(topic);
+            stopEventConsumer.onStop(sn, payload);
         });
         log.info("[MQTT] Subscribed to device topics");
     }

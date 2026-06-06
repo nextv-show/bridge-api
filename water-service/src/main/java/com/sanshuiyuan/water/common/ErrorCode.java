@@ -13,6 +13,14 @@ public enum ErrorCode {
     WALLET_NOT_FOUND(HttpStatus.NOT_FOUND, "WALLET_NOT_FOUND", "钱包不存在"),
     TOPUP_MIN_AMOUNT(HttpStatus.UNPROCESSABLE_ENTITY, "TOPUP_MIN_AMOUNT", "充值金额低于最低限额"),
     PAY_PREPAY_FAILED(HttpStatus.BAD_GATEWAY, "PAY_PREPAY_FAILED", "发起微信支付失败"),
+    DEVICE_LOCKED(HttpStatus.FORBIDDEN, "DEVICE_LOCKED", "设备已锁定，无法出水"),
+    DEVICE_IN_USE(HttpStatus.CONFLICT, "DEVICE_IN_USE", "设备正在使用中"),
+    DEVICE_OFFLINE(HttpStatus.SERVICE_UNAVAILABLE, "DEVICE_OFFLINE", "设备离线"),
+    LOW_BALANCE(HttpStatus.UNPROCESSABLE_ENTITY, "LOW_BALANCE", "余额不足"),
+    SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "SESSION_NOT_FOUND", "取水会话不存在"),
+    SESSION_NOT_ACTIVE(HttpStatus.CONFLICT, "SESSION_NOT_ACTIVE", "会话已结束"),
+    BILL_NOT_FOUND(HttpStatus.NOT_FOUND, "BILL_NOT_FOUND", "账单不存在"),
+    IOT_COMMAND_FAILED(HttpStatus.GATEWAY_TIMEOUT, "IOT_COMMAND_FAILED", "设备命令下发失败"),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "服务器内部错误");
 
     private final HttpStatus httpStatus;

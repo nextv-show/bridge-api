@@ -41,3 +41,6 @@ wxpay:
   public-key-id: ${WXPAY_PUBLIC_KEY_ID:}
 wallet:
   min-topup-cents: ${WALLET_MIN_TOPUP_CENTS:500}
+water:
+  min-start-amount-cents: ${WATER_MIN_START_AMOUNT_CENTS:50}
+  session-timeout-minutes: ${WATER_SESSION_TIMEOUT_MINUTES:10}
