@@ -152,6 +152,13 @@ jobs:
               exit 1
             fi
 
+            # 保留最近 6 个构建（含当前 active），清理其余历史 jar 释放磁盘
+            ACTIVE_JAR="$(readlink -f "$APP_DIR/app.jar" 2>/dev/null || true)"
+            (ls -1t "$REL_DIR"/*.jar 2>/dev/null || true) | tail -n +7 | while read -r OLD_JAR; do
+              [ "$OLD_JAR" = "$ACTIVE_JAR" ] && continue
+              sudo rm -f "$OLD_JAR"
+            done
+
             echo "[deploy] success: $SERVICE running and UP"
 
       - name: Activate & Restart bridge-cend-service (Port 8083)
@@ -272,6 +279,13 @@ jobs:
               exit 1
             fi
 
+            # 保留最近 6 个构建（含当前 active），清理其余历史 jar 释放磁盘
+            ACTIVE_JAR="$(readlink -f "$APP_DIR/app.jar" 2>/dev/null || true)"
+            (ls -1t "$REL_DIR"/*.jar 2>/dev/null || true) | tail -n +7 | while read -r OLD_JAR; do
+              [ "$OLD_JAR" = "$ACTIVE_JAR" ] && continue
+              sudo rm -f "$OLD_JAR"
+            done
+
             echo "[deploy] success: $SERVICE running and UP"
 
       - name: Activate & Restart bridge-user-service (Port 8081)
@@ -373,6 +387,13 @@ jobs:
               fi
               exit 1
             fi
+
+            # 保留最近 6 个构建（含当前 active），清理其余历史 jar 释放磁盘
+            ACTIVE_JAR="$(readlink -f "$APP_DIR/app.jar" 2>/dev/null || true)"
+            (ls -1t "$REL_DIR"/*.jar 2>/dev/null || true) | tail -n +7 | while read -r OLD_JAR; do
+              [ "$OLD_JAR" = "$ACTIVE_JAR" ] && continue
+              sudo rm -f "$OLD_JAR"
+            done
 
             echo "[deploy] success: $SERVICE running and UP"
 
@@ -484,6 +505,13 @@ jobs:
               exit 1
             fi
 
+            # 保留最近 6 个构建（含当前 active），清理其余历史 jar 释放磁盘
+            ACTIVE_JAR="$(readlink -f "$APP_DIR/app.jar" 2>/dev/null || true)"
+            (ls -1t "$REL_DIR"/*.jar 2>/dev/null || true) | tail -n +7 | while read -r OLD_JAR; do
+              [ "$OLD_JAR" = "$ACTIVE_JAR" ] && continue
+              sudo rm -f "$OLD_JAR"
+            done
+
             echo "[deploy] success: $SERVICE running and UP"
 
       # ===== 统一部署：matching / logistics / ess 纳入同一条 CD（systemd） =====
@@ -580,6 +608,13 @@ jobs:
               fi
               exit 1
             fi
+
+            # 保留最近 6 个构建（含当前 active），清理其余历史 jar 释放磁盘
+            ACTIVE_JAR="$(readlink -f "$APP_DIR/app.jar" 2>/dev/null || true)"
+            (ls -1t "$REL_DIR"/*.jar 2>/dev/null || true) | tail -n +7 | while read -r OLD_JAR; do
+              [ "$OLD_JAR" = "$ACTIVE_JAR" ] && continue
+              sudo rm -f "$OLD_JAR"
+            done
 
             echo "[deploy] success: $SERVICE running and UP"
 
@@ -689,6 +724,13 @@ jobs:
               exit 1
             fi
 
+            # 保留最近 6 个构建（含当前 active），清理其余历史 jar 释放磁盘
+            ACTIVE_JAR="$(readlink -f "$APP_DIR/app.jar" 2>/dev/null || true)"
+            (ls -1t "$REL_DIR"/*.jar 2>/dev/null || true) | tail -n +7 | while read -r OLD_JAR; do
+              [ "$OLD_JAR" = "$ACTIVE_JAR" ] && continue
+              sudo rm -f "$OLD_JAR"
+            done
+
             echo "[deploy] success: $SERVICE running and UP"
 
       - name: Activate & Restart bridge-ess-service (Port 8085)
@@ -795,5 +837,12 @@ jobs:
 
             # 清理临时 staging 目录（最后一个部署步骤）
             rm -rf /tmp/staging
+
+            # 保留最近 6 个构建（含当前 active），清理其余历史 jar 释放磁盘
+            ACTIVE_JAR="$(readlink -f "$APP_DIR/app.jar" 2>/dev/null || true)"
+            (ls -1t "$REL_DIR"/*.jar 2>/dev/null || true) | tail -n +7 | while read -r OLD_JAR; do
+              [ "$OLD_JAR" = "$ACTIVE_JAR" ] && continue
+              sudo rm -f "$OLD_JAR"
+            done
 
             echo "[deploy] success: $SERVICE running and UP"
