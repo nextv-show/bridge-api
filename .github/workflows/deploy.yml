@@ -29,7 +29,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v3
 
       - name: Build Services (skip tests, CI has executed)
-        run: ./gradlew :cend-service:assemble :admin-service:assemble :user-service:assemble :asset-service:assemble :matching-service:assemble :logistics-service:assemble :ess-service:assemble -x test
+        run: ./gradlew :cend-service:assemble :admin-service:assemble :user-service:assemble :asset-service:assemble :matching-service:assemble :logistics-service:assemble :ess-service:assemble :settlement-service:assemble -x test
 
       - name: Stage jars with stable names
         run: |
@@ -41,6 +41,7 @@ jobs:
           find matching-service/build/libs/ -name "matching-service-*.jar" ! -name "*-plain.jar" -exec cp {} staging/matching-service.jar \;
           find logistics-service/build/libs/ -name "logistics-service-*.jar" ! -name "*-plain.jar" -exec cp {} staging/logistics-service.jar \;
           find ess-service/build/libs/ -name "ess-service-*.jar" ! -name "*-plain.jar" -exec cp {} staging/ess-service.jar \;
+          find settlement-service/build/libs/ -name "settlement-service-*.jar" ! -name "*-plain.jar" -exec cp {} staging/settlement-service.jar \;
 
       - name: SCP jars to server
         uses: appleboy/scp-action@v0.1.7
@@ -49,7 +50,7 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
-          source: "staging/cend-service.jar,staging/admin-service.jar,staging/user-service.jar,staging/asset-service.jar,staging/matching-service.jar,staging/logistics-service.jar,staging/ess-service.jar"
+          source: "staging/cend-service.jar,staging/admin-service.jar,staging/user-service.jar,staging/asset-service.jar,staging/matching-service.jar,staging/logistics-service.jar,staging/ess-service.jar,staging/settlement-service.jar"
           target: "/tmp/"
 
       # NOTE: admin-service 先于 cend-service 部署 —— admin 的 Flyway 迁移（如 V078 给
@@ -717,6 +718,111 @@ jobs:
             if [ "$ok" -ne 1 ]; then
               echo "[deploy] health check failed, rollback!" >&2
               sudo journalctl -u "$SERVICE" -n 50 --no-pager || true
+              if [ -n "$PREV_JAR" ] && [ -f "$PREV_JAR" ]; then
+                sudo ln -sfn "$PREV_JAR" "$APP_DIR/app.jar"
+                sudo systemctl restart "$SERVICE"
+              fi
+              exit 1
+            fi
+
+            # 保留最近 6 个构建（含当前 active），清理其余历史 jar 释放磁盘
+            ACTIVE_JAR="$(readlink -f "$APP_DIR/app.jar" 2>/dev/null || true)"
+            (ls -1t "$REL_DIR"/*.jar 2>/dev/null || true) | tail -n +7 | while read -r OLD_JAR; do
+              [ "$OLD_JAR" = "$ACTIVE_JAR" ] && continue
+              sudo rm -f "$OLD_JAR"
+            done
+
+            echo "[deploy] success: $SERVICE running and UP"
+
+      - name: Activate & Restart bridge-settlement-service (Port 8091)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          script_stop: true
+          command_timeout: 10m
+          script: |
+            set -euo pipefail
+
+            APP_DIR="/opt/bridge-settlement-service"
+            REL_DIR="$APP_DIR/releases"
+            INCOMING="/tmp/staging/settlement-service.jar"
+            ENV_FILE="$APP_DIR/app.env"
+            SERVICE="bridge-settlement-service"
+            NEW_JAR="app-${{ github.sha }}.jar"
+
+            sudo mkdir -p "$APP_DIR" "$REL_DIR"
+            if [ ! -f "$ENV_FILE" ]; then
+              echo "[deploy] Creating $ENV_FILE from skeleton"
+              # 注意：H5_JWT_SECRET / S2S_TOKEN / WXPAY_* / WATER_SERVICE_BASE_URL 须由运维按生产值补齐；
+              #       以下骨架仅含启动所需的 DB 配置，其余项走 application.yml 的 dev 默认值。
+              sudo tee "$ENV_FILE" > /dev/null <<'ENVEOF'
+            SERVER_PORT=8091
+            SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3306/h5_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+            DB_USERNAME=root
+            DB_PASSWORD=Sanshuiyuan2026!
+            ENVEOF
+            fi
+
+            SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
+            CURRENT_EXEC="$(grep -E '^ExecStart=' "$SERVICE_FILE" 2>/dev/null || true)"
+            if [ ! -f "$SERVICE_FILE" ] || ! echo "$CURRENT_EXEC" | grep -q "$APP_DIR/app.jar"; then
+              echo "[deploy] (re)writing systemd unit: $SERVICE"
+              sudo tee "$SERVICE_FILE" > /dev/null <<SYSEOF
+            [Unit]
+            Description=三水元 Settlement Service (8091)
+            After=network.target
+
+            [Service]
+            Type=simple
+            User=root
+            WorkingDirectory=$APP_DIR
+            EnvironmentFile=$ENV_FILE
+            ExecStart=/usr/bin/java -jar $APP_DIR/app.jar
+            Restart=always
+            RestartSec=10
+
+            [Install]
+            WantedBy=multi-user.target
+            SYSEOF
+              sudo systemctl daemon-reload
+              sudo systemctl enable "$SERVICE"
+            fi
+
+            if [ ! -f "$INCOMING" ]; then
+              echo "[deploy] FATAL: jar not found at $INCOMING" >&2
+              exit 1
+            fi
+
+            PREV_JAR=""
+            if [ -L "$APP_DIR/app.jar" ]; then
+              PREV_JAR="$(readlink "$APP_DIR/app.jar" || true)"
+            fi
+
+            sudo mv -f "$INCOMING" "$REL_DIR/$NEW_JAR"
+            sudo ln -sfn "$REL_DIR/$NEW_JAR" "$APP_DIR/app.jar"
+
+            echo "[deploy] restarting service: $SERVICE"
+            sudo systemctl restart "$SERVICE"
+
+            echo "[deploy] wait health check (max 90s — 首次冷启含 Flyway)"
+            ok=0
+            i=0
+            while [ "$i" -lt 45 ]; do
+              i=$((i + 1))
+              sleep 2
+              status=$(curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8091/actuator/health || echo "000")
+              if [ "$status" = "200" ]; then
+                ok=1
+                break
+              fi
+            done
+
+            if [ "$ok" -ne 1 ]; then
+              echo "[deploy] health check failed, rollback!" >&2
+              sudo journalctl -u "$SERVICE" -n 80 --no-pager || true
               if [ -n "$PREV_JAR" ] && [ -f "$PREV_JAR" ]; then
                 sudo ln -sfn "$PREV_JAR" "$APP_DIR/app.jar"
                 sudo systemctl restart "$SERVICE"
