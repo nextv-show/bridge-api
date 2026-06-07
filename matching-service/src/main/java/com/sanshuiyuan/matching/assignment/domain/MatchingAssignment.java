@@ -11,7 +11,7 @@ import org.hibernate.generator.EventType;
 
 import java.time.LocalDateTime;
 
-/** 接单绑定记录（matching_assignments，落 h5_db）。 */
+/** 接单绑定记录（matching_assignments，落 core_db）。 */
 @Entity
 @Table(name = "matching_assignments")
 public class MatchingAssignment {

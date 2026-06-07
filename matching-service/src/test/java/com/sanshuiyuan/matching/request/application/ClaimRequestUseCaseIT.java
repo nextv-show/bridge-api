@@ -40,7 +40,7 @@ class ClaimRequestUseCaseIT {
 
     @SuppressWarnings("resource")
     static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0")
-            .withDatabaseName("h5_db").withUsername("test").withPassword("test").withReuse(true);
+            .withDatabaseName("core_db").withUsername("test").withPassword("test").withReuse(true);
 
     @DynamicPropertySource
     static void props(DynamicPropertyRegistry r) {

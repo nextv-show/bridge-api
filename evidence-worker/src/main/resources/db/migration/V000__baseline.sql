@@ -1,0 +1,3 @@
+-- baseline
+-- evidence-worker 共享 water_db，表结构（water_bills / evidence_outbox）由 water-service Flyway 维护。
+-- 本服务仅持有独立的 evidence_flyway_schema_history 历史表，此处为占位 baseline。

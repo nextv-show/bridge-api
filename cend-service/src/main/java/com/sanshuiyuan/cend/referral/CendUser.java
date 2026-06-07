@@ -12,10 +12,10 @@ import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 
 /**
- * H5 用户身份记录（cend-service 自有 {@code h5_db.h5_users}，按微信 openid 唯一）。
+ * H5 用户身份记录（cend-service 自有 {@code core_db.h5_users}，按微信 openid 唯一）。
  *
  * <p>背景：cend-service 以微信 openid 自有认证，canonical {@code users} 表归未部署的 user-service（见 008a T8a.1）。
- * 为使 H5 推广关系链（009/011）在「仅部署 cend-service」的真实生产环境可落地，cend-service 在 {@code h5_db} 维护
+ * 为使 H5 推广关系链（009/011）在「仅部署 cend-service」的真实生产环境可落地，cend-service 在 {@code core_db} 维护
  * 自有的轻量身份表：自增 {@code id} 即 ref_id 编码的「H5 user_id」，承载 L1/L2 关系链。
  *
  * <p><b>合规铁律（L1+L2 两级死锁）</b>：

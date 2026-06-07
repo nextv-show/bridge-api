@@ -13,7 +13,7 @@ import jakarta.persistence.Version;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/** 撮合需求单（matching_requests，落 h5_db）。列与 V010 完全对齐（ddl-auto=validate）。 */
+/** 撮合需求单（matching_requests，落 core_db）。列与 V010 完全对齐（ddl-auto=validate）。 */
 @Entity
 @Table(name = "matching_requests")
 public class MatchingRequest {

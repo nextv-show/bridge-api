@@ -11,7 +11,7 @@ import org.hibernate.generator.EventType;
 
 import java.time.LocalDateTime;
 
-/** 物流状态流水（logistics_events，落 h5_db）。external_event_id 唯一索引兜底幂等。 */
+/** 物流状态流水（logistics_events，落 core_db）。external_event_id 唯一索引兜底幂等。 */
 @Entity
 @Table(name = "logistics_events")
 public class LogisticsEvent {

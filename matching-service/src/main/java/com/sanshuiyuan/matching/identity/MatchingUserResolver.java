@@ -14,7 +14,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * 把 JWT subject（openid/unionid）解析为 h5_db.users.id（= device_assets.user_id）。
+ * 把 JWT subject（openid/unionid）解析为 core_db.users.id（= device_assets.user_id）。
  * 复刻 h5-service AdminOrderProjector.resolveUserId：select-then-insert，应用层去重。
  * Owner 门控：device_assets 中存在 stage=PENDING_MATCH 的资产。device_assets 为 admin 真表，只读。
  */

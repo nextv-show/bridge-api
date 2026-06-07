@@ -1,0 +1,8 @@
+// settlement-service — 结算引擎：资金分账/所有权人钱包/提现代付/对账（004 Phase A 脚手架）。公共依赖由 root build.gradle 的 subprojects{} 注入。
+bootJar { duplicatesStrategy = DuplicatesStrategy.EXCLUDE }
+dependencies {
+    implementation 'org.flywaydb:flyway-mysql'
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0'
+    implementation 'com.github.wechatpay-apiv3:wechatpay-java:0.2.14'    // 微信代付
+    implementation 'com.bucket4j:bucket4j_jdk17-core:8.11.0'              // 提现限频（8.10.x 无 jdk17-core 产物，取最近可用版本）
+}

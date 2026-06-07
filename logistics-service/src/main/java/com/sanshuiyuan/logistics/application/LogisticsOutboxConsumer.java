@@ -17,7 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Map;
 
 /**
- * D.2 Outbox 消费者：每 5s 扫描 matching 库的 logistics_outbox（同 h5_db），
+ * D.2 Outbox 消费者：每 5s 扫描 matching 库的 logistics_outbox（同 core_db），
  * consumed_at IS NULL 的记录 → 创建 PENDING_SHIP 工单 → 标记 consumed_at。
  */
 @Component

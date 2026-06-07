@@ -12,7 +12,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * T8a.6（cend-service 侧）：V018 迁移在 cend-service 实际连接库（h5_db）落库 ——
+ * T8a.6（cend-service 侧）：V018 迁移在 cend-service 实际连接库（core_db）落库 ——
  * h5_orders 新增快照列存在，且关系链快照列可写可读（ddl-auto=validate 同时校验实体↔列一致）。
  */
 @Tag("integration")

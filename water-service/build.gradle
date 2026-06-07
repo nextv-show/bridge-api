@@ -1,0 +1,9 @@
+// water-service — 用水服务：钱包/充值/出水/流水（003 Phase A 脚手架）。公共依赖由 root build.gradle 的 subprojects{} 注入。
+bootJar { duplicatesStrategy = DuplicatesStrategy.EXCLUDE }
+dependencies {
+    implementation 'org.flywaydb:flyway-mysql'
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0'
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'   // 钱包余额缓存
+    implementation 'org.springframework.boot:spring-boot-starter-websocket'    // 出水实时推送
+    implementation 'com.github.wechatpay-apiv3:wechatpay-java:0.2.14'           // 微信支付 V3（充值）
+}

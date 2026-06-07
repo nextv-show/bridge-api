@@ -1,0 +1,20 @@
+CREATE TABLE settlement_entries (
+  id                  BIGINT PRIMARY KEY AUTO_INCREMENT,
+  bill_id             BIGINT NOT NULL,
+  sn                  VARCHAR(64) NOT NULL,
+  beneficiary_type    ENUM('OWNER','PROMOTER','PLATFORM') NOT NULL,
+  beneficiary_user_id BIGINT,
+  amount_cents        BIGINT NOT NULL,
+  owner_bp            INT NOT NULL,
+  promoter_bp         INT NOT NULL DEFAULT 0,
+  platform_bp         INT NOT NULL,
+  split_reason        ENUM('NORMAL','STAGE_STEP','BLOCKED_PRE_INSTALL') NOT NULL DEFAULT 'NORMAL',
+  stage_at_post       ENUM('PENDING_MATCH','PENDING_ACTIVATE','STAGE_1','STAGE_2') NOT NULL,
+  posted_at           DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  UNIQUE KEY uk_bill_beneficiary (bill_id, beneficiary_type, beneficiary_user_id),
+  KEY idx_sn_time (sn, posted_at),
+  KEY idx_bill (bill_id),
+  KEY idx_beneficiary (beneficiary_type, beneficiary_user_id, posted_at),
+  CONSTRAINT chk_amount_nonneg CHECK (amount_cents >= 0),
+  CONSTRAINT chk_bp_sum CHECK (owner_bp + promoter_bp + platform_bp = 10000)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -7,7 +7,7 @@
 --    matching_requests / matching_assignments）；③ 在事务内执行，校验通过再 COMMIT。
 -- ⚠️ 顺序：先跑本脚本 → 再部署 admin-service（触发 V080 加唯一键）。
 --
--- 库：h5_db。保留策略：每个重复 openid 保留 MIN(id)，其余行的引用重指到保留 id 后删除。
+-- 库：core_db。保留策略：每个重复 openid 保留 MIN(id)，其余行的引用重指到保留 id 后删除。
 -- 引用 users.id（user_id 系列）的表（截至 002 Phase B）：
 --   orders.user_id、device_assets.user_id、
 --   matching_requests.user_id、matching_requests.locked_by_user_id、

@@ -11,7 +11,7 @@ import org.hibernate.generator.EventType;
 
 import java.time.LocalDateTime;
 
-/** 物流 outbox（logistics_outbox，落 h5_db）。 */
+/** 物流 outbox（logistics_outbox，落 core_db）。 */
 @Entity
 @Table(name = "logistics_outbox")
 public class LogisticsOutboxEntry {
