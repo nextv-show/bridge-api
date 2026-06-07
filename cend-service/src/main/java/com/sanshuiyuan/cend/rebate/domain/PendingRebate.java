@@ -12,7 +12,7 @@ import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 
 /**
- * 冷静期返利冻结记录（{@code h5_db.pending_rebates}，011-rebate-freeze）。
+ * 冷静期返利冻结记录（{@code core_db.pending_rebates}，011-rebate-freeze）。
  *
  * <p>支付成功后按订单快照的 L1/L2 受益人各冻结一条；冷静期满解冻为已确认，退款则取消。
  *

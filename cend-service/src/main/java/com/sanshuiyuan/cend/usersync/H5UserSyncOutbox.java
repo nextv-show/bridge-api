@@ -12,7 +12,7 @@ import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 
 /**
- * H5/小程序登录并号（sync-h5）失败兜底记录（cend-service 自有 {@code h5_db.h5_user_sync_outbox}）。
+ * H5/小程序登录并号（sync-h5）失败兜底记录（cend-service 自有 {@code core_db.h5_user_sync_outbox}）。
  *
  * <p>仅在 {@code userServiceClient.syncH5} 降级失败时入队；{@link ReconcileH5UserSyncJob} 周期重试至成功。
  * 按 {@code canonicalId} 唯一，重复登录失败只刷新同一行（不重复入队）。

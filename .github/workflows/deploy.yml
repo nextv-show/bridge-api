@@ -85,7 +85,7 @@ jobs:
               echo "[deploy] Creating $ENV_FILE from skeleton"
               sudo tee "$ENV_FILE" > /dev/null <<'ENVEOF'
             SERVER_PORT=8084
-            SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3306/h5_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+            SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3306/core_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
             DB_USERNAME=root
             DB_PASSWORD=Sanshuiyuan2026!
             ADMIN_JWT_SECRET=sanshuiyuan-admin-jwt-prod-key-2026-please-change-in-production
@@ -207,7 +207,7 @@ jobs:
               echo "[deploy] Creating $ENV_FILE from skeleton"
               sudo tee "$ENV_FILE" > /dev/null <<'ENVEOF'
             SERVER_PORT=8083
-            SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3306/h5_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+            SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3306/core_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
             DB_USERNAME=root
             DB_PASSWORD=Sanshuiyuan2026!
             REDIS_HOST=localhost
@@ -544,7 +544,7 @@ jobs:
               echo "[deploy] Creating $ENV_FILE from skeleton"
               sudo tee "$ENV_FILE" > /dev/null <<'ENVEOF'
             SERVER_PORT=8087
-            SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3306/h5_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+            SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3306/core_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
             DB_USERNAME=root
             DB_PASSWORD=Sanshuiyuan2026!
             ENVEOF
@@ -657,7 +657,7 @@ jobs:
               echo "[deploy] Creating $ENV_FILE from skeleton"
               sudo tee "$ENV_FILE" > /dev/null <<'ENVEOF'
             SERVER_PORT=8086
-            SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3306/h5_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+            SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3306/core_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
             DB_USERNAME=root
             DB_PASSWORD=Sanshuiyuan2026!
             ENVEOF
@@ -763,7 +763,7 @@ jobs:
               #       以下骨架仅含启动所需的 DB 配置，其余项走 application.yml 的 dev 默认值。
               sudo tee "$ENV_FILE" > /dev/null <<'ENVEOF'
             SERVER_PORT=8091
-            SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3306/h5_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+            SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3306/core_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
             DB_USERNAME=root
             DB_PASSWORD=Sanshuiyuan2026!
             ENVEOF
@@ -867,7 +867,7 @@ jobs:
               # 注意：设备鉴权密钥 / H5_JWT_SECRET / S2S_TOKEN 等须由运维按生产值补齐；以下仅含启动所需 DB。
               sudo tee "$ENV_FILE" > /dev/null <<'ENVEOF'
             SERVER_PORT=8089
-            SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3306/h5_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+            SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3306/core_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
             DB_USERNAME=root
             DB_PASSWORD=Sanshuiyuan2026!
             ENVEOF

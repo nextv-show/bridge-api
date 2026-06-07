@@ -4,7 +4,7 @@ import com.sanshuiyuan.settlement.domain.DeviceStage;
 import jakarta.persistence.*;
 
 /**
- * h5_db.device_assets 读/写实体（含 V059 新列 purchase_price_cents / promoter_user_id）。
+ * core_db.device_assets 读/写实体（含 V059 新列 purchase_price_cents / promoter_user_id）。
  *
  * <p>注意：真实 device_assets 表（admin V074 / asset V003 + settlement V059）没有 version 列，
  * 因此本实体不映射乐观锁 version；并发安全由结算时的 {@code findWithLockBySn}（SELECT ... FOR UPDATE）

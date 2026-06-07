@@ -2,7 +2,7 @@ package com.sanshuiyuan.settlement.infra.user;
 
 import jakarta.persistence.*;
 
-/** h5_db.users 只读实体：提现/合规校验需要的 KYC 状态。 */
+/** core_db.users 只读实体：提现/合规校验需要的 KYC 状态。 */
 @Entity
 @Table(name = "users")
 public class UserEntity {

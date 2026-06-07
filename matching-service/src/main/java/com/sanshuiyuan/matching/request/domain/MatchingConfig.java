@@ -7,7 +7,7 @@ import jakarta.persistence.Table;
 
 import java.time.LocalDateTime;
 
-/** 撮合配置 KV（matching_config，落 h5_db）。 */
+/** 撮合配置 KV（matching_config，落 core_db）。 */
 @Entity
 @Table(name = "matching_config")
 public class MatchingConfig {

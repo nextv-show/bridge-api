@@ -11,7 +11,7 @@ import org.hibernate.generator.EventType;
 
 import java.time.LocalDateTime;
 
-/** 设备阶段事件流（device_assets_stage_events，落 h5_db）。V015 建表。 */
+/** 设备阶段事件流（device_assets_stage_events，落 core_db）。V015 建表。 */
 @Entity
 @Table(name = "device_assets_stage_events")
 public class DeviceAssetStageEvent {

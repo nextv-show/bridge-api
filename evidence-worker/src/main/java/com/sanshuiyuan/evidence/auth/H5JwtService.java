@@ -9,7 +9,7 @@ import java.util.Date;
 
 /**
  * 校验 h5-service 签发的 H5 JWT（同密钥/算法 HS256），返回 subject（统一身份 unionid/openid）。
- * Phase B 再由 subject 解析到 h5_db.users.id。
+ * Phase B 再由 subject 解析到 core_db.users.id。
  */
 public class H5JwtService {
     private final byte[] secret;

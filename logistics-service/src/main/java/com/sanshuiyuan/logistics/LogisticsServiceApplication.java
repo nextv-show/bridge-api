@@ -7,7 +7,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * 三水元 物流工单服务（logistics-service，002）。消费 logistics_outbox 建工单，状态机
- * PENDING_SHIP→SHIPPED→DELIVERED→INSTALLED；连 h5_db（E-2）；端口 8087（E-3）。
+ * PENDING_SHIP→SHIPPED→DELIVERED→INSTALLED；连 core_db（E-2）；端口 8087（E-3）。
  */
 @SpringBootApplication
 @EnableScheduling

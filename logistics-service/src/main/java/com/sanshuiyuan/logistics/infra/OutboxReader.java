@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 读取 matching-service 写入的 logistics_outbox 表（同 h5_db 内，通过 JdbcTemplate 直读）。
+ * 读取 matching-service 写入的 logistics_outbox 表（同 core_db 内，通过 JdbcTemplate 直读）。
  * logistics-service 不拥有 outbox JPA 实体；用 JDBC 跨表读取。
  */
 @Component

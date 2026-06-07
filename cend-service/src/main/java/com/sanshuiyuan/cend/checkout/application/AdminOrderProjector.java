@@ -20,7 +20,7 @@ import java.util.Map;
  * 在 h5_orders 写入的同一事务内，向 admin 的 {@code orders} 投影一行（按 h5_order_no 幂等 upsert），
  * 并保证买家在 admin 的 {@code users} 表存在（select-then-insert，应用层去重，不依赖 DB 唯一约束）。
  *
- * <p>h5_orders / orders / users / h5_users / skus 同库（h5_db），故可直接用 JdbcTemplate 跨表写。
+ * <p>h5_orders / orders / users / h5_users / skus 同库（core_db），故可直接用 JdbcTemplate 跨表写。
  *
  * <p>投影失败仅记录日志、绝不抛出，避免影响主支付/关单/退款流程。
  */
@@ -89,7 +89,7 @@ public class AdminOrderProjector {
     }
 
     /**
-     * 在 PAID 同事务内向 {@code device_assets}（h5_db 真表）建一条 PENDING_MATCH 资产。
+     * 在 PAID 同事务内向 {@code device_assets}（core_db 真表）建一条 PENDING_MATCH 资产。
      * order_id 取刚投影的 admin {@code orders}.id（按 h5_order_no 反查）；sn 待绑定为 NULL；
      * 收益列 0 为非空基线（不写收益，归 004）。幂等：UNIQUE(order_id) + ON DUPLICATE。
      */

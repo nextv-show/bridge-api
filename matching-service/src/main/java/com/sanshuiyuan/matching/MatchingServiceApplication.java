@@ -7,8 +7,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * 三水元 撮合服务（matching-service，002）。
- * 撮合主体：所有权人小程序自助接单（plan §0.5 E-4）。鉴权用 h5-service H5 JWT → h5_db.users.id（E-1）；
- * 连 h5_db（E-2，与 users/device_assets 同库）；端口 8086（E-3）。
+ * 撮合主体：所有权人小程序自助接单（plan §0.5 E-4）。鉴权用 h5-service H5 JWT → core_db.users.id（E-1）；
+ * 连 core_db（E-2，与 users/device_assets 同库）；端口 8086（E-3）。
  */
 @SpringBootApplication
 @EnableCaching

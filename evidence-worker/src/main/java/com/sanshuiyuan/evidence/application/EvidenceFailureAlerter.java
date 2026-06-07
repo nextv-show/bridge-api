@@ -10,7 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 存证终态失败告警：outbox 超过最大重试次数时，将发件箱与账单置 FAILED 并写日志告警。
- * V1 仅 log.error（alarms_outbox 在 h5_db，本服务不直连）。
+ * V1 仅 log.error（alarms_outbox 在 core_db，本服务不直连）。
  */
 @Component
 public class EvidenceFailureAlerter {

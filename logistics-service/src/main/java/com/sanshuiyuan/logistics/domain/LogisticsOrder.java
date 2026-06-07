@@ -13,7 +13,7 @@ import org.hibernate.generator.EventType;
 
 import java.time.LocalDateTime;
 
-/** 物流工单（logistics_orders，落 h5_db）。V010 建表。 */
+/** 物流工单（logistics_orders，落 core_db）。V010 建表。 */
 @Entity
 @Table(name = "logistics_orders")
 public class LogisticsOrder {

@@ -18,8 +18,8 @@ import static org.mockito.Mockito.when;
 
 /**
  * 024 Phase B：AdminOrderProjector 的 device_assets 入库逻辑单元测试（mock JdbcTemplate）。
- * device_assets 是 admin-service 拥有的 h5_db 真表，cend-service 测试容器无该表，故不走集成测试；
- * 真实 DB 的 INSERT/幂等在 Phase C 联调（真 h5_db 有 admin schema）验证。
+ * device_assets 是 admin-service 拥有的 core_db 真表，cend-service 测试容器无该表，故不走集成测试；
+ * 真实 DB 的 INSERT/幂等在 Phase C 联调（真 core_db 有 admin schema）验证。
  */
 class AdminOrderProjectorTest {
 
