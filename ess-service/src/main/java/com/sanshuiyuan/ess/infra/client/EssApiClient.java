@@ -56,13 +56,33 @@ public class EssApiClient {
             backoff = @Backoff(delay = 1000, multiplier = 2.0, maxDelay = 10000)
     )
     public JsonNode invoke(String action, TreeMap<String, Object> params) {
+        return execute(action, params, properties.apiEndpoint());
+    }
+
+    /**
+     * 指定接入域名调用（用于文件上传专用域名 file.*.ess.tencent.cn 等）。
+     * TC3 签名方案与默认域名一致，仅 host 不同。
+     */
+    @Retryable(
+            retryFor = {EssApiException.class},
+            noRetryFor = {
+                    com.sanshuiyuan.ess.exception.EssFlowException.class,
+                    com.sanshuiyuan.ess.exception.EssCallbackVerificationException.class
+            },
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 1000, multiplier = 2.0, maxDelay = 10000)
+    )
+    public JsonNode invoke(String action, TreeMap<String, Object> params, String hostEndpoint) {
+        return execute(action, params, hostEndpoint);
+    }
+
+    private JsonNode execute(String action, TreeMap<String, Object> params, String endpoint) {
         long start = System.currentTimeMillis();
         try {
             String body = objectMapper.writeValueAsString(params);
-            String endpoint = properties.apiEndpoint();
             String service = "ess";
 
-            log.info("ESS API [action={}, bodyLen={}, endpoint={}]", action, body.length(), properties.apiEndpoint());
+            log.info("ESS API [action={}, bodyLen={}, endpoint={}]", action, body.length(), endpoint);
 
             // TC3-HMAC-SHA256 签名
             byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);

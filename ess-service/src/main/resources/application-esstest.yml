@@ -1,0 +1,17 @@
+# ================================================================
+# 叠加 Profile：在【三水元生产环境】连接【腾讯电子签测试环境】联调
+# 用法: SPRING_PROFILES_ACTIVE=prod,esstest
+#   （esstest 排在 prod 之后，覆盖 prod 里指向腾讯生产的接入域名；
+#    DB / 日志 / 连接池等仍沿用同时激活的 prod。）
+#
+# ⚠️ 用腾讯电子签【测试环境】签署的合同不具法律效力、数据会被清理，仅供联调。
+#    测试窗口内务必不要让真实认购用户走签约（否则用户拿到的是无效合同）。
+#
+# 联调完成：把 SPRING_PROFILES_ACTIVE 改回 prod 并重启，即恢复连腾讯生产环境。
+# ================================================================
+ess:
+  # 普通 API 接入点 → 腾讯测试环境
+  api-endpoint: ${ESS_API_ENDPOINT:ess.test.ess.tencent.cn}
+  file:
+    # 文件上传专用域名 → 腾讯测试环境
+    endpoint: ${ESS_FILE_ENDPOINT:file.test.ess.tencent.cn}

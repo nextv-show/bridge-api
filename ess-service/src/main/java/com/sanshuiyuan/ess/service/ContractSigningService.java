@@ -2,6 +2,7 @@ package com.sanshuiyuan.ess.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sanshuiyuan.ess.config.EssFileProperties;
 import com.sanshuiyuan.ess.domain.Contract;
 import com.sanshuiyuan.ess.domain.Contract.ContractStatus;
 import com.sanshuiyuan.ess.domain.ContractAuditTrail;
@@ -32,6 +33,37 @@ public class ContractSigningService {
     private final ContractArchiveService archiveService;
     private final AuditTrailService auditTrailService;
     private final ObjectMapper objectMapper;
+
+    /**
+     * 文件模式发起的协作者（均为可选注入）。
+     * <p>三者齐备且 {@link EssFileProperties#enabled()} 为 true 时，走文件模式（渲染 PDF → CreateFlowByFiles）；
+     * 否则维持既有模板模式，单元测试无需设置即保持旧行为。</p>
+     */
+    private EssFileProperties fileProperties;
+    private ContractPdfRenderService pdfRenderService;
+    private ContractGenerationService generationService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setFileProperties(EssFileProperties fileProperties) {
+        this.fileProperties = fileProperties;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setPdfRenderService(ContractPdfRenderService pdfRenderService) {
+        this.pdfRenderService = pdfRenderService;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setGenerationService(ContractGenerationService generationService) {
+        this.generationService = generationService;
+    }
+
+    private boolean isFileModeEnabled() {
+        return fileProperties != null
+                && Boolean.TRUE.equals(fileProperties.enabled())
+                && pdfRenderService != null
+                && generationService != null;
+    }
 
     public ContractSigningService(ContractRepository contractRepository,
                                    ContractSnBindingRepository snBindingRepository,
@@ -114,8 +146,18 @@ public class ContractSigningService {
         // 签署前验证：姓名必须为真实姓名，不能为脱敏值（含 *）或空
         validateRealName(signerJson, contract.getContractNo());
 
-        EssFlowRecord flowRecord = essContractService.createFlow(
-                contractNoStr, flowName, signerJson);
+        EssFlowRecord flowRecord;
+        if (isFileModeEnabled()) {
+            // 文件模式：后端渲染「变量已填好」的 PDF → 上传 → CreateFlowByFiles（只放签名控件）。
+            String markdown = generationService.getContractContent(contractId).mainContractContent();
+            byte[] pdf = pdfRenderService.renderMarkdownToPdf(markdown, flowName);
+            flowRecord = essContractService.createFlowByFiles(
+                    contractNoStr, flowName, signerJson, pdf, contractNoStr + ".pdf");
+            log.info("文件模式发起签署 [contractNo={}, pdfBytes={}]", contractNoStr, pdf.length);
+        } else {
+            // 模板模式（既有行为）：变量交给腾讯电子签模板控件。
+            flowRecord = essContractService.createFlow(contractNoStr, flowName, signerJson);
+        }
 
         // 更新合同状态（带签署来源）
         if (signSource != null) {

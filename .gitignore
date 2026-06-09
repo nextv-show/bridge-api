@@ -20,3 +20,6 @@ build/
 *.env
 .omc/
 .omc/
+
+# 编译产物（Eclipse/Gradle bin 输出目录），不入库
+bin/

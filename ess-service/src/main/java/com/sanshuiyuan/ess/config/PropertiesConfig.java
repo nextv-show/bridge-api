@@ -12,6 +12,8 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 @EnableConfigurationProperties({
         EssProperties.class,
+        EssFileProperties.class,
+        ContractPdfProperties.class,
         OssProperties.class
 })
 public class PropertiesConfig {

@@ -39,6 +39,30 @@ ess:
   max-retries: 3
   # 个人签署传 ApproverIdCardNumber，触发腾讯电子签内的实名+人脸核身（小程序认购签约依赖此项）。
   collect-id-card: ${ESS_COLLECT_ID_CARD:true}
+  # 文件模式发起（CreateFlowByFiles）：后端渲染「变量已填好」的合同 PDF，平台只放签名/签章控件。
+  # 默认关闭 → 维持既有模板模式；开启前需在腾讯电子签测试账号侧确认印章/静默签配置。
+  file:
+    enabled: ${ESS_FILE_MODE_ENABLED:false}
+    endpoint: ${ESS_FILE_ENDPOINT:file.test.ess.tencent.cn}
+    signature-keyword: ${ESS_FILE_SIGN_KEYWORD:电子签字}
+    date-keyword: ${ESS_FILE_DATE_KEYWORD:}
+    company-seal: ${ESS_FILE_COMPANY_SEAL:false}
+    seal-keyword: ${ESS_FILE_SEAL_KEYWORD:公章}
+    company-name: ${ESS_FILE_COMPANY_NAME:天津源创智能科技有限公司}
+    # 甲方签名控件定位（合同左栏较宽，Right 不溢出）
+    relative-location: ${ESS_FILE_RELATIVE_LOCATION:Right}
+    # 乙方签章控件独立定位：公章靠右边，Right 会溢出页面，默认盖在「公章」标签下方
+    seal-relative-location: ${ESS_FILE_SEAL_RELATIVE_LOCATION:Below}
+    seal-width: ${ESS_FILE_SEAL_WIDTH:100}
+    seal-height: ${ESS_FILE_SEAL_HEIGHT:100}
+    seal-offset-x: ${ESS_FILE_SEAL_OFFSET_X:0}
+    seal-offset-y: ${ESS_FILE_SEAL_OFFSET_Y:5}
+
+# 合同 PDF 渲染（文件模式）。中文合同必须有 CJK 字体，否则正文显示为方块。
+contract:
+  pdf:
+    font-path: ${CONTRACT_PDF_FONT_PATH:}
+    page-size: ${CONTRACT_PDF_PAGE_SIZE:A4}
 
 # 小程序签署默认 appId（sign-params?clientType=MINI 时透传给 ESS CreateSchemeUrl；前端可用 wxAppId 覆盖）。
 wx:
