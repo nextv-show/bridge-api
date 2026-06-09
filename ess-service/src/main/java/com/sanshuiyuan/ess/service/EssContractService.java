@@ -3,6 +3,7 @@ package com.sanshuiyuan.ess.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.sanshuiyuan.ess.config.EssFileProperties;
 import com.sanshuiyuan.ess.config.EssProperties;
 import com.sanshuiyuan.ess.config.SigningPreCheckInterceptor;
 import com.sanshuiyuan.ess.domain.EssFlowRecord;
@@ -49,6 +50,11 @@ public class EssContractService {
      * 使用 setter 注入避免与 ContractSigningService 形成构造循环。
      */
     private ContractCompletionBridge completionBridge;
+    /**
+     * 文件模式发起配置（可选注入）。
+     * <p>缺省为 null 时，{@link #createFlowByFiles} 不可用；既有模板模式 {@link #createFlow} 不受影响。</p>
+     */
+    private EssFileProperties fileProperties;
 
     public EssContractService(EssApiClient apiClient,
                                EssProperties properties,
@@ -67,6 +73,11 @@ public class EssContractService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     public void setCompletionBridge(ContractCompletionBridge completionBridge) {
         this.completionBridge = completionBridge;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setFileProperties(EssFileProperties fileProperties) {
+        this.fileProperties = fileProperties;
     }
 
     /**
@@ -111,6 +122,105 @@ public class EssContractService {
             apiLogService.recordFailureAsync("CreateFlow", "{}", null, null, duration, e.getMessage());
             throw new EssFlowException(contractId, "创建签署流程失败: " + e.getMessage());
         }
+    }
+
+    /**
+     * 文件模式创建签署流程（CreateFlowByFiles）。
+     * <p>
+     * 由调用方先把合同正文渲染成「变量已填好」的 PDF：
+     * <ol>
+     *   <li>UploadFiles 上传 PDF → 取得 FileId（走文件专用域名）；</li>
+     *   <li>CreateFlowByFiles 用 FileId + Approvers（含关键字定位的签名/签章控件）创建流程。</li>
+     * </ol>
+     * 业务变量不再交给腾讯电子签，平台只负责放置签名/签章控件。
+     *
+     * @param contractId  业务合同号
+     * @param flowName    流程名
+     * @param signersJson 签署方业务 JSON
+     * @param pdfBytes    已渲染好的合同 PDF
+     * @param fileName    PDF 文件名（如 {@code CT-xxx.pdf}）
+     */
+    @Transactional
+    public EssFlowRecord createFlowByFiles(String contractId, String flowName, String signersJson,
+                                            byte[] pdfBytes, String fileName) {
+        EssFileProperties fp = requireFileProperties();
+        flowRecordRepository.findByContractId(contractId).ifPresent(existing -> {
+            throw new EssFlowException(contractId, "合同已存在签署流程，flowId=" + existing.getEssFlowId());
+        });
+
+        EssFlowRecord record = EssFlowRecord.create(contractId, signersJson);
+        flowRecordRepository.save(record);
+
+        long start = System.currentTimeMillis();
+        try {
+            String fileId = uploadFile(pdfBytes, fileName, fp);
+
+            TreeMap<String, Object> params = new TreeMap<>();
+            params.put("Operator", buildOperator());
+            params.put("FlowName", flowName);
+            params.put("Unordered", false);
+            params.put("FileIds", java.util.List.of(fileId));
+            params.put("Approvers", buildFileApprovers(signersJson, fp));
+
+            JsonNode response = apiClient.invoke("CreateFlowByFiles", params);
+            String flowId = response.get("FlowId").asText();
+
+            record.assignFlowId(flowId);
+            flowRecordRepository.save(record);
+
+            int duration = (int) (System.currentTimeMillis() - start);
+            apiLogService.recordSuccessAsync("CreateFlowByFiles", params.toString(), response.toString(), 200, duration);
+
+            log.info("文件模式签署流程已创建 [contractId={}, flowId={}, fileId={}]", contractId, flowId, fileId);
+            return record;
+
+        } catch (EssFlowException e) {
+            throw e;
+        } catch (Exception e) {
+            int duration = (int) (System.currentTimeMillis() - start);
+            apiLogService.recordFailureAsync("CreateFlowByFiles", "{}", null, null, duration, e.getMessage());
+            throw new EssFlowException(contractId, "文件模式创建签署流程失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 上传 PDF 至腾讯电子签文件专用域名，返回 FileId。
+     * UploadFiles 用 JSON + base64 传输文件内容。
+     */
+    private String uploadFile(byte[] pdfBytes, String fileName, EssFileProperties fp) {
+        if (pdfBytes == null || pdfBytes.length == 0) {
+            throw new EssFlowException(fileName, "待上传的合同 PDF 为空");
+        }
+        String base64 = java.util.Base64.getEncoder().encodeToString(pdfBytes);
+
+        TreeMap<String, Object> params = new TreeMap<>();
+        params.put("BusinessType", "DOCUMENT");
+        params.put("FileType", "PDF");
+        TreeMap<String, Object> fileInfo = new TreeMap<>();
+        fileInfo.put("FileName", fileName);
+        fileInfo.put("FileBody", base64);
+        params.put("FileInfos", java.util.List.of(fileInfo));
+
+        long start = System.currentTimeMillis();
+        // 注意：日志参数不落 base64 文件体，避免巨大日志/敏感内容。
+        JsonNode response = apiClient.invoke("UploadFiles", params, fp.endpoint());
+        int duration = (int) (System.currentTimeMillis() - start);
+        apiLogService.recordSuccessAsync("UploadFiles",
+                "{\"FileName\":\"" + fileName + "\",\"bytes\":" + pdfBytes.length + "}",
+                response.toString(), 200, duration);
+
+        JsonNode fileIds = response.get("FileIds");
+        if (fileIds == null || !fileIds.isArray() || fileIds.isEmpty()) {
+            throw new EssFlowException(fileName, "UploadFiles 未返回 FileIds");
+        }
+        return fileIds.get(0).asText();
+    }
+
+    private EssFileProperties requireFileProperties() {
+        if (fileProperties == null) {
+            throw new IllegalStateException("文件模式未配置（EssFileProperties 缺失），无法调用 createFlowByFiles");
+        }
+        return fileProperties;
     }
 
     @Transactional
@@ -304,6 +414,67 @@ public class EssContractService {
             approvers.add(defaultApprover);
         }
         return approvers;
+    }
+
+    /**
+     * 文件模式 Approvers：在个人签署方上挂关键字定位的签名/签署日期控件，
+     * 并按配置可选追加乙方企业签章方。
+     */
+    private java.util.List<TreeMap<String, Object>> buildFileApprovers(String signerInfoJson, EssFileProperties fp) {
+        java.util.List<TreeMap<String, Object>> approvers = buildApprovers(signerInfoJson);
+        for (TreeMap<String, Object> approver : approvers) {
+            java.util.List<TreeMap<String, Object>> signComponents = new java.util.ArrayList<>();
+            // 甲方签名（及可选签署日期）：用签名一组定位参数。
+            signComponents.add(buildSignComponent("SIGN_SIGNATURE", fp.signatureKeyword(),
+                    fp.signWidth(), fp.signHeight(), fp.relativeLocation(), fp.offsetX(), fp.offsetY()));
+            if (fp.dateKeyword() != null && !fp.dateKeyword().isBlank()) {
+                signComponents.add(buildSignComponent("SIGN_DATE", fp.dateKeyword(),
+                        fp.signWidth(), fp.signHeight(), fp.relativeLocation(), fp.offsetX(), fp.offsetY()));
+            }
+            approver.put("SignComponents", signComponents);
+        }
+
+        // 可选：乙方企业签章方（静默签需腾讯电子签账号侧授权印章，默认关闭）。
+        // 印章靠近页边，用独立一组定位参数（默认 Below），避免 Right 溢出页面。
+        if (Boolean.TRUE.equals(fp.companySeal())) {
+            TreeMap<String, Object> company = new TreeMap<>();
+            company.put("ApproverType", 0); // 0=企业
+            company.put("OrganizationName", fp.companyName());
+            company.put("ApproverName", fp.companyName());
+            company.put("RecipientId", properties.operatorId());
+            company.put("NotifyType", "NONE");
+            company.put("SignComponents", java.util.List.of(
+                    buildSignComponent("SIGN_SEAL", fp.sealKeyword(),
+                            fp.sealWidth(), fp.sealHeight(), fp.sealRelativeLocation(),
+                            fp.sealOffsetX(), fp.sealOffsetY())));
+            approvers.add(company);
+        }
+        return approvers;
+    }
+
+    /**
+     * 构造关键字定位的签名/签章控件。
+     * <p>关键字定位（GenerateMode=KEYWORD）下，关键字字符串通过 {@code ComponentId} 传入，
+     * 控件放在该关键字在 PDF 中的相对方位（{@code RelativeLocation}）。
+     * 尺寸/方位/偏移由调用方按签名 or 签章分别传入。</p>
+     */
+    private TreeMap<String, Object> buildSignComponent(String type, String keyword,
+                                                        double width, double height,
+                                                        String relativeLocation,
+                                                        double offsetX, double offsetY) {
+        TreeMap<String, Object> c = new TreeMap<>();
+        c.put("ComponentType", type);
+        c.put("ComponentName", type + "-" + keyword);
+        c.put("ComponentId", keyword);
+        c.put("GenerateMode", "KEYWORD");
+        c.put("FileIndex", 0);
+        c.put("ComponentWidth", width);
+        c.put("ComponentHeight", height);
+        c.put("RelativeLocation", relativeLocation);
+        c.put("OffsetX", offsetX);
+        c.put("OffsetY", offsetY);
+        c.put("KeywordOrder", "Positive");
+        return c;
     }
 
     private void updateRecordStatus(EssFlowRecord record, FlowStatus status, String callbackData) {

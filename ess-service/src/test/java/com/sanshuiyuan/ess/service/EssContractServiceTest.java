@@ -3,6 +3,7 @@ package com.sanshuiyuan.ess.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.sanshuiyuan.ess.config.EssFileProperties;
 import com.sanshuiyuan.ess.config.EssProperties;
 import com.sanshuiyuan.ess.config.SigningPreCheckInterceptor;
 import com.sanshuiyuan.ess.domain.EssFlowRecord;
@@ -13,10 +14,12 @@ import com.sanshuiyuan.ess.infra.repository.EssFlowRecordRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Optional;
+import java.util.TreeMap;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -60,6 +63,62 @@ class EssContractServiceTest {
         assertEquals("flow-ess-001", result.getEssFlowId());
         assertEquals(FlowStatus.CREATED, result.getFlowStatus());
         verify(apiClient).invoke(eq("CreateFlow"), any());
+    }
+
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void createFlowByFiles_uploadsThenCreatesFlowWithSignComponents() {
+        // Arrange: 启用文件模式
+        service.setFileProperties(new EssFileProperties(
+                true, "file.test.ess.tencent.cn", "电子签字", "", false,
+                "公章", "天津源创智能科技有限公司", "Right", 120.0, 44.0, 5.0, 0.0,
+                "Below", 100.0, 100.0, 0.0, 5.0));
+
+        when(flowRecordRepository.findByContractId("c-f1")).thenReturn(Optional.empty());
+        when(flowRecordRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        ObjectNode uploadResp = objectMapper.createObjectNode();
+        uploadResp.set("FileIds", objectMapper.createArrayNode().add("file-xyz"));
+        when(apiClient.invoke(eq("UploadFiles"), any(), anyString())).thenReturn(uploadResp);
+
+        ObjectNode flowResp = objectMapper.createObjectNode();
+        flowResp.put("FlowId", "flow-file-1");
+        when(apiClient.invoke(eq("CreateFlowByFiles"), any())).thenReturn(flowResp);
+
+        ArgumentCaptor<TreeMap> paramsCaptor = ArgumentCaptor.forClass(TreeMap.class);
+
+        // Act
+        EssFlowRecord result = service.createFlowByFiles(
+                "c-f1", "测试合同",
+                "[{\"userName\":\"张三\",\"phone\":\"13800138000\"}]",
+                new byte[]{1, 2, 3}, "c-f1.pdf");
+
+        // Assert
+        assertNotNull(result);
+        assertEquals("flow-file-1", result.getEssFlowId());
+        assertEquals(FlowStatus.CREATED, result.getFlowStatus());
+        // 上传走文件专用域名
+        verify(apiClient).invoke(eq("UploadFiles"), any(), eq("file.test.ess.tencent.cn"));
+        verify(apiClient).invoke(eq("CreateFlowByFiles"), paramsCaptor.capture());
+
+        TreeMap params = paramsCaptor.getValue();
+        assertTrue(params.containsKey("FileIds"), "应带 FileIds");
+        assertTrue(params.containsKey("Approvers"), "应带 Approvers");
+        java.util.List<?> approvers = (java.util.List<?>) params.get("Approvers");
+        TreeMap<String, Object> approver = (TreeMap<String, Object>) approvers.get(0);
+        assertTrue(approver.containsKey("SignComponents"), "签署方应挂签名控件");
+        java.util.List<?> comps = (java.util.List<?>) approver.get("SignComponents");
+        TreeMap<String, Object> sign = (TreeMap<String, Object>) comps.get(0);
+        assertEquals("SIGN_SIGNATURE", sign.get("ComponentType"));
+        assertEquals("KEYWORD", sign.get("GenerateMode"));
+        assertEquals("电子签字", sign.get("ComponentId"), "关键字定位：关键字走 ComponentId");
+    }
+
+    @Test
+    void createFlowByFiles_withoutFilePropertiesConfigured_shouldThrow() {
+        // 未注入 EssFileProperties → 文件模式不可用
+        assertThrows(IllegalStateException.class, () ->
+                service.createFlowByFiles("c-f2", "x", "[{}]", new byte[]{1}, "x.pdf"));
     }
 
     @Test
