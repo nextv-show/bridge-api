@@ -174,7 +174,7 @@ class ContractAdminControllerTest {
                 .thenThrow(new IllegalArgumentException("合同不存在: id=9999"));
 
         mockMvc.perform(get("/api/admin/contracts/9999"))
-                .andExpect(status().is5xxServerError());
+                .andExpect(status().isBadRequest());
     }
 
     // ========== T20.11: GET /api/admin/contracts/{id}/audit ==========
@@ -372,7 +372,7 @@ class ContractAdminControllerTest {
                 .thenThrow(new IllegalArgumentException("合同不存在: id=9999"));
 
         mockMvc.perform(get("/api/admin/contracts/9999/audit-trail"))
-                .andExpect(status().is5xxServerError());
+                .andExpect(status().isBadRequest());
     }
 
     // ========== Phase E：失败重试端点 ==========

@@ -67,7 +67,7 @@ class EssSignControllerTest {
         mockMvc.perform(post("/api/ess/sign/h5-url")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"signerId\":\"signer-001\"}"))
-                .andExpect(status().isInternalServerError());
+                .andExpect(status().isBadRequest());
     }
 
     // ========== T015: miniapp ==========
@@ -124,7 +124,7 @@ class EssSignControllerTest {
         mockMvc.perform(post("/api/ess/sign/app-params")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"contractId\":\"c-001\",\"signerId\":\"signer-001\"}"))
-                .andExpect(status().isInternalServerError());
+                .andExpect(status().isBadRequest());
     }
 
     // ========== Server Sign ==========

@@ -12,5 +12,9 @@ public interface AgreementAcceptanceRepository extends JpaRepository<AgreementAc
 
     Optional<AgreementAcceptance> findTopByOpenidAndAgreementCodeOrderByAcceptedAtDesc(String openid, String agreementCode);
 
+    /** 幂等查询：唯一键 (openid, agreement_code, template_version) 对应的已有记录。 */
+    Optional<AgreementAcceptance> findByOpenidAndAgreementCodeAndTemplateVersion(
+            String openid, String agreementCode, int templateVersion);
+
     boolean existsByOpenidAndAgreementCode(String openid, String agreementCode);
 }

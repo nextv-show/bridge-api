@@ -153,7 +153,13 @@ public class ContractController {
         ownershipGuard.requireAuthenticated();
         ownershipGuard.assertOwner(loadContractOrThrow(id).getUserId());
 
-        Long userId = requireLong(request, "userId");
+        // 不信任 body 的 userId：以当前会话 openid 解析（与 /generate 一致），避免上游传 "null" 致 500。
+        String openid = CurrentOpenid.require();
+        Long userId = userServiceClient.resolveUserId(openid);
+        if (userId == null) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.FORBIDDEN, "无法解析当前用户身份");
+        }
         ClientType clientType = resolveClientType(request, httpRequest);
         String phoneOverride = request.get("phone");
         String nameOverride = request.get("realName");
@@ -322,15 +328,6 @@ public class ContractController {
             throw new IllegalArgumentException("缺少必要参数: " + key);
         }
         return value;
-    }
-
-    private Long requireLong(Map<String, String> request, String key) {
-        String value = requireParam(request, key);
-        try {
-            return Long.parseLong(value);
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("参数格式错误: " + key + " 必须为数字");
-        }
     }
 
     /**
