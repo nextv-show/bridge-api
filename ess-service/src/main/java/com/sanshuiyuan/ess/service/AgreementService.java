@@ -63,13 +63,22 @@ public class AgreementService {
                                                 String clientType, String clientIp) {
         ContractTemplate agreement = getLatestAgreement(agreementCode);
 
-        AgreementAcceptance acceptance = AgreementAcceptance.create(
-                openid, agreementCode, agreement.getVersion(), clientType, clientIp);
-        acceptance = acceptanceRepository.save(acceptance);
-
-        log.info("协议同意已记录 [openid={}, code={}, version={}, clientType={}]",
-                openid, agreementCode, agreement.getVersion(), clientType);
-        return acceptance;
+        // 幂等：同一 (openid, code, version) 重复接受不报错（唯一键 uk_openid_agreement_version），
+        // 直接返回既有记录，避免重复点击/重进时撞 Duplicate entry 抛 500。
+        return acceptanceRepository
+                .findByOpenidAndAgreementCodeAndTemplateVersion(openid, agreementCode, agreement.getVersion())
+                .map(existing -> {
+                    log.info("协议已接受，幂等返回 [openid={}, code={}, version={}]",
+                            openid, agreementCode, agreement.getVersion());
+                    return existing;
+                })
+                .orElseGet(() -> {
+                    AgreementAcceptance saved = acceptanceRepository.save(AgreementAcceptance.create(
+                            openid, agreementCode, agreement.getVersion(), clientType, clientIp));
+                    log.info("协议同意已记录 [openid={}, code={}, version={}, clientType={}]",
+                            openid, agreementCode, agreement.getVersion(), clientType);
+                    return saved;
+                });
     }
 
     /**

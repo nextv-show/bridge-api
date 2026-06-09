@@ -80,6 +80,19 @@ public class EssExceptionHandler {
     }
 
     /**
+     * 参数校验失败（缺参/格式错误）——属客户端错误，返回 400 而非 500。
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException ex) {
+        log.warn("请求参数错误: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
+                "code", -1,
+                "error", "BadRequest",
+                "message", ex.getMessage() != null ? ex.getMessage() : "请求参数错误"
+        ));
+    }
+
+    /**
      * 兜底异常处理。
      */
     @ExceptionHandler(Exception.class)

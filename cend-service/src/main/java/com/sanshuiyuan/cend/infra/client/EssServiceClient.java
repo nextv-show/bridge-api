@@ -39,7 +39,8 @@ public class EssServiceClient {
     public GenerateResult generate(String bearer, Long userId, String deviceModel, String devicePrice,
                                    String userName, String idCardNo, String phone) {
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("userId", String.valueOf(userId));
+        // userId 仅作参考：ess 以会话 openid 为准解析。为 null 时省略，勿发字符串 "null"。
+        if (userId != null) body.put("userId", String.valueOf(userId));
         body.put("deviceModel", deviceModel);
         body.put("devicePrice", devicePrice);
         body.put("userName", userName);
@@ -57,7 +58,8 @@ public class EssServiceClient {
     public String initiateSigning(String bearer, Long contractId, Long userId,
                                   String phone, String realName, String realIdCard) {
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("userId", String.valueOf(userId));
+        // userId 仅作参考：ess 以会话 openid 为准解析。为 null 时省略，勿发字符串 "null"。
+        if (userId != null) body.put("userId", String.valueOf(userId));
         body.put("clientType", "MINI");
         if (phone != null) body.put("phone", phone);
         if (realName != null) body.put("realName", realName);
