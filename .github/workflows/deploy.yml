@@ -110,7 +110,7 @@ jobs:
               printf '%s=%s\n' "$k" "$v" | sudo tee -a "$f" > /dev/null
             }
             upsert_secret ADMIN_JWT_SECRET "${SHARED_ADMIN_JWT_SECRET:-}" "sanshuiyuan-admin-jwt-prod-key-2026-please-change-in-production" "$ENV_FILE"
-            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "change-me-s2s-shared-token" "$ENV_FILE"
+            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
 
             # 首次初始化 Systemd 配置文件
             SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
@@ -249,7 +249,7 @@ jobs:
               printf '%s=%s\n' "$k" "$v" | sudo tee -a "$f" > /dev/null
             }
             upsert_secret H5_JWT_SECRET "${SHARED_H5_JWT_SECRET:-}" "dev-h5-jwt-secret-please-override-in-prod-0001" "$ENV_FILE"
-            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "change-me-s2s-shared-token" "$ENV_FILE"
+            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
 
             # 首次初始化 Systemd 配置文件
             SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
@@ -368,8 +368,8 @@ jobs:
               sudo sed -i "/^${k}=/d" "$f"
               printf '%s=%s\n' "$k" "$v" | sudo tee -a "$f" > /dev/null
             }
-            upsert_secret JWT_SECRET "${SHARED_JWT_SECRET:-}" "CHANGE-ME-set-repo-secret-JWT_SECRET-openssl-rand-hex-48" "$ENV_FILE"
-            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "change-me-s2s-shared-token" "$ENV_FILE"
+            upsert_secret JWT_SECRET "${SHARED_JWT_SECRET:-}" "change-me-in-production-at-least-256-bits-long!!" "$ENV_FILE"
+            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
 
             SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
             if [ ! -f "$SERVICE_FILE" ]; then
@@ -496,8 +496,8 @@ jobs:
               sudo sed -i "/^${k}=/d" "$f"
               printf '%s=%s\n' "$k" "$v" | sudo tee -a "$f" > /dev/null
             }
-            upsert_secret JWT_SECRET "${SHARED_JWT_SECRET:-}" "CHANGE-ME-set-repo-secret-JWT_SECRET-openssl-rand-hex-48" "$ENV_FILE"
-            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "change-me-s2s-shared-token" "$ENV_FILE"
+            upsert_secret JWT_SECRET "${SHARED_JWT_SECRET:-}" "change-me-in-production-at-least-256-bits-long!!" "$ENV_FILE"
+            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
 
             SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
             if [ ! -f "$SERVICE_FILE" ]; then
@@ -613,7 +613,7 @@ jobs:
               printf '%s=%s\n' "$k" "$v" | sudo tee -a "$f" > /dev/null
             }
             upsert_secret H5_JWT_SECRET "${SHARED_H5_JWT_SECRET:-}" "dev-h5-jwt-secret-please-override-in-prod-0001" "$ENV_FILE"
-            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "change-me-s2s-shared-token" "$ENV_FILE"
+            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
 
             SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
             if [ ! -f "$SERVICE_FILE" ]; then
@@ -738,7 +738,7 @@ jobs:
               printf '%s=%s\n' "$k" "$v" | sudo tee -a "$f" > /dev/null
             }
             upsert_secret H5_JWT_SECRET "${SHARED_H5_JWT_SECRET:-}" "dev-h5-jwt-secret-please-override-in-prod-0001" "$ENV_FILE"
-            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "change-me-s2s-shared-token" "$ENV_FILE"
+            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
 
             # 标准 systemd 单元（迁移后重写为指向标准目录；旧单元若指向 /opt/matching-service 一并覆盖）
             SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
@@ -855,7 +855,7 @@ jobs:
               printf '%s=%s\n' "$k" "$v" | sudo tee -a "$f" > /dev/null
             }
             upsert_secret H5_JWT_SECRET "${SHARED_H5_JWT_SECRET:-}" "dev-h5-jwt-secret-please-override-in-prod-0001" "$ENV_FILE"
-            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "change-me-s2s-shared-token" "$ENV_FILE"
+            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
 
             SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
             CURRENT_EXEC="$(grep -E '^ExecStart=' "$SERVICE_FILE" 2>/dev/null || true)"
@@ -975,7 +975,7 @@ jobs:
               printf '%s=%s\n' "$k" "$v" | sudo tee -a "$f" > /dev/null
             }
             upsert_secret H5_JWT_SECRET "${SHARED_H5_JWT_SECRET:-}" "dev-h5-jwt-secret-please-override-in-prod-0001" "$ENV_FILE"
-            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "change-me-s2s-shared-token" "$ENV_FILE"
+            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
 
             SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
             CURRENT_EXEC="$(grep -E '^ExecStart=' "$SERVICE_FILE" 2>/dev/null || true)"
@@ -1092,7 +1092,7 @@ jobs:
               printf '%s=%s\n' "$k" "$v" | sudo tee -a "$f" > /dev/null
             }
             upsert_secret H5_JWT_SECRET "${SHARED_H5_JWT_SECRET:-}" "dev-h5-jwt-secret-please-override-in-prod-0001" "$ENV_FILE"
-            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "change-me-s2s-shared-token" "$ENV_FILE"
+            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
 
             SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
             CURRENT_EXEC="$(grep -E '^ExecStart=' "$SERVICE_FILE" 2>/dev/null || true)"
@@ -1209,7 +1209,7 @@ jobs:
               printf '%s=%s\n' "$k" "$v" | sudo tee -a "$f" > /dev/null
             }
             upsert_secret H5_JWT_SECRET "${SHARED_H5_JWT_SECRET:-}" "dev-h5-jwt-secret-please-override-in-prod-0001" "$ENV_FILE"
-            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "change-me-s2s-shared-token" "$ENV_FILE"
+            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
 
             SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
             CURRENT_EXEC="$(grep -E '^ExecStart=' "$SERVICE_FILE" 2>/dev/null || true)"
@@ -1320,6 +1320,18 @@ jobs:
               echo "[deploy] FATAL: $ENV_FILE 不存在——ess 迁移需先预置 app.env（含密钥与 127.0.0.1 端点）" >&2
               exit 1
             fi
+            # 共享密钥 upsert（与 cend/全链路对齐）：repo secret 已设→每次部署写入；未设→保留已有值、缺失才补同组占位（=各服务 yml 默认，行为不变）。见 deploy/SECRETS.md
+            upsert_secret() {
+              local k="$1" v="$2" ph="$3" f="$4"
+              if [ -z "$v" ]; then
+                if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
+                v="$ph"
+              fi
+              sudo sed -i "/^${k}=/d" "$f"
+              printf '%s=%s\n' "$k" "$v" | sudo tee -a "$f" > /dev/null
+            }
+            upsert_secret H5_JWT_SECRET "${SHARED_H5_JWT_SECRET:-}" "dev-h5-jwt-secret-please-override-in-prod-0001" "$ENV_FILE"
+            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
 
             SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
             if [ ! -f "$SERVICE_FILE" ]; then

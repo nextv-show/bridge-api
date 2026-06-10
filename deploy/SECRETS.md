@@ -61,21 +61,19 @@ CD（`.github/workflows/deploy.yml`）已把同组共享密钥改为 **GitHub Ac
 `upsert_secret` 的三态语义（每次部署都执行，非仅首次 provision）：
 - **repo secret 已设** → 把该值 upsert 进 app.env（覆盖旧行）：**现网每次部署自动对齐**，无需手动维护窗口；
 - **repo secret 未设 + 该行已存在** → **原样保留**，绝不冲掉手动轮换/运维填的值（如 2026-06-09 手动轮换的 user/asset 强密钥）；
-- **repo secret 未设 + 该行缺失** → 写同组占位（保证同组仍匹配、可启动）。
+- **repo secret 未设 + 该行缺失** → 写同组占位（**= 各服务 application.yml 默认值**，即不接此 PR 时该服务本就会用的值 → 行为零变化，不会"静默轮换"）。
 
 **需在仓库 Settings → Secrets and variables → Actions 配置的 repo secret：**
 
-| Repo Secret | 注入到的服务 | 不配置的后果 |
+| Repo Secret | 注入到的服务 | 未配置时的回退占位（= yml 默认，inert） |
 |---|---|---|
-| `JWT_SECRET` | user-service · asset-service | 回退占位 `CHANGE-ME-set-repo-secret-JWT_SECRET-...`（两端**同串**，仍匹配，但是公开弱值） |
-| `H5_JWT_SECRET` | cend + 7 个 H5 消费方 | 回退 yml dev 默认（全组同串、匹配，但弱） |
-| `S2S_TOKEN` | 全部后端服务 | 回退 `change-me-s2s-shared-token`（弱） |
-| `ADMIN_JWT_SECRET` | admin-service | 回退 `sanshuiyuan-admin-jwt-prod-key-...`（弱） |
+| `JWT_SECRET` | user-service · asset-service | `change-me-in-production-at-least-256-bits-long!!`（两端 yml 默认本就相同→同串匹配） |
+| `H5_JWT_SECRET` | cend(签发) + 6 消费方 + ess | `dev-h5-jwt-secret-please-override-in-prod-0001`（全组 yml 默认相同→匹配） |
+| `S2S_TOKEN` | 全部 11 个后端服务 | `local-dev-static-token`（统一值；注 1） |
+| `ADMIN_JWT_SECRET` | admin-service | `sanshuiyuan-admin-jwt-prod-key-2026-please-change-in-production`（admin 现网 app.env 既有值；单服务自签自验，任意值可用） |
 
 > 生成值：`openssl rand -hex 48`，在上面后台粘贴为对应 secret 的值。配置后，**下次任意一次部署**即把强值 upsert 到现网各服务（含已存在的 app.env），无需手动维护窗口。
 > ⚠️ 轮换即生效：因 upsert 每次部署执行，改了 repo secret 值 → 下次部署同组全部换新 → 存量 token 失效（user/asset 改 `JWT_SECRET` 则用户需重登，小程序自动重登恢复）。轮换请挑窗口。
-> ess-service 例外：其步骤 app.env 缺失即 FATAL、不自动建，且未接 upsert，须运维手动预置/对齐（含 `H5_JWT_SECRET`=cend 同值、`S2S_TOKEN`=全链路同值）。
-
-## 待办 / 加固建议
-
-- ess-service 尚未接入 `upsert_secret`（其步骤在 app.env 缺失时 FATAL、不自动建）。若要让 ess 也随 repo secret 自动对齐 `H5_JWT_SECRET`/`S2S_TOKEN`，需单独在其步骤加 upsert（注意它要求 app.env 必须已存在）。
+> ess-service：app.env 仍须运维**预置**（缺失即 FATAL、不自动建）；但已在 FATAL 守卫之后接入 `upsert_secret`（`H5_JWT_SECRET`/`S2S_TOKEN`），故 repo secret 设了之后 ess 也会随每次部署对齐。
+>
+> 注 1（S2S 回退取值）：各服务 yml 默认并不一致（核心服务 user/asset/admin/cend/ess=`local-dev-static-token`，6 个消费方=`dev-s2s-shared-token`）；统一回退取 `local-dev-static-token`。对**现网无影响**——已核实 11 个服务 app.env 均已显式写 `S2S_TOKEN`，upsert 命中"已存在"分支原样保留，回退值不会被用到；统一值仅作用于全新/灾备 provision，反而修掉了旧骨架"各服务回退到不同 S2S→跨服务 401"的split-brain。
