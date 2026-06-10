@@ -99,18 +99,18 @@ jobs:
             DB_PASSWORD=Sanshuiyuan2026!
             ENVEOF
             fi
-            # 共享密钥 upsert（ADMIN_JWT_SECRET 仅 admin；S2S_TOKEN 全链路同值）：repo secret 已设→每次部署写入(现网亦对齐)；未设→保留已有值、缺失才补占位。见 deploy/SECRETS.md
-            upsert_secret() {
+            # 共享密钥按需补齐（ADMIN_JWT_SECRET 仅 admin；S2S_TOKEN 全链路同值）：仅缺失时按 repo secret（未设则该键 yml 默认）补齐，不就地轮换；轮换走 deploy/SECRETS.md 手动 SOP
+            seed_secret() {
+              # 仅当该键在 app.env 缺失时写入（新建/灾备 provision，或某服务漏配该键）；已存在则一律不动。
+              # 故意不在 CD 内就地轮换共享密钥：多服务顺序重启期间签发/验签密钥会短暂错位（401），
+              # 且某步骤健康检查失败回滚只还原 jar、不还原 env，会留下持久 split-brain。轮换走 deploy/SECRETS.md 手动 SOP。
               local k="$1" v="$2" ph="$3" f="$4"
-              if [ -z "$v" ]; then
-                if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
-                v="$ph"
-              fi
-              sudo sed -i "/^${k}=/d" "$f"
+              if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
+              [ -n "$v" ] || v="$ph"   # repo secret 未设 → 回退该键 yml 默认（行为不变）
               printf '%s=%s\n' "$k" "$v" | sudo tee -a "$f" > /dev/null
             }
-            upsert_secret ADMIN_JWT_SECRET "${SHARED_ADMIN_JWT_SECRET:-}" "sanshuiyuan-admin-jwt-prod-key-2026-please-change-in-production" "$ENV_FILE"
-            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
+            seed_secret ADMIN_JWT_SECRET "${SHARED_ADMIN_JWT_SECRET:-}" "sanshuiyuan-admin-jwt-prod-key-2026-please-change-in-production" "$ENV_FILE"
+            seed_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
 
             # 首次初始化 Systemd 配置文件
             SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
@@ -238,18 +238,18 @@ jobs:
             WXPAY_API_V3_KEY=stub
             ENVEOF
             fi
-            # 共享密钥 upsert（cend 是 H5_JWT_SECRET 签发方；S2S_TOKEN 全链路同值）：repo secret 已设→每次部署写入(现网亦对齐)；未设→保留已有值、缺失才补占位。见 deploy/SECRETS.md
-            upsert_secret() {
+            # 共享密钥按需补齐（cend 是 H5_JWT_SECRET 签发方；S2S_TOKEN 全链路同值）：仅缺失时按 repo secret（未设则该键 yml 默认）补齐，不就地轮换；轮换走 deploy/SECRETS.md 手动 SOP
+            seed_secret() {
+              # 仅当该键在 app.env 缺失时写入（新建/灾备 provision，或某服务漏配该键）；已存在则一律不动。
+              # 故意不在 CD 内就地轮换共享密钥：多服务顺序重启期间签发/验签密钥会短暂错位（401），
+              # 且某步骤健康检查失败回滚只还原 jar、不还原 env，会留下持久 split-brain。轮换走 deploy/SECRETS.md 手动 SOP。
               local k="$1" v="$2" ph="$3" f="$4"
-              if [ -z "$v" ]; then
-                if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
-                v="$ph"
-              fi
-              sudo sed -i "/^${k}=/d" "$f"
+              if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
+              [ -n "$v" ] || v="$ph"   # repo secret 未设 → 回退该键 yml 默认（行为不变）
               printf '%s=%s\n' "$k" "$v" | sudo tee -a "$f" > /dev/null
             }
-            upsert_secret H5_JWT_SECRET "${SHARED_H5_JWT_SECRET:-}" "dev-h5-jwt-secret-please-override-in-prod-0001" "$ENV_FILE"
-            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
+            seed_secret H5_JWT_SECRET "${SHARED_H5_JWT_SECRET:-}" "dev-h5-jwt-secret-please-override-in-prod-0001" "$ENV_FILE"
+            seed_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
 
             # 首次初始化 Systemd 配置文件
             SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
@@ -358,18 +358,18 @@ jobs:
             WX_MP_APP_SECRET=stub
             ENVEOF
             fi
-            # 共享密钥 upsert（JWT_SECRET 须与 bridge-asset-service 同值，不一致→asset 全量 401；S2S_TOKEN 全链路同值）：repo secret 已设→每次部署写入(现网亦对齐)；未设→保留已有值、缺失才补同组占位。见 deploy/SECRETS.md
-            upsert_secret() {
+            # 共享密钥按需补齐（JWT_SECRET 须与 bridge-asset-service 同值，不一致→asset 全量 401；S2S_TOKEN 全链路同值）：仅缺失时按 repo secret（未设则该键 yml 默认）补齐，不就地轮换；轮换走 deploy/SECRETS.md 手动 SOP
+            seed_secret() {
+              # 仅当该键在 app.env 缺失时写入（新建/灾备 provision，或某服务漏配该键）；已存在则一律不动。
+              # 故意不在 CD 内就地轮换共享密钥：多服务顺序重启期间签发/验签密钥会短暂错位（401），
+              # 且某步骤健康检查失败回滚只还原 jar、不还原 env，会留下持久 split-brain。轮换走 deploy/SECRETS.md 手动 SOP。
               local k="$1" v="$2" ph="$3" f="$4"
-              if [ -z "$v" ]; then
-                if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
-                v="$ph"
-              fi
-              sudo sed -i "/^${k}=/d" "$f"
+              if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
+              [ -n "$v" ] || v="$ph"   # repo secret 未设 → 回退该键 yml 默认（行为不变）
               printf '%s=%s\n' "$k" "$v" | sudo tee -a "$f" > /dev/null
             }
-            upsert_secret JWT_SECRET "${SHARED_JWT_SECRET:-}" "change-me-in-production-at-least-256-bits-long!!" "$ENV_FILE"
-            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
+            seed_secret JWT_SECRET "${SHARED_JWT_SECRET:-}" "change-me-in-production-at-least-256-bits-long!!" "$ENV_FILE"
+            seed_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
 
             SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
             if [ ! -f "$SERVICE_FILE" ]; then
@@ -486,18 +486,18 @@ jobs:
             WXPAY_WALLET_NOTIFY_URL=https://api.sanshuiyuan.com/api/asset/wxpay/wallet-callback
             ENVEOF
             fi
-            # 共享密钥 upsert（JWT_SECRET 须与 bridge-user-service 同值，不一致→asset 全量 401；S2S_TOKEN 全链路同值）：repo secret 已设→每次部署写入(现网亦对齐)；未设→保留已有值、缺失才补同组占位。见 deploy/SECRETS.md
-            upsert_secret() {
+            # 共享密钥按需补齐（JWT_SECRET 须与 bridge-user-service 同值，不一致→asset 全量 401；S2S_TOKEN 全链路同值）：仅缺失时按 repo secret（未设则该键 yml 默认）补齐，不就地轮换；轮换走 deploy/SECRETS.md 手动 SOP
+            seed_secret() {
+              # 仅当该键在 app.env 缺失时写入（新建/灾备 provision，或某服务漏配该键）；已存在则一律不动。
+              # 故意不在 CD 内就地轮换共享密钥：多服务顺序重启期间签发/验签密钥会短暂错位（401），
+              # 且某步骤健康检查失败回滚只还原 jar、不还原 env，会留下持久 split-brain。轮换走 deploy/SECRETS.md 手动 SOP。
               local k="$1" v="$2" ph="$3" f="$4"
-              if [ -z "$v" ]; then
-                if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
-                v="$ph"
-              fi
-              sudo sed -i "/^${k}=/d" "$f"
+              if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
+              [ -n "$v" ] || v="$ph"   # repo secret 未设 → 回退该键 yml 默认（行为不变）
               printf '%s=%s\n' "$k" "$v" | sudo tee -a "$f" > /dev/null
             }
-            upsert_secret JWT_SECRET "${SHARED_JWT_SECRET:-}" "change-me-in-production-at-least-256-bits-long!!" "$ENV_FILE"
-            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
+            seed_secret JWT_SECRET "${SHARED_JWT_SECRET:-}" "change-me-in-production-at-least-256-bits-long!!" "$ENV_FILE"
+            seed_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
 
             SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
             if [ ! -f "$SERVICE_FILE" ]; then
@@ -602,18 +602,18 @@ jobs:
             DB_PASSWORD=Sanshuiyuan2026!
             ENVEOF
             fi
-            # 共享密钥 upsert（H5_JWT_SECRET 须与 cend 同值、S2S_TOKEN 全链路同值）：repo secret 已设→每次部署写入(现网亦对齐)；未设→保留已有值、缺失才补同组占位。见 deploy/SECRETS.md
-            upsert_secret() {
+            # 共享密钥按需补齐（H5_JWT_SECRET 须与 cend 同值、S2S_TOKEN 全链路同值）：仅缺失时按 repo secret（未设则该键 yml 默认）补齐，不就地轮换；轮换走 deploy/SECRETS.md 手动 SOP
+            seed_secret() {
+              # 仅当该键在 app.env 缺失时写入（新建/灾备 provision，或某服务漏配该键）；已存在则一律不动。
+              # 故意不在 CD 内就地轮换共享密钥：多服务顺序重启期间签发/验签密钥会短暂错位（401），
+              # 且某步骤健康检查失败回滚只还原 jar、不还原 env，会留下持久 split-brain。轮换走 deploy/SECRETS.md 手动 SOP。
               local k="$1" v="$2" ph="$3" f="$4"
-              if [ -z "$v" ]; then
-                if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
-                v="$ph"
-              fi
-              sudo sed -i "/^${k}=/d" "$f"
+              if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
+              [ -n "$v" ] || v="$ph"   # repo secret 未设 → 回退该键 yml 默认（行为不变）
               printf '%s=%s\n' "$k" "$v" | sudo tee -a "$f" > /dev/null
             }
-            upsert_secret H5_JWT_SECRET "${SHARED_H5_JWT_SECRET:-}" "dev-h5-jwt-secret-please-override-in-prod-0001" "$ENV_FILE"
-            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
+            seed_secret H5_JWT_SECRET "${SHARED_H5_JWT_SECRET:-}" "dev-h5-jwt-secret-please-override-in-prod-0001" "$ENV_FILE"
+            seed_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
 
             SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
             if [ ! -f "$SERVICE_FILE" ]; then
@@ -727,18 +727,18 @@ jobs:
             DB_PASSWORD=Sanshuiyuan2026!
             ENVEOF
             fi
-            # 共享密钥 upsert（H5_JWT_SECRET 须与 cend 同值、S2S_TOKEN 全链路同值）：repo secret 已设→每次部署写入(现网亦对齐)；未设→保留已有值、缺失才补同组占位。见 deploy/SECRETS.md
-            upsert_secret() {
+            # 共享密钥按需补齐（H5_JWT_SECRET 须与 cend 同值、S2S_TOKEN 全链路同值）：仅缺失时按 repo secret（未设则该键 yml 默认）补齐，不就地轮换；轮换走 deploy/SECRETS.md 手动 SOP
+            seed_secret() {
+              # 仅当该键在 app.env 缺失时写入（新建/灾备 provision，或某服务漏配该键）；已存在则一律不动。
+              # 故意不在 CD 内就地轮换共享密钥：多服务顺序重启期间签发/验签密钥会短暂错位（401），
+              # 且某步骤健康检查失败回滚只还原 jar、不还原 env，会留下持久 split-brain。轮换走 deploy/SECRETS.md 手动 SOP。
               local k="$1" v="$2" ph="$3" f="$4"
-              if [ -z "$v" ]; then
-                if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
-                v="$ph"
-              fi
-              sudo sed -i "/^${k}=/d" "$f"
+              if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
+              [ -n "$v" ] || v="$ph"   # repo secret 未设 → 回退该键 yml 默认（行为不变）
               printf '%s=%s\n' "$k" "$v" | sudo tee -a "$f" > /dev/null
             }
-            upsert_secret H5_JWT_SECRET "${SHARED_H5_JWT_SECRET:-}" "dev-h5-jwt-secret-please-override-in-prod-0001" "$ENV_FILE"
-            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
+            seed_secret H5_JWT_SECRET "${SHARED_H5_JWT_SECRET:-}" "dev-h5-jwt-secret-please-override-in-prod-0001" "$ENV_FILE"
+            seed_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
 
             # 标准 systemd 单元（迁移后重写为指向标准目录；旧单元若指向 /opt/matching-service 一并覆盖）
             SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
@@ -844,18 +844,18 @@ jobs:
             DB_PASSWORD=Sanshuiyuan2026!
             ENVEOF
             fi
-            # 共享密钥 upsert（H5_JWT_SECRET 须与 cend 同值、S2S_TOKEN 全链路同值）：repo secret 已设→每次部署写入(现网亦对齐)；未设→保留已有值、缺失才补同组占位。见 deploy/SECRETS.md
-            upsert_secret() {
+            # 共享密钥按需补齐（H5_JWT_SECRET 须与 cend 同值、S2S_TOKEN 全链路同值）：仅缺失时按 repo secret（未设则该键 yml 默认）补齐，不就地轮换；轮换走 deploy/SECRETS.md 手动 SOP
+            seed_secret() {
+              # 仅当该键在 app.env 缺失时写入（新建/灾备 provision，或某服务漏配该键）；已存在则一律不动。
+              # 故意不在 CD 内就地轮换共享密钥：多服务顺序重启期间签发/验签密钥会短暂错位（401），
+              # 且某步骤健康检查失败回滚只还原 jar、不还原 env，会留下持久 split-brain。轮换走 deploy/SECRETS.md 手动 SOP。
               local k="$1" v="$2" ph="$3" f="$4"
-              if [ -z "$v" ]; then
-                if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
-                v="$ph"
-              fi
-              sudo sed -i "/^${k}=/d" "$f"
+              if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
+              [ -n "$v" ] || v="$ph"   # repo secret 未设 → 回退该键 yml 默认（行为不变）
               printf '%s=%s\n' "$k" "$v" | sudo tee -a "$f" > /dev/null
             }
-            upsert_secret H5_JWT_SECRET "${SHARED_H5_JWT_SECRET:-}" "dev-h5-jwt-secret-please-override-in-prod-0001" "$ENV_FILE"
-            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
+            seed_secret H5_JWT_SECRET "${SHARED_H5_JWT_SECRET:-}" "dev-h5-jwt-secret-please-override-in-prod-0001" "$ENV_FILE"
+            seed_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
 
             SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
             CURRENT_EXEC="$(grep -E '^ExecStart=' "$SERVICE_FILE" 2>/dev/null || true)"
@@ -964,18 +964,18 @@ jobs:
             SPRING_DATA_REDIS_PASSWORD=
             ENVEOF
             fi
-            # 共享密钥 upsert（H5_JWT_SECRET 须与 cend 同值、S2S_TOKEN 全链路同值）：repo secret 已设→每次部署写入(现网亦对齐)；未设→保留已有值、缺失才补同组占位。见 deploy/SECRETS.md
-            upsert_secret() {
+            # 共享密钥按需补齐（H5_JWT_SECRET 须与 cend 同值、S2S_TOKEN 全链路同值）：仅缺失时按 repo secret（未设则该键 yml 默认）补齐，不就地轮换；轮换走 deploy/SECRETS.md 手动 SOP
+            seed_secret() {
+              # 仅当该键在 app.env 缺失时写入（新建/灾备 provision，或某服务漏配该键）；已存在则一律不动。
+              # 故意不在 CD 内就地轮换共享密钥：多服务顺序重启期间签发/验签密钥会短暂错位（401），
+              # 且某步骤健康检查失败回滚只还原 jar、不还原 env，会留下持久 split-brain。轮换走 deploy/SECRETS.md 手动 SOP。
               local k="$1" v="$2" ph="$3" f="$4"
-              if [ -z "$v" ]; then
-                if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
-                v="$ph"
-              fi
-              sudo sed -i "/^${k}=/d" "$f"
+              if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
+              [ -n "$v" ] || v="$ph"   # repo secret 未设 → 回退该键 yml 默认（行为不变）
               printf '%s=%s\n' "$k" "$v" | sudo tee -a "$f" > /dev/null
             }
-            upsert_secret H5_JWT_SECRET "${SHARED_H5_JWT_SECRET:-}" "dev-h5-jwt-secret-please-override-in-prod-0001" "$ENV_FILE"
-            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
+            seed_secret H5_JWT_SECRET "${SHARED_H5_JWT_SECRET:-}" "dev-h5-jwt-secret-please-override-in-prod-0001" "$ENV_FILE"
+            seed_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
 
             SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
             CURRENT_EXEC="$(grep -E '^ExecStart=' "$SERVICE_FILE" 2>/dev/null || true)"
@@ -1081,18 +1081,18 @@ jobs:
             DB_PASSWORD=Sanshuiyuan2026!
             ENVEOF
             fi
-            # 共享密钥 upsert（H5_JWT_SECRET 须与 cend 同值、S2S_TOKEN 全链路同值）：repo secret 已设→每次部署写入(现网亦对齐)；未设→保留已有值、缺失才补同组占位。见 deploy/SECRETS.md
-            upsert_secret() {
+            # 共享密钥按需补齐（H5_JWT_SECRET 须与 cend 同值、S2S_TOKEN 全链路同值）：仅缺失时按 repo secret（未设则该键 yml 默认）补齐，不就地轮换；轮换走 deploy/SECRETS.md 手动 SOP
+            seed_secret() {
+              # 仅当该键在 app.env 缺失时写入（新建/灾备 provision，或某服务漏配该键）；已存在则一律不动。
+              # 故意不在 CD 内就地轮换共享密钥：多服务顺序重启期间签发/验签密钥会短暂错位（401），
+              # 且某步骤健康检查失败回滚只还原 jar、不还原 env，会留下持久 split-brain。轮换走 deploy/SECRETS.md 手动 SOP。
               local k="$1" v="$2" ph="$3" f="$4"
-              if [ -z "$v" ]; then
-                if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
-                v="$ph"
-              fi
-              sudo sed -i "/^${k}=/d" "$f"
+              if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
+              [ -n "$v" ] || v="$ph"   # repo secret 未设 → 回退该键 yml 默认（行为不变）
               printf '%s=%s\n' "$k" "$v" | sudo tee -a "$f" > /dev/null
             }
-            upsert_secret H5_JWT_SECRET "${SHARED_H5_JWT_SECRET:-}" "dev-h5-jwt-secret-please-override-in-prod-0001" "$ENV_FILE"
-            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
+            seed_secret H5_JWT_SECRET "${SHARED_H5_JWT_SECRET:-}" "dev-h5-jwt-secret-please-override-in-prod-0001" "$ENV_FILE"
+            seed_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
 
             SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
             CURRENT_EXEC="$(grep -E '^ExecStart=' "$SERVICE_FILE" 2>/dev/null || true)"
@@ -1198,18 +1198,18 @@ jobs:
             DB_PASSWORD=Sanshuiyuan2026!
             ENVEOF
             fi
-            # 共享密钥 upsert（H5_JWT_SECRET 须与 cend 同值、S2S_TOKEN 全链路同值）：repo secret 已设→每次部署写入(现网亦对齐)；未设→保留已有值、缺失才补同组占位。见 deploy/SECRETS.md
-            upsert_secret() {
+            # 共享密钥按需补齐（H5_JWT_SECRET 须与 cend 同值、S2S_TOKEN 全链路同值）：仅缺失时按 repo secret（未设则该键 yml 默认）补齐，不就地轮换；轮换走 deploy/SECRETS.md 手动 SOP
+            seed_secret() {
+              # 仅当该键在 app.env 缺失时写入（新建/灾备 provision，或某服务漏配该键）；已存在则一律不动。
+              # 故意不在 CD 内就地轮换共享密钥：多服务顺序重启期间签发/验签密钥会短暂错位（401），
+              # 且某步骤健康检查失败回滚只还原 jar、不还原 env，会留下持久 split-brain。轮换走 deploy/SECRETS.md 手动 SOP。
               local k="$1" v="$2" ph="$3" f="$4"
-              if [ -z "$v" ]; then
-                if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
-                v="$ph"
-              fi
-              sudo sed -i "/^${k}=/d" "$f"
+              if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
+              [ -n "$v" ] || v="$ph"   # repo secret 未设 → 回退该键 yml 默认（行为不变）
               printf '%s=%s\n' "$k" "$v" | sudo tee -a "$f" > /dev/null
             }
-            upsert_secret H5_JWT_SECRET "${SHARED_H5_JWT_SECRET:-}" "dev-h5-jwt-secret-please-override-in-prod-0001" "$ENV_FILE"
-            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
+            seed_secret H5_JWT_SECRET "${SHARED_H5_JWT_SECRET:-}" "dev-h5-jwt-secret-please-override-in-prod-0001" "$ENV_FILE"
+            seed_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
 
             SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
             CURRENT_EXEC="$(grep -E '^ExecStart=' "$SERVICE_FILE" 2>/dev/null || true)"
@@ -1320,18 +1320,18 @@ jobs:
               echo "[deploy] FATAL: $ENV_FILE 不存在——ess 迁移需先预置 app.env（含密钥与 127.0.0.1 端点）" >&2
               exit 1
             fi
-            # 共享密钥 upsert（与 cend/全链路对齐）：repo secret 已设→每次部署写入；未设→保留已有值、缺失才补同组占位（=各服务 yml 默认，行为不变）。见 deploy/SECRETS.md
-            upsert_secret() {
+            # 共享密钥按需补齐（与 cend/全链路对齐）：仅缺失时按 repo secret（未设则该键 yml 默认）补齐，不就地轮换；轮换走 deploy/SECRETS.md 手动 SOP
+            seed_secret() {
+              # 仅当该键在 app.env 缺失时写入（新建/灾备 provision，或某服务漏配该键）；已存在则一律不动。
+              # 故意不在 CD 内就地轮换共享密钥：多服务顺序重启期间签发/验签密钥会短暂错位（401），
+              # 且某步骤健康检查失败回滚只还原 jar、不还原 env，会留下持久 split-brain。轮换走 deploy/SECRETS.md 手动 SOP。
               local k="$1" v="$2" ph="$3" f="$4"
-              if [ -z "$v" ]; then
-                if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
-                v="$ph"
-              fi
-              sudo sed -i "/^${k}=/d" "$f"
+              if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
+              [ -n "$v" ] || v="$ph"   # repo secret 未设 → 回退该键 yml 默认（行为不变）
               printf '%s=%s\n' "$k" "$v" | sudo tee -a "$f" > /dev/null
             }
-            upsert_secret H5_JWT_SECRET "${SHARED_H5_JWT_SECRET:-}" "dev-h5-jwt-secret-please-override-in-prod-0001" "$ENV_FILE"
-            upsert_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
+            seed_secret H5_JWT_SECRET "${SHARED_H5_JWT_SECRET:-}" "dev-h5-jwt-secret-please-override-in-prod-0001" "$ENV_FILE"
+            seed_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
 
             SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
             if [ ! -f "$SERVICE_FILE" ]; then
