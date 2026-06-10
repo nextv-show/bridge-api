@@ -77,8 +77,30 @@ public class WxLoginUseCase {
     /** 支持关系链参数的创建/查找（供内部 sync 接口调用，见 spec 012）。 */
     public User findOrCreateByUnionid(String unionid, String openidWx, String openidApp,
                                        Long inviterId, Long grandInviterId) {
-        return userRepository.findByUnionid(unionid)
-                .orElseGet(() -> createUser(unionid, openidWx, openidApp, inviterId, grandInviterId));
+        // 有 unionid：按 unionid（多端统一键）命中即返回。
+        if (unionid != null && !unionid.isBlank()) {
+            var byUnionid = userRepository.findByUnionid(unionid);
+            if (byUnionid.isPresent()) {
+                return byUnionid.get();
+            }
+        } else {
+            // 无 unionid（小程序未绑微信开放平台时 jscode2session 不下发 unionid）：
+            // 退回按端内稳定标识 openid 查找。绝不能用 findByUnionid(null)——多个未绑用户的
+            // unionid 均为 NULL，会命中多行抛 NonUniqueResultException 导致登录 500（见 SyncH5UseCase 同款逻辑）。
+            if (openidWx != null && !openidWx.isBlank()) {
+                var byWx = userRepository.findByOpenidWx(openidWx);
+                if (byWx.isPresent()) {
+                    return byWx.get();
+                }
+            }
+            if (openidApp != null && !openidApp.isBlank()) {
+                var byApp = userRepository.findByOpenidApp(openidApp);
+                if (byApp.isPresent()) {
+                    return byApp.get();
+                }
+            }
+        }
+        return createUser(unionid, openidWx, openidApp, inviterId, grandInviterId);
     }
 
     /**
