@@ -54,6 +54,23 @@ openssl rand -base64 32
 
 - **2026-06-09**：`JWT_SECRET` 经实测发现生产仍为 yml 弱默认（用 `change-me-...` 铸 token 可 200），已轮换为 `openssl rand -hex 48` 强随机值，`user-service` 与 `asset-service` 同值并重启，旧 token 已全 403。同时把 `JWT_SECRET` 补进本清单与 CD 骨架（user-service 占位改为"需强随机+须与 asset 一致"；asset-service 骨架此前**完全缺失** `JWT_SECRET` 行，已补）。详见父仓记忆 `jwt-auth-security`。
 
+## CD 注入共享密钥（已实施）
+
+CD（`.github/workflows/deploy.yml`）已把同组共享密钥改为 **GitHub Actions Secret 单一来源**：job 级 `env:` 读取 repo secret → 各 ssh 步骤经 `envs:` 转发到远端 → **仅在 `app.env` 不存在时**（首次 provision）追加写入对应服务的 app.env。同组各服务读同一个 secret，天然逐字节一致。
+
+**需在仓库 Settings → Secrets and variables → Actions 配置的 repo secret：**
+
+| Repo Secret | 注入到的服务 | 不配置的后果 |
+|---|---|---|
+| `JWT_SECRET` | user-service · asset-service | 回退占位 `CHANGE-ME-set-repo-secret-JWT_SECRET-...`（两端**同串**，仍匹配，但是公开弱值） |
+| `H5_JWT_SECRET` | cend + 7 个 H5 消费方 | 回退 yml dev 默认（全组同串、匹配，但弱） |
+| `S2S_TOKEN` | 全部后端服务 | 回退 `change-me-s2s-shared-token`（弱） |
+| `ADMIN_JWT_SECRET` | admin-service | 回退 `sanshuiyuan-admin-jwt-prod-key-...`（弱） |
+
+> 生成值：`openssl rand -hex 48`，在上面后台粘贴为对应 secret 的值。配置后，**下次任何一台机器首次 provision** 即自动落强值。
+> ⚠️ 注意边界：CD 只在 `app.env` **不存在**时写入 → 配置 repo secret **不会**自动改已存在的现网 app.env（含 2026-06-09 已轮换的 user/asset）。要让现网换用 repo secret 值，仍需按上面「轮换流程」手动覆写或先删除 app.env 让 CD 重建。
+> ess-service 例外：其步骤 app.env 缺失即 FATAL、不自动建，须运维预置（含 `H5_JWT_SECRET`=cend 同值、`S2S_TOKEN`=全链路同值）。
+
 ## 待办 / 加固建议
 
-- 当前 `app.env` 为服务器手维护、无版本管理。可考虑把同组共享密钥（`JWT_SECRET`/`H5_JWT_SECRET`/`S2S_TOKEN`）改为 **GitHub Actions Secret 单一来源**，由 CD 在首次 provision 时注入两端，杜绝"两端各自占位→不一致"与"漏设回退弱默认"。此为流程变更，需仓库管理员配合设置 repo secret，未在本次实施。
+- 现网 app.env 与 repo secret 的"对齐"仍是手动一次性动作（见上方边界说明）。如需让现网完全以 repo secret 为准，可在一次维护窗口内：设好 repo secret → 备份并删除各 app.env 的对应行（或整文件）→ 重跑 CD（`workflow_dispatch`）由骨架重建 → 验证健康与跨服务验签。
