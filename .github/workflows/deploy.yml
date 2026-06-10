@@ -320,7 +320,10 @@ jobs:
             DB_PASSWORD=Sanshuiyuan2026!
             REDIS_HOST=localhost
             REDIS_PORT=6379
-            JWT_SECRET=change-me-in-production-at-least-256-bits-long!!
+            # JWT_SECRET：用户态 access/refresh 签发密钥（HS256）。⚠️ 必须改成强随机值，且与
+            # bridge-asset-service 的 JWT_SECRET 完全一致（asset 用同一密钥验签用户 token；
+            # 不一致→asset 全量 401）。生成：openssl rand -hex 48。清单见 deploy/SECRETS.md。
+            JWT_SECRET=change-me-STRONG-RANDOM-hex48-and-MUST-MATCH-asset-service
             S2S_TOKEN=change-me-s2s-shared-token
             WX_MP_APP_ID=stub
             WX_MP_APP_SECRET=stub
@@ -428,6 +431,9 @@ jobs:
             DB_PASSWORD=Sanshuiyuan2026!
             REDIS_HOST=localhost
             REDIS_PORT=6379
+            # JWT_SECRET：验签 user-service 签发的用户 token。⚠️ 必须与 bridge-user-service 的
+            # JWT_SECRET 完全一致，否则 asset 全量 401。生成：openssl rand -hex 48。清单见 deploy/SECRETS.md。
+            JWT_SECRET=change-me-STRONG-RANDOM-hex48-and-MUST-MATCH-user-service
             S2S_TOKEN=change-me-s2s-shared-token
             # 微信支付默认不配置：asset-service 回退 stub 下单 + 失败关闭验签，可正常启动。
             # 启用时取消注释并填真实值，并把商户私钥放到 WXPAY_API_KEY_PATH 指向的文件。
