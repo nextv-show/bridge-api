@@ -113,6 +113,33 @@ class WxLoginUseCaseTest {
     }
 
     @Test
+    void loginMiniProgram_nullUnionid_matchesByOpenidWx_doesNotRecreate() {
+        // 线上回归：小程序未绑微信开放平台时 jscode2session 不下发 unionid。
+        // 老逻辑 findByUnionid(null) 会命中多个 unionid=NULL 的用户抛 NonUniqueResultException → 登录 500。
+        // 现按 openid_wx 兜底命中既有用户，不再重复建号、不报错。
+        User existing = new User();
+        existing.setId(9L);
+        existing.setOpenidWx("openid-no-union");
+        existing.setActiveRole(Role.CONSUMER);
+
+        when(wxMiniProgramClient.code2session("js-code-3"))
+                .thenReturn(new WxMiniProgramClient.WxSessionResponse("openid-no-union", null, "sk"));
+        when(userRepository.findByOpenidWx("openid-no-union")).thenReturn(Optional.of(existing));
+        when(userRoleRepository.findByIdUserId(9L)).thenReturn(List.of(new UserRole(9L, Role.CONSUMER)));
+        when(jwtIssuer.issueAccessToken(eq(9L), eq(Role.CONSUMER))).thenReturn("access-jwt");
+        when(jwtIssuer.issueRefreshToken(9L)).thenReturn("refresh-jwt");
+
+        AuthResponse resp = useCase.loginMiniProgram("js-code-3");
+
+        // 不得用 unionid 查询（避免 null 命中多行）；既有用户不重复创建。
+        verify(userRepository, never()).findByUnionid(any());
+        verify(userRepository, never()).save(any());
+        verify(userRoleRepository, never()).save(any());
+        verify(homeLayoutPrefRepository, never()).save(any());
+        assertThat(resp.getUser().getId()).isEqualTo(9L);
+    }
+
+    @Test
     void loginApp_newUser_setsOpenidApp() {
         when(wxOpenPlatformClient.exchangeAppCode("app-code"))
                 .thenReturn(new WxOpenPlatformClient.WxOAuthResponse("openid-app", "union-z", "at"));
