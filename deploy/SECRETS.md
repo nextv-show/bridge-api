@@ -56,7 +56,12 @@ openssl rand -base64 32
 
 ## CD 注入共享密钥（已实施）
 
-CD（`.github/workflows/deploy.yml`）已把同组共享密钥改为 **GitHub Actions Secret 单一来源**：job 级 `env:` 读取 repo secret → 各 ssh 步骤经 `envs:` 转发到远端 → **仅在 `app.env` 不存在时**（首次 provision）追加写入对应服务的 app.env。同组各服务读同一个 secret，天然逐字节一致。
+CD（`.github/workflows/deploy.yml`）已把同组共享密钥改为 **GitHub Actions Secret 单一来源**：job 级 `env:` 读取 repo secret → 各 ssh 步骤经 `envs:` 转发到远端 → 远端 `upsert_secret` 幂等写入对应服务的 app.env。同组各服务读同一个 secret，天然逐字节一致。
+
+`upsert_secret` 的三态语义（每次部署都执行，非仅首次 provision）：
+- **repo secret 已设** → 把该值 upsert 进 app.env（覆盖旧行）：**现网每次部署自动对齐**，无需手动维护窗口；
+- **repo secret 未设 + 该行已存在** → **原样保留**，绝不冲掉手动轮换/运维填的值（如 2026-06-09 手动轮换的 user/asset 强密钥）；
+- **repo secret 未设 + 该行缺失** → 写同组占位（保证同组仍匹配、可启动）。
 
 **需在仓库 Settings → Secrets and variables → Actions 配置的 repo secret：**
 
@@ -67,10 +72,10 @@ CD（`.github/workflows/deploy.yml`）已把同组共享密钥改为 **GitHub Ac
 | `S2S_TOKEN` | 全部后端服务 | 回退 `change-me-s2s-shared-token`（弱） |
 | `ADMIN_JWT_SECRET` | admin-service | 回退 `sanshuiyuan-admin-jwt-prod-key-...`（弱） |
 
-> 生成值：`openssl rand -hex 48`，在上面后台粘贴为对应 secret 的值。配置后，**下次任何一台机器首次 provision** 即自动落强值。
-> ⚠️ 注意边界：CD 只在 `app.env` **不存在**时写入 → 配置 repo secret **不会**自动改已存在的现网 app.env（含 2026-06-09 已轮换的 user/asset）。要让现网换用 repo secret 值，仍需按上面「轮换流程」手动覆写或先删除 app.env 让 CD 重建。
-> ess-service 例外：其步骤 app.env 缺失即 FATAL、不自动建，须运维预置（含 `H5_JWT_SECRET`=cend 同值、`S2S_TOKEN`=全链路同值）。
+> 生成值：`openssl rand -hex 48`，在上面后台粘贴为对应 secret 的值。配置后，**下次任意一次部署**即把强值 upsert 到现网各服务（含已存在的 app.env），无需手动维护窗口。
+> ⚠️ 轮换即生效：因 upsert 每次部署执行，改了 repo secret 值 → 下次部署同组全部换新 → 存量 token 失效（user/asset 改 `JWT_SECRET` 则用户需重登，小程序自动重登恢复）。轮换请挑窗口。
+> ess-service 例外：其步骤 app.env 缺失即 FATAL、不自动建，且未接 upsert，须运维手动预置/对齐（含 `H5_JWT_SECRET`=cend 同值、`S2S_TOKEN`=全链路同值）。
 
 ## 待办 / 加固建议
 
-- 现网 app.env 与 repo secret 的"对齐"仍是手动一次性动作（见上方边界说明）。如需让现网完全以 repo secret 为准，可在一次维护窗口内：设好 repo secret → 备份并删除各 app.env 的对应行（或整文件）→ 重跑 CD（`workflow_dispatch`）由骨架重建 → 验证健康与跨服务验签。
+- ess-service 尚未接入 `upsert_secret`（其步骤在 app.env 缺失时 FATAL、不自动建）。若要让 ess 也随 repo secret 自动对齐 `H5_JWT_SECRET`/`S2S_TOKEN`，需单独在其步骤加 upsert（注意它要求 app.env 必须已存在）。
