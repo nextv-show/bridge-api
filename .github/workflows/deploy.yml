@@ -103,7 +103,7 @@ jobs:
             upsert_secret() {
               local k="$1" v="$2" ph="$3" f="$4"
               if [ -z "$v" ]; then
-                if grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
+                if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
                 v="$ph"
               fi
               sudo sed -i "/^${k}=/d" "$f"
@@ -242,7 +242,7 @@ jobs:
             upsert_secret() {
               local k="$1" v="$2" ph="$3" f="$4"
               if [ -z "$v" ]; then
-                if grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
+                if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
                 v="$ph"
               fi
               sudo sed -i "/^${k}=/d" "$f"
@@ -362,7 +362,7 @@ jobs:
             upsert_secret() {
               local k="$1" v="$2" ph="$3" f="$4"
               if [ -z "$v" ]; then
-                if grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
+                if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
                 v="$ph"
               fi
               sudo sed -i "/^${k}=/d" "$f"
@@ -490,7 +490,7 @@ jobs:
             upsert_secret() {
               local k="$1" v="$2" ph="$3" f="$4"
               if [ -z "$v" ]; then
-                if grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
+                if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
                 v="$ph"
               fi
               sudo sed -i "/^${k}=/d" "$f"
@@ -606,7 +606,7 @@ jobs:
             upsert_secret() {
               local k="$1" v="$2" ph="$3" f="$4"
               if [ -z "$v" ]; then
-                if grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
+                if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
                 v="$ph"
               fi
               sudo sed -i "/^${k}=/d" "$f"
@@ -731,7 +731,7 @@ jobs:
             upsert_secret() {
               local k="$1" v="$2" ph="$3" f="$4"
               if [ -z "$v" ]; then
-                if grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
+                if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
                 v="$ph"
               fi
               sudo sed -i "/^${k}=/d" "$f"
@@ -848,7 +848,7 @@ jobs:
             upsert_secret() {
               local k="$1" v="$2" ph="$3" f="$4"
               if [ -z "$v" ]; then
-                if grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
+                if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
                 v="$ph"
               fi
               sudo sed -i "/^${k}=/d" "$f"
@@ -968,7 +968,7 @@ jobs:
             upsert_secret() {
               local k="$1" v="$2" ph="$3" f="$4"
               if [ -z "$v" ]; then
-                if grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
+                if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
                 v="$ph"
               fi
               sudo sed -i "/^${k}=/d" "$f"
@@ -1085,7 +1085,7 @@ jobs:
             upsert_secret() {
               local k="$1" v="$2" ph="$3" f="$4"
               if [ -z "$v" ]; then
-                if grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
+                if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
                 v="$ph"
               fi
               sudo sed -i "/^${k}=/d" "$f"
@@ -1202,7 +1202,7 @@ jobs:
             upsert_secret() {
               local k="$1" v="$2" ph="$3" f="$4"
               if [ -z "$v" ]; then
-                if grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
+                if sudo grep -q "^${k}=" "$f" 2>/dev/null; then return 0; fi
                 v="$ph"
               fi
               sudo sed -i "/^${k}=/d" "$f"
