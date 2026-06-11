@@ -29,6 +29,13 @@ public class WalletPayController {
     static final String OUT_TRADE_PREFIX = "WR";
 
     /**
+     * 微信查单返回这些「已确定未支付」终态时，待支付充值单才可安全取消/关单。
+     * 其余状态（QUERY_ERROR 查单失败 / USERPAYING 支付中 / ACCEPT / STUB 等）支付结果未确定，
+     * 一律不取消——避免「用户已付但被取消、钱包不增」资损。
+     */
+    public static final java.util.Set<String> CLOSEABLE_UNPAID = java.util.Set.of("NOTPAY", "CLOSED", "REVOKED", "PAYERROR");
+
+    /**
      * 充值单 → 微信商户订单号。微信要求 out_trade_no 6~32 位，故对 rechargeId 左补零至 10 位
      * （回调/查单侧 {@code Long.valueOf(no.substring(2))} 可还原）。下单与主动查单必须用同一构造。
      */
@@ -104,16 +111,22 @@ public class WalletPayController {
         if (r.getStatus() != RechargeStatus.PENDING_PAY) {
             return ResponseEntity.status(409).body(Map.of("error", "充值单状态不可取消：" + r.getStatus()));
         }
-        // 取消前主动查单：查到已支付即兜底入账，避免资损。查单失败按未支付继续取消。
-        try {
+        // 取消前主动查单，按微信侧真实支付状态决定，避免「用户已付但被取消、钱包不增」资损。
+        // stub（dev/CI，无真实支付）无资损风险，直接放行取消；真实支付下仅「已确定未支付」终态才取消。
+        if (mpWxPayClient.isReal()) {
             MpWxPayClient.TradeQueryResult q = mpWxPayClient.queryOrder(outTradeNo(r.getId()));
-            if ("SUCCESS".equals(q.tradeState())) {
+            String state = q.tradeState();
+            if ("SUCCESS".equals(state)) {
                 WalletRecharge paid = walletService.markPaidByRecharge(r.getId(), q.transactionId());
                 log.info("取消充值单 {} 时查到微信已支付，转兜底入账 transactionId={}", rechargeId, q.transactionId());
                 return ResponseEntity.ok(Map.of("rechargeId", paid.getId(), "status", paid.getStatus().name(), "credited", true));
             }
-        } catch (RuntimeException e) {
-            log.warn("取消充值单 {} 前查单失败，按未支付继续取消：{}", rechargeId, e.getMessage());
+            if (!CLOSEABLE_UNPAID.contains(state)) {
+                // QUERY_ERROR / USERPAYING / ACCEPT 等：支付状态未确定，拒绝取消（保守，避免资损），待用户稍后重试。
+                log.warn("取消充值单 {} 查单状态未确定（tradeState={}），拒绝取消，待用户重试", rechargeId, state);
+                return ResponseEntity.status(409).body(Map.of("error", "支付状态确认中，请稍后重试"));
+            }
+            // NOTPAY / CLOSED / REVOKED / PAYERROR：已确定未支付，可安全取消。
         }
         try {
             WalletRecharge cancelled = walletService.cancelRecharge(userId, r.getId());

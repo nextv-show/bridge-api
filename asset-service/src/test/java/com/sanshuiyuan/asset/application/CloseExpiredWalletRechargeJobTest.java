@@ -81,15 +81,32 @@ class CloseExpiredWalletRechargeJobTest {
     }
 
     @Test
-    void cancelsWhenQueryFails() {
+    void skipsWhenQueryFails() {
+        // 资损防护：查单失败（QUERY_ERROR，微信/网络抖动）时绝不关单，本轮跳过、留待下一轮重试。
         WalletRecharge r = pending(7L, 3L, LocalDateTime.now().minusHours(30));
         when(rechargeRepo.findByStatusAndCreatedAtBefore(eq(RechargeStatus.PENDING_PAY), any()))
                 .thenReturn(List.of(r));
-        when(mpWxPayClient.queryOrder("WR0000000007")).thenThrow(new RuntimeException("boom"));
+        when(mpWxPayClient.queryOrder("WR0000000007"))
+                .thenReturn(new MpWxPayClient.TradeQueryResult("QUERY_ERROR", null, null));
 
         job().closeExpired();
 
-        verify(walletService).cancelRecharge(eq(3L), eq(7L));
+        verify(walletService, never()).cancelRecharge(any(), any());
+        verify(walletService, never()).markPaidByRecharge(any(), any());
+    }
+
+    @Test
+    void skipsWhenPaymentInProgress() {
+        // USERPAYING（用户支付中）：状态未确定，不关单。
+        WalletRecharge r = pending(10L, 6L, LocalDateTime.now().minusHours(30));
+        when(rechargeRepo.findByStatusAndCreatedAtBefore(eq(RechargeStatus.PENDING_PAY), any()))
+                .thenReturn(List.of(r));
+        when(mpWxPayClient.queryOrder("WR0000000010"))
+                .thenReturn(new MpWxPayClient.TradeQueryResult("USERPAYING", null, null));
+
+        job().closeExpired();
+
+        verify(walletService, never()).cancelRecharge(any(), any());
     }
 
     @Test

@@ -57,20 +57,24 @@ public class CloseExpiredWalletRechargeJob {
         List<WalletRecharge> expired = rechargeRepo.findByStatusAndCreatedAtBefore(RechargeStatus.PENDING_PAY, expiryTime);
         for (WalletRecharge r : expired) {
             try {
-                // 关单前主动查单：查到已支付即兜底入账，避免「用户已付但被关单、钱包不增」资损。
-                try {
-                    MpWxPayClient.TradeQueryResult q = mpWxPayClient.queryOrder(WalletPayController.outTradeNo(r.getId()));
-                    if ("SUCCESS".equals(q.tradeState())) {
-                        log.info("超时关单时查到微信已支付，转兜底入账：rechargeId={} transactionId={}", r.getId(), q.transactionId());
-                        walletService.markPaidByRecharge(r.getId(), q.transactionId());
-                        continue;
-                    }
-                } catch (RuntimeException e) {
-                    // 查单失败（如订单过老被微信清理）按未支付处理，继续关单。
-                    log.warn("超时关单 rechargeId={} 前查单失败，按未支付关单：{}", r.getId(), e.getMessage());
+                // 关单前主动查单，按微信侧真实状态决定，绝不在状态未知时关单。
+                MpWxPayClient.TradeQueryResult q = mpWxPayClient.queryOrder(WalletPayController.outTradeNo(r.getId()));
+                String state = q.tradeState();
+                if ("SUCCESS".equals(state)) {
+                    log.info("超时关单时查到微信已支付，转兜底入账：rechargeId={} transactionId={}", r.getId(), q.transactionId());
+                    walletService.markPaidByRecharge(r.getId(), q.transactionId());
+                    continue;
                 }
+                if (!WalletPayController.CLOSEABLE_UNPAID.contains(state)) {
+                    // QUERY_ERROR（微信/网络抖动）/ USERPAYING / STUB 等：支付状态未确定，本轮跳过、下一轮重试。
+                    // 绝不在状态未知时关单——避免抖动期把 24h+ 待支付单批量误关，造成「用户已付但被关单」资损。
+                    log.debug("超时关单跳过 rechargeId={}：支付状态未确定 tradeState={}", r.getId(), state);
+                    continue;
+                }
+                // NOTPAY / CLOSED / REVOKED / PAYERROR：已确定未支付，安全关单。
                 walletService.cancelRecharge(r.getUserId(), r.getId());
-                log.info("待支付充值单超时关单：rechargeId={} userId={} createdAt={}", r.getId(), r.getUserId(), r.getCreatedAt());
+                log.info("待支付充值单超时关单：rechargeId={} userId={} createdAt={} tradeState={}",
+                        r.getId(), r.getUserId(), r.getCreatedAt(), state);
             } catch (Exception e) {
                 // 单笔失败不中断整批。
                 log.error("待支付充值单超时关单失败 rechargeId={}: {}", r.getId(), e.getMessage(), e);
