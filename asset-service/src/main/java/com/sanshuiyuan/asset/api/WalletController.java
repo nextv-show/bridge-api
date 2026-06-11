@@ -2,11 +2,13 @@ package com.sanshuiyuan.asset.api;
 
 import com.sanshuiyuan.asset.api.dto.RechargeCreateRequest;
 import com.sanshuiyuan.asset.api.dto.RechargeCreateResponse;
+import com.sanshuiyuan.asset.api.dto.RechargeRecordDto;
 import com.sanshuiyuan.asset.api.dto.WalletDto;
 import com.sanshuiyuan.asset.application.WalletService;
 import com.sanshuiyuan.asset.domain.ConsumerWallet;
 import com.sanshuiyuan.asset.domain.WalletRecharge;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -16,6 +18,7 @@ import java.time.format.DateTimeFormatter;
 /**
  * 消费者水费钱包 API（小程序 user-JWT）。
  * GET  /wallet                  当前用户钱包
+ * GET  /wallet/recharges        当前用户充值/账单流水（分页）
  * POST /wallet/recharge         创建水费充值单（预收账款）
  */
 @RestController
@@ -41,6 +44,14 @@ public class WalletController {
                 w.getLastRechargeCents(),
                 w.getLastRechargeAt() != null ? w.getLastRechargeAt().format(DATE) : null
         ));
+    }
+
+    @GetMapping("/recharges")
+    public ResponseEntity<Page<RechargeRecordDto>> listRecharges(
+            @AuthenticationPrincipal Long userId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(walletService.listRecharges(userId, page, size));
     }
 
     @PostMapping("/recharge")
