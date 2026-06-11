@@ -32,6 +32,44 @@ class RefIdCodecTest {
     }
 
     @Test
+    void encodeSceneThenDecode_restoresOriginalUserId() {
+        for (long userId : new long[]{1L, 42L, 14821L, 9_999_999L, Long.MAX_VALUE}) {
+            String scene = codec.encodeScene(userId);
+            assertThat(codec.decode(scene)).isEqualTo(userId);
+        }
+    }
+
+    @Test
+    void encodeScene_fitsWeixin32CharLimitAndIsSceneSafe() {
+        // 微信 wxacode scene 上限 32 字符；任意 long（含 Long.MAX_VALUE）都必须 ≤32，否则报 40169。
+        for (long userId : new long[]{1L, 14821L, 1_000_000_000L, Long.MAX_VALUE}) {
+            String scene = codec.encodeScene(userId);
+            assertThat(scene.length()).as("scene len for %s", userId).isLessThanOrEqualTo(32);
+            // 微信允许字符含 Base64URL 字符集与 '.'；确保无 '+' '/' '=' 填充。
+            assertThat(scene).doesNotContain("+").doesNotContain("/").doesNotContain("=");
+            assertThat(scene.split("\\.")).hasSize(2);
+        }
+    }
+
+    @Test
+    void decode_tamperedScene_isRejected() {
+        String scene = codec.encodeScene(14821L);
+        String tampered = scene.substring(0, scene.length() - 1)
+                + (scene.endsWith("A") ? "B" : "A");
+        assertThatThrownBy(() -> codec.decode(tampered))
+                .isInstanceOf(InvalidRefIdException.class);
+    }
+
+    @Test
+    void decode_sceneFromDifferentSecret_isRejected() {
+        RefIdCodec other = new RefIdCodec("a-completely-different-secret-key-9876");
+        String sceneFromOther = other.encodeScene(14821L);
+        assertThat(other.decode(sceneFromOther)).isEqualTo(14821L);
+        assertThatThrownBy(() -> codec.decode(sceneFromOther))
+                .isInstanceOf(InvalidRefIdException.class);
+    }
+
+    @Test
     void decode_tamperedSignature_isRejected() {
         String token = codec.encode(14821L);
         String tampered = token.substring(0, token.length() - 1)

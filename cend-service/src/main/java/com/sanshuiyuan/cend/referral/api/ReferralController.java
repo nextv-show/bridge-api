@@ -116,7 +116,8 @@ public class ReferralController {
         String openid = CurrentOpenid.require();
         CendUser user = userRepo.findByOpenid(openid)
                 .orElseThrow(() -> new BizException(ErrorCode.UNAUTHORIZED));
-        String scene = refIdCodec.encode(user.getId());
+        // 微信 scene 最长 32 字符（标准 encode 约 48 字符会被拒，errcode 40169）→ 用紧凑形态。
+        String scene = refIdCodec.encodeScene(user.getId());
         String dataUrl = wxMiniCodeClient.getUnlimitedWxaCode(scene, req.page(), req.envVersion());
         return ApiResponse.ok(new WxacodeResponse(dataUrl));
     }
