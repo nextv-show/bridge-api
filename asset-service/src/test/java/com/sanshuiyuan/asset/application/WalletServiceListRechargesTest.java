@@ -36,7 +36,7 @@ class WalletServiceListRechargesTest {
     @Test
     void queriesByCurrentUserAndMapsToDto() {
         WalletRecharge r = WalletRecharge.create(42L, 20000L, 20, 0, "WECHAT");
-        when(rechargeRepo.findByUserIdOrderByCreatedAtDesc(eq(42L), org.mockito.ArgumentMatchers.any(Pageable.class)))
+        when(rechargeRepo.findHistoryByUserId(eq(42L), org.mockito.ArgumentMatchers.any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(r)));
 
         Page<RechargeRecordDto> out = service().listRecharges(42L, 0, 20);
@@ -49,13 +49,13 @@ class WalletServiceListRechargesTest {
 
     @Test
     void clampsSizeToFiftyAndPageToZero() {
-        when(rechargeRepo.findByUserIdOrderByCreatedAtDesc(eq(7L), org.mockito.ArgumentMatchers.any(Pageable.class)))
+        when(rechargeRepo.findHistoryByUserId(eq(7L), org.mockito.ArgumentMatchers.any(Pageable.class)))
                 .thenReturn(Page.empty());
 
         service().listRecharges(7L, -3, 999);
 
         ArgumentCaptor<Pageable> cap = ArgumentCaptor.forClass(Pageable.class);
-        org.mockito.Mockito.verify(rechargeRepo).findByUserIdOrderByCreatedAtDesc(eq(7L), cap.capture());
+        org.mockito.Mockito.verify(rechargeRepo).findHistoryByUserId(eq(7L), cap.capture());
         assertThat(cap.getValue().getPageNumber()).isZero();
         assertThat(cap.getValue().getPageSize()).isEqualTo(50);
     }

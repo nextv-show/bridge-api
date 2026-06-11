@@ -58,7 +58,7 @@ public class WalletService {
         int safeSize = Math.min(Math.max(size, 1), 50);
         int safePage = Math.max(page, 0);
         Pageable pageable = PageRequest.of(safePage, safeSize);
-        return rechargeRepo.findByUserIdOrderByCreatedAtDesc(userId, pageable)
+        return rechargeRepo.findHistoryByUserId(userId, pageable)
                 .map(RechargeRecordDto::from);
     }
 
