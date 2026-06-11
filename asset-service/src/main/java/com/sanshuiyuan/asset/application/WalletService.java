@@ -52,6 +52,24 @@ public class WalletService {
                 .orElseThrow(() -> new IllegalArgumentException("充值单不存在"));
     }
 
+    /**
+     * 用户主动取消待支付充值单。幂等：已取消的直接返回；已支付的拒绝（不可逆）。
+     * 调用方（WalletPayController）应在取消前先主动查单，避免「用户已付但被取消」资损。
+     */
+    @Transactional
+    public WalletRecharge cancelRecharge(Long userId, Long rechargeId) {
+        WalletRecharge r = rechargeRepo.findByIdAndUserId(rechargeId, userId)
+                .orElseThrow(() -> new IllegalArgumentException("充值单不存在"));
+        if (r.getStatus() == RechargeStatus.CANCELLED) {
+            return r; // 幂等
+        }
+        if (r.getStatus() != RechargeStatus.PENDING_PAY) {
+            throw new IllegalStateException("充值单状态不可取消：" + r.getStatus());
+        }
+        r.cancel();
+        return rechargeRepo.save(r);
+    }
+
     /** 当前用户充值/账单流水（按创建时间降序，分页）。size 上限 50。 */
     @Transactional(readOnly = true)
     public Page<RechargeRecordDto> listRecharges(Long userId, int page, int size) {

@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -16,6 +17,9 @@ public interface WalletRechargeRepository extends JpaRepository<WalletRecharge, 
 
     /** 主动查单兜底用：拉取所有待支付充值单（ReconcileWalletRechargeJob）。 */
     List<WalletRecharge> findByStatus(RechargeStatus status);
+
+    /** 超时关单用：拉取指定时间前创建、仍待支付的充值单（CloseExpiredWalletRechargeJob）。 */
+    List<WalletRecharge> findByStatusAndCreatedAtBefore(RechargeStatus status, LocalDateTime createdBefore);
 
     /**
      * 当前用户充值/账单流水（分页）。

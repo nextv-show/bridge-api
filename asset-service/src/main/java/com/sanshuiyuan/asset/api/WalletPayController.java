@@ -84,4 +84,42 @@ public class WalletPayController {
         body.put("real", mpWxPayClient.isReal()); // false=stub，前端走 dev 模拟支付
         return ResponseEntity.ok(body);
     }
+
+    /**
+     * 取消待支付充值单（账单页「取消充值」）。
+     * 资损防护：本机微信回调零送达，取消前先主动查单——若微信侧已 SUCCESS，则兜底入账而非取消
+     * （返回 status=PAID, credited=true），避免「用户已付但订单被取消、钱包不增」。否则作废为 CANCELLED。
+     */
+    @PostMapping("/{id}/cancel")
+    public ResponseEntity<?> cancel(@AuthenticationPrincipal Long userId, @PathVariable("id") Long rechargeId) {
+        WalletRecharge r;
+        try {
+            r = walletService.getOwnedRecharge(userId, rechargeId);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
+        }
+        if (r.getStatus() == RechargeStatus.CANCELLED) {
+            return ResponseEntity.ok(Map.of("rechargeId", r.getId(), "status", r.getStatus().name())); // 幂等
+        }
+        if (r.getStatus() != RechargeStatus.PENDING_PAY) {
+            return ResponseEntity.status(409).body(Map.of("error", "充值单状态不可取消：" + r.getStatus()));
+        }
+        // 取消前主动查单：查到已支付即兜底入账，避免资损。查单失败按未支付继续取消。
+        try {
+            MpWxPayClient.TradeQueryResult q = mpWxPayClient.queryOrder(outTradeNo(r.getId()));
+            if ("SUCCESS".equals(q.tradeState())) {
+                WalletRecharge paid = walletService.markPaidByRecharge(r.getId(), q.transactionId());
+                log.info("取消充值单 {} 时查到微信已支付，转兜底入账 transactionId={}", rechargeId, q.transactionId());
+                return ResponseEntity.ok(Map.of("rechargeId", paid.getId(), "status", paid.getStatus().name(), "credited", true));
+            }
+        } catch (RuntimeException e) {
+            log.warn("取消充值单 {} 前查单失败，按未支付继续取消：{}", rechargeId, e.getMessage());
+        }
+        try {
+            WalletRecharge cancelled = walletService.cancelRecharge(userId, r.getId());
+            return ResponseEntity.ok(Map.of("rechargeId", cancelled.getId(), "status", cancelled.getStatus().name()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(409).body(Map.of("error", e.getMessage()));
+        }
+    }
 }
