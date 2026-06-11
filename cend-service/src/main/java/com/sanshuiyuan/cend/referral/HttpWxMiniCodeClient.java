@@ -30,21 +30,30 @@ public class HttpWxMiniCodeClient implements WxMiniCodeClient {
     }
 
     @Override
-    public String getUnlimitedWxaCode(String scene, String page) {
+    public String getUnlimitedWxaCode(String scene, String page, String envVersion) {
+        String env = normalizeEnv(envVersion);
         String token = getAccessToken(false);
         byte[] imageBytes;
         try {
-            imageBytes = callWxaCode(token, scene, page);
+            imageBytes = callWxaCode(token, scene, page, env);
         } catch (BizException e) {
             if ("40001".equals(e.getMessage())) {
                 log.info("wxacode token 过期，重新获取并重试 (appId 前4位: {})", maskAppId());
                 token = getAccessToken(true);
-                imageBytes = callWxaCode(token, scene, page);
+                imageBytes = callWxaCode(token, scene, page, env);
             } else {
                 throw e;
             }
         }
         return "data:image/jpeg;base64," + Base64.getEncoder().encodeToString(imageBytes);
+    }
+
+    // 仅放行微信支持的三个版本值，其余一律回退 release，避免把非法值透传给微信侧。
+    private static String normalizeEnv(String envVersion) {
+        if ("trial".equals(envVersion) || "develop".equals(envVersion)) {
+            return envVersion;
+        }
+        return "release";
     }
 
     private synchronized String getAccessToken(boolean forceRefresh) {
@@ -87,7 +96,7 @@ public class HttpWxMiniCodeClient implements WxMiniCodeClient {
         return token;
     }
 
-    private byte[] callWxaCode(String token, String scene, String page) {
+    private byte[] callWxaCode(String token, String scene, String page, String envVersion) {
         String reqBody;
         try {
             reqBody = objectMapper.writeValueAsString(
@@ -95,7 +104,7 @@ public class HttpWxMiniCodeClient implements WxMiniCodeClient {
                             .put("scene", scene)
                             .put("page", page)
                             .put("check_path", false)
-                            .put("env_version", "release")
+                            .put("env_version", envVersion)
                             .put("width", 430));
         } catch (Exception e) {
             throw new BizException(ErrorCode.WX_API_ERROR, "构建小程序码请求失败");

@@ -14,8 +14,8 @@ public class StubWxMiniCodeClient implements WxMiniCodeClient {
                     + "AAAAAAAAAAwAAAAA/9oACAEBAAA/Az/9k=";
 
     @Override
-    public String getUnlimitedWxaCode(String scene, String page) {
-        log.info("[stub] wxacode.getUnlimited scene={} page={} -> 占位图", scene, page);
+    public String getUnlimitedWxaCode(String scene, String page, String envVersion) {
+        log.info("[stub] wxacode.getUnlimited scene={} page={} envVersion={} -> 占位图", scene, page, envVersion);
         return PLACEHOLDER_DATA_URL;
     }
 }

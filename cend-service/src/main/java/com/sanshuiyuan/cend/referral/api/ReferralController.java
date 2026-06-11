@@ -117,7 +117,7 @@ public class ReferralController {
         CendUser user = userRepo.findByOpenid(openid)
                 .orElseThrow(() -> new BizException(ErrorCode.UNAUTHORIZED));
         String scene = refIdCodec.encode(user.getId());
-        String dataUrl = wxMiniCodeClient.getUnlimitedWxaCode(scene, req.page());
+        String dataUrl = wxMiniCodeClient.getUnlimitedWxaCode(scene, req.page(), req.envVersion());
         return ApiResponse.ok(new WxacodeResponse(dataUrl));
     }
 
