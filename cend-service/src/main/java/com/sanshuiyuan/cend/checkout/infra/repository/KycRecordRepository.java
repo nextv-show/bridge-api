@@ -33,4 +33,8 @@ public interface KycRecordRepository extends JpaRepository<KycRecord, Long> {
     /** phone_hash 回填：取一批已实名(PASS)、有密文手机号但缺 phone_hash 的记录。 */
     List<KycRecord> findByStatusAndPhoneHashIsNullAndPhoneEncIsNotNull(
             KycStatus status, org.springframework.data.domain.Pageable pageable);
+
+    /** id_card_hash 回填：取一批已实名(PASS)、有密文身份证但缺 id_card_hash 的记录（V022 之前的存量）。 */
+    List<KycRecord> findByStatusAndIdCardHashIsNullAndIdCardNoEncIsNotNull(
+            KycStatus status, org.springframework.data.domain.Pageable pageable);
 }

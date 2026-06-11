@@ -52,12 +52,16 @@ public class IdentityLinkService {
         KycRecord match = kycRepo
                 .findFirstByPhoneHashAndStatusOrderByVerifiedAtDesc(phoneHash, KycStatus.PASS)
                 .orElse(null);
-        if (match == null || match.getIdCardHash() == null || match.getIdCardHash().isBlank()) {
+        if (match == null) {
             log.info("手机号核验通过但无可关联的实名订单 openid={}", openid);
             return new LinkResult(false, "该手机号下暂无可关联的实名订单");
         }
 
-        String idCardHash = match.getIdCardHash();
+        String idCardHash = resolveIdCardHash(match);
+        if (idCardHash == null || idCardHash.isBlank()) {
+            log.info("手机号核验命中实名记录但无可用 id_card_hash openid={}", openid);
+            return new LinkResult(false, "该手机号下暂无可关联的实名订单");
+        }
         // 本端已有实名(PASS)即天然同人，无需再建关联，幂等返回成功。
         boolean alreadyKyc = kycRepo
                 .findFirstByOpenidAndStatusOrderByVerifiedAtDesc(openid, KycStatus.PASS)
@@ -74,4 +78,32 @@ public class IdentityLinkService {
         log.info("手机号核验跨端关联成功 openid={}", openid);
         return new LinkResult(true, "关联成功，已为你合并历史订单");
     }
+
+    /**
+     * 取实名记录的 id_card_hash；存量 PASS（V022 之前）该列为空时，就地解密 id_card_no_enc 重算并持久化，
+     * 使关联与订单聚合即时可用（与 KycHashBackfillRunner 同算法，互为兜底）。
+     */
+    private String resolveIdCardHash(KycRecord match) {
+        String hash = match.getIdCardHash();
+        if (hash != null && !hash.isBlank()) {
+            return hash;
+        }
+        if (match.getIdCardNoEnc() == null) {
+            return null;
+        }
+        try {
+            String idNo = cipher.decrypt(match.getIdCardNoEnc());
+            if (idNo == null || idNo.isBlank()) {
+                return null;
+            }
+            String computed = cipher.idCardHash(idNo.trim().toUpperCase());
+            match.bindIdCardHash(computed);
+            kycRepo.save(match);
+            return computed;
+        } catch (Exception e) {
+            log.warn("就地补算 id_card_hash 失败 recordId={}: {}", match.getId(), e.getMessage());
+            return null;
+        }
+    }
 }
+

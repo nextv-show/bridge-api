@@ -80,6 +80,42 @@ class IdentityLinkServiceTest {
         verify(linkRepo, never()).save(any());
     }
 
+    private KycRecord passNoHashButEncrypted(String openid) {
+        try {
+            var ctor = KycRecord.class.getDeclaredConstructor();
+            ctor.setAccessible(true);
+            KycRecord r = ctor.newInstance();
+            set(r, "openid", openid);
+            set(r, "status", KycStatus.PASS);
+            set(r, "idCardNoEnc", new byte[]{1, 2, 3}); // 有密文，无 id_card_hash（V022 前存量）
+            return r;
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Test
+    void legacyPassMissingIdCardHash_selfHealsAndLinks() {
+        KycRecord legacy = passNoHashButEncrypted("wx-openid");
+        when(phoneClient.getPhoneNumber("code")).thenReturn("16601115566");
+        when(cipher.phoneHash("16601115566")).thenReturn("phash");
+        when(kycRepo.findFirstByPhoneHashAndStatusOrderByVerifiedAtDesc("phash", KycStatus.PASS))
+                .thenReturn(Optional.of(legacy));
+        // 就地解密 id_card_no_enc → 重算 id_card_hash 并持久化。
+        when(cipher.decrypt(any())).thenReturn("110101199003077432");
+        when(cipher.idCardHash("110101199003077432")).thenReturn("idhash");
+        when(kycRepo.findFirstByOpenidAndStatusOrderByVerifiedAtDesc("mini-openid", KycStatus.PASS))
+                .thenReturn(Optional.empty());
+        when(linkRepo.findByOpenid("mini-openid")).thenReturn(Optional.empty());
+
+        IdentityLinkService.LinkResult r = service().link("mini-openid", "code");
+
+        assertThat(r.linked()).isTrue();
+        verify(kycRepo).save(legacy);          // 补算 id_card_hash 持久化
+        verify(linkRepo).save(any(IdentityLink.class));
+        assertThat(legacy.getIdCardHash()).isEqualTo("idhash");
+    }
+
     @Test
     void phoneMatchesRealName_createsVisibilityLink() {
         when(phoneClient.getPhoneNumber("code")).thenReturn("13800138000");
