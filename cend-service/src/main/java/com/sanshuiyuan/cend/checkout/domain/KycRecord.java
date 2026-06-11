@@ -128,6 +128,11 @@ public class KycRecord {
         this.phoneHash = phoneHash;
     }
 
+    /** 回填身份证哈希（V022 之前的 PASS 记录 id_card_hash 为空时，解密 id_card_no_enc 重算后补写）。 */
+    public void bindIdCardHash(String idCardHash) {
+        this.idCardHash = idCardHash;
+    }
+
     public Long getId() { return id; }
     public String getOpenid() { return openid; }
     public byte[] getRealName() { return realName; }
