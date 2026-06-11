@@ -60,6 +60,11 @@ public class WalletRecharge {
         this.paidAt = LocalDateTime.now();
     }
 
+    /** 作废待支付充值单（用户主动取消）。仅 PENDING_PAY 可取消，已入账不可逆。 */
+    public void cancel() {
+        this.status = RechargeStatus.CANCELLED;
+    }
+
     public Long getId() { return id; }
     public Long getUserId() { return userId; }
     public Long getAmountCents() { return amountCents; }
