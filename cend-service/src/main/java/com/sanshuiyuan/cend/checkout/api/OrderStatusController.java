@@ -6,6 +6,7 @@ import com.sanshuiyuan.cend.checkout.domain.CendOrder;
 import com.sanshuiyuan.cend.checkout.domain.OrderStatus;
 import com.sanshuiyuan.cend.checkout.infra.repository.CendOrderRepository;
 import com.sanshuiyuan.cend.checkout.infra.wxpay.WxPayClient;
+import com.sanshuiyuan.cend.identity.IdentityResolver;
 import com.sanshuiyuan.cend.common.ApiResponse;
 import com.sanshuiyuan.cend.common.BizException;
 import com.sanshuiyuan.cend.common.ErrorCode;
@@ -33,12 +34,15 @@ public class OrderStatusController {
     private final CendOrderRepository orderRepo;
     private final WxPayClient wxPayClient;
     private final OrderPaymentCompletionService completionService;
+    private final IdentityResolver identityResolver;
 
     public OrderStatusController(CendOrderRepository orderRepo, WxPayClient wxPayClient,
-                                 OrderPaymentCompletionService completionService) {
+                                 OrderPaymentCompletionService completionService,
+                                 IdentityResolver identityResolver) {
         this.orderRepo = orderRepo;
         this.wxPayClient = wxPayClient;
         this.completionService = completionService;
+        this.identityResolver = identityResolver;
     }
 
     @GetMapping("/{id}/status")
@@ -47,7 +51,9 @@ public class OrderStatusController {
         String openid = CurrentOpenid.require();
         CendOrder order = orderRepo.findById(id)
                 .orElseThrow(() -> new BizException(ErrorCode.ORDER_NOT_FOUND));
-        if (!order.getOpenid().equals(openid)) {
+        // 归属校验按自然人聚合：放行同一自然人名下任意 openid（小程序查看其在 H5 下的订单状态等），
+        // 未实名时集合仅含自身 openid，等价于原严格相等校验。
+        if (!identityResolver.owns(openid, order.getOpenid())) {
             throw new BizException(ErrorCode.FORBIDDEN);
         }
 

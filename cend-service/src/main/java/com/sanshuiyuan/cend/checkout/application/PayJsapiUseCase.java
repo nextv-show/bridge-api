@@ -35,6 +35,9 @@ public class PayJsapiUseCase {
         CendOrder order = orderRepo.findById(orderId)
                 .orElseThrow(() -> new BizException(ErrorCode.ORDER_NOT_FOUND));
 
+        // 跨端边界（刻意严格，不按自然人聚合）：支付动作留在下单原端。
+        // 订单的 JSAPI 预支付与下单端的微信 appid/payer openid 绑定，跨端（公众号↔小程序）续付会触发
+        // appid 与 payer openid 不匹配。读路径（列表/详情/资产/发票）已按自然人放行可见，支付仍按原端 openid。
         if (!order.getOpenid().equals(openid)) {
             throw new BizException(ErrorCode.FORBIDDEN);
         }

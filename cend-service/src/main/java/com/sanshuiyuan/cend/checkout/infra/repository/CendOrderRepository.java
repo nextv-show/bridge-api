@@ -27,4 +27,9 @@ public interface CendOrderRepository extends JpaRepository<CendOrder, Long> {
 
     // Spec 015: 批量按 openid + 状态查订单（判断被推荐人是否已购买；按 openid 单点匹配，不涉及关系链层级）
     List<CendOrder> findByOpenidInAndStatus(Collection<String> openids, OrderStatus status);
+
+    // 跨端聚合：按"同一自然人的多个 openid"集合分页查订单（created_at 降序）。
+    // openid 集合由 IdentityResolver 经 PASS 实名的 id_card_hash 归并得出，让小程序/公众号同人订单合并可见。
+    org.springframework.data.domain.Page<CendOrder> findByOpenidInOrderByCreatedAtDesc(
+            Collection<String> openids, org.springframework.data.domain.Pageable pageable);
 }

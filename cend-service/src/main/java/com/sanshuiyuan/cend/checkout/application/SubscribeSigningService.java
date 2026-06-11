@@ -62,10 +62,11 @@ public class SubscribeSigningService {
         String idNo = identity.idCardNo();
         String phoneTrim = identity.phone();
 
-        // 一证一号：同一身份证已在其他 openid 下 PASS 则拒绝。
+        // 一证一号（同证同人则链接）：放行第二端发起签约，签署完成置 PASS 时建立同人跨端绑定（promoteKyc）。
+        // 仅记审计，不拦截。注意：放行后同一自然人可在两端各完成一次认购；如需限制重复认购，应加在订单/配额层。
         String idCardHash = cipher.idCardHash(idNo);
         if (kycRepo.existsByIdCardHashAndStatusAndOpenidNot(idCardHash, KycStatus.PASS, openid)) {
-            throw new BizException(ErrorCode.KYC_ID_CARD_CONFLICT);
+            log.info("一证一号跨端链接：同证已在其他 openid PASS，放行本端发起签约 openid={}", openid);
         }
 
         // 服务端解析规格与价格（不信前端）。
@@ -145,6 +146,7 @@ public class SubscribeSigningService {
                 MaskingUtils.maskRealName(name), MaskingUtils.maskIdCard(idNo), idCardHash,
                 certifyId, CHANNEL,
                 cipher.encrypt(phone), MaskingUtils.maskPhone(phone));
+        init.bindPhoneHash(cipher.phoneHash(phone));
         kycRepo.save(init);
     }
 
@@ -199,10 +201,12 @@ public class SubscribeSigningService {
             return; // 已提升或无记录，幂等返回。
         }
         KycRecord record = initOpt.get();
+        // 一证一号（同证同人则链接）：电子签个人签署已完成实名+人脸核身，确为同一自然人；同证若已在其他
+        // openid PASS，则建立同人跨端绑定，本端正常置 PASS（两端各保留一条 PASS，经 id_card_hash 聚合订单）。
         String idCardHash = record.getIdCardHash();
         if (idCardHash != null
                 && kycRepo.existsByIdCardHashAndStatusAndOpenidNot(idCardHash, KycStatus.PASS, openid)) {
-            throw new BizException(ErrorCode.KYC_ID_CARD_CONFLICT);
+            log.info("一证一号跨端链接：同证已在其他 openid PASS，电子签完成建立同人绑定 openid={}", openid);
         }
         // 作废该 openid 旧 PASS（一 openid 一实名）。
         List<KycRecord> old = kycRepo.findAllByOpenidAndStatus(openid, KycStatus.PASS);

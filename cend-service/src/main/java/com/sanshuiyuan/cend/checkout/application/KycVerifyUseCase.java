@@ -5,8 +5,6 @@ import com.sanshuiyuan.cend.checkout.domain.KycRecord;
 import com.sanshuiyuan.cend.checkout.domain.KycStatus;
 import com.sanshuiyuan.cend.checkout.infra.aliyun.AliyunKycClient;
 import com.sanshuiyuan.cend.checkout.infra.repository.KycRecordRepository;
-import com.sanshuiyuan.cend.common.BizException;
-import com.sanshuiyuan.cend.common.ErrorCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -46,11 +44,13 @@ public class KycVerifyUseCase {
         }
         KycRecord record = initOpt.get();
 
-        // 一证一号（权威闸口）：活体已过，但若同一身份证号已在其他 openid 下 PASS，则拒绝置 PASS。
+        // 一证一号（同证同人则链接）：活体已核验"同一张脸↔同一证"，若该身份证已在其他 openid 下 PASS，
+        // 判定为同一自然人在本端（公众号/小程序）建立绑定，不再拒绝；本端正常置 PASS，两端 openid 经
+        // id_card_hash 链接、订单按自然人聚合可见（IdentityResolver）。仅记审计，不阻断。
         String idCardHash = record.getIdCardHash();
         if (idCardHash != null
                 && kycRepo.existsByIdCardHashAndStatusAndOpenidNot(idCardHash, KycStatus.PASS, openid)) {
-            throw new BizException(ErrorCode.KYC_ID_CARD_CONFLICT);
+            log.info("一证一号跨端链接：同证已在其他 openid PASS，本端 openid 建立同人绑定 openid={}", openid);
         }
 
         // 作废该用户旧的 PASS 记录（ASSUMPTION-Q6：一 openid 对应一实名）。

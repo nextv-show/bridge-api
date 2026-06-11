@@ -62,6 +62,8 @@ public class RefundService {
         CendOrder order = orderRepo.findById(orderId)
                 .orElseThrow(() -> new BizException(ErrorCode.ORDER_NOT_FOUND));
 
+        // 跨端边界（刻意严格，不按自然人聚合）：退款为资金动作，留在下单原端发起，避免跨端误操作。
+        // 读路径已按自然人放行可见；如需开放同人跨端退款，改为 identityResolver.owns(...) 并评估资金合规。
         if (!order.getOpenid().equals(openid)) {
             throw new BizException(ErrorCode.FORBIDDEN);
         }

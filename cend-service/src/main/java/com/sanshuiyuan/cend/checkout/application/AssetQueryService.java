@@ -10,6 +10,7 @@ import com.sanshuiyuan.cend.checkout.infra.repository.CendOrderRepository;
 import com.sanshuiyuan.cend.checkout.infra.repository.InvoiceRepository;
 import com.sanshuiyuan.cend.common.BizException;
 import com.sanshuiyuan.cend.common.ErrorCode;
+import com.sanshuiyuan.cend.identity.IdentityResolver;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -26,20 +27,24 @@ public class AssetQueryService {
     private final CendOrderRepository orderRepo;
     private final DeviceSpecRepository specRepo;
     private final InvoiceRepository invoiceRepo;
+    private final IdentityResolver identityResolver;
 
     public AssetQueryService(CendOrderRepository orderRepo,
                              DeviceSpecRepository specRepo,
-                             InvoiceRepository invoiceRepo) {
+                             InvoiceRepository invoiceRepo,
+                             IdentityResolver identityResolver) {
         this.orderRepo = orderRepo;
         this.specRepo = specRepo;
         this.invoiceRepo = invoiceRepo;
+        this.identityResolver = identityResolver;
     }
 
     public AssetDto queryAsset(Long orderId, String openid) {
         CendOrder order = orderRepo.findById(orderId)
                 .orElseThrow(() -> new BizException(ErrorCode.ORDER_NOT_FOUND));
 
-        if (!order.getOpenid().equals(openid)) {
+        // 读路径按自然人聚合：放行同人跨端查看设备资产（小程序看 H5 单的设备/SN 等）。
+        if (!identityResolver.owns(openid, order.getOpenid())) {
             throw new BizException(ErrorCode.FORBIDDEN);
         }
 

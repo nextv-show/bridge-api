@@ -7,6 +7,7 @@ import com.sanshuiyuan.cend.checkout.infra.repository.CendOrderRepository;
 import com.sanshuiyuan.cend.checkout.infra.repository.InvoiceRepository;
 import com.sanshuiyuan.cend.common.BizException;
 import com.sanshuiyuan.cend.common.ErrorCode;
+import com.sanshuiyuan.cend.identity.IdentityResolver;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,10 +16,13 @@ public class InvoiceService {
 
     private final InvoiceRepository invoiceRepo;
     private final CendOrderRepository orderRepo;
+    private final IdentityResolver identityResolver;
 
-    public InvoiceService(InvoiceRepository invoiceRepo, CendOrderRepository orderRepo) {
+    public InvoiceService(InvoiceRepository invoiceRepo, CendOrderRepository orderRepo,
+                          IdentityResolver identityResolver) {
         this.invoiceRepo = invoiceRepo;
         this.orderRepo = orderRepo;
+        this.identityResolver = identityResolver;
     }
 
     @Transactional
@@ -26,7 +30,8 @@ public class InvoiceService {
         CendOrder order = orderRepo.findById(orderId)
                 .orElseThrow(() -> new BizException(ErrorCode.ORDER_NOT_FOUND));
 
-        if (!order.getOpenid().equals(openid)) {
+        // 读路径按自然人聚合：放行同人跨端查看/获取发票。
+        if (!identityResolver.owns(openid, order.getOpenid())) {
             throw new BizException(ErrorCode.FORBIDDEN);
         }
 

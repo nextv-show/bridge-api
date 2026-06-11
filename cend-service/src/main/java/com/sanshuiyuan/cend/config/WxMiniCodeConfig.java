@@ -1,5 +1,8 @@
 package com.sanshuiyuan.cend.config;
 
+import com.sanshuiyuan.cend.identity.HttpWxMiniPhoneClient;
+import com.sanshuiyuan.cend.identity.StubWxMiniPhoneClient;
+import com.sanshuiyuan.cend.identity.WxMiniPhoneClient;
 import com.sanshuiyuan.cend.referral.HttpWxMiniCodeClient;
 import com.sanshuiyuan.cend.referral.StubWxMiniCodeClient;
 import com.sanshuiyuan.cend.referral.WxMiniCodeClient;
@@ -29,6 +32,18 @@ public class WxMiniCodeConfig {
         }
         log.info("小程序 app-secret 未配置，使用 StubWxMiniCodeClient");
         return new StubWxMiniCodeClient();
+    }
+
+    @Bean
+    public WxMiniPhoneClient wxMiniPhoneClient(
+            @Value("${wx.miniprogram.app-id:stub}") String appId,
+            @Value("${wx.miniprogram.app-secret:}") String appSecret) {
+        if (appSecret != null && !appSecret.isBlank() && !"stub".equals(appSecret)) {
+            log.info("创建 HttpWxMiniPhoneClient appId={}", maskAppId(appId));
+            return new HttpWxMiniPhoneClient(appId, appSecret);
+        }
+        log.info("小程序 app-secret 未配置，使用 StubWxMiniPhoneClient");
+        return new StubWxMiniPhoneClient();
     }
 
     private static String maskAppId(String appId) {
