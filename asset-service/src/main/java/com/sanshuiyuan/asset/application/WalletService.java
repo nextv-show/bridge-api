@@ -1,10 +1,14 @@
 package com.sanshuiyuan.asset.application;
 
+import com.sanshuiyuan.asset.api.dto.RechargeRecordDto;
 import com.sanshuiyuan.asset.domain.ConsumerWallet;
 import com.sanshuiyuan.asset.domain.RechargeStatus;
 import com.sanshuiyuan.asset.domain.WalletRecharge;
 import com.sanshuiyuan.asset.infra.repository.ConsumerWalletRepository;
 import com.sanshuiyuan.asset.infra.repository.WalletRechargeRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,6 +50,16 @@ public class WalletService {
     public WalletRecharge getOwnedRecharge(Long userId, Long rechargeId) {
         return rechargeRepo.findByIdAndUserId(rechargeId, userId)
                 .orElseThrow(() -> new IllegalArgumentException("充值单不存在"));
+    }
+
+    /** 当前用户充值/账单流水（按创建时间降序，分页）。size 上限 50。 */
+    @Transactional(readOnly = true)
+    public Page<RechargeRecordDto> listRecharges(Long userId, int page, int size) {
+        int safeSize = Math.min(Math.max(size, 1), 50);
+        int safePage = Math.max(page, 0);
+        Pageable pageable = PageRequest.of(safePage, safeSize);
+        return rechargeRepo.findHistoryByUserId(userId, pageable)
+                .map(RechargeRecordDto::from);
     }
 
     /**
