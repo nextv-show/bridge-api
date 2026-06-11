@@ -41,6 +41,10 @@ public class KycRecord {
     @Column(name = "id_card_hash", length = 64)
     private String idCardHash;
 
+    /** 手机号确定性哈希（HMAC-SHA256），用于"微信手机号核验跨端关联"按号匹配同人（V025）。 */
+    @Column(name = "phone_hash", length = 64)
+    private String phoneHash;
+
     @Column(name = "real_name_mask", nullable = false, length = 32)
     private String realNameMask;
 
@@ -119,6 +123,11 @@ public class KycRecord {
         this.phoneMask = phoneMask;
     }
 
+    /** 绑定手机号确定性哈希（创建/补录/回填时由 IdCardCipher.phoneHash 计算后写入）。 */
+    public void bindPhoneHash(String phoneHash) {
+        this.phoneHash = phoneHash;
+    }
+
     public Long getId() { return id; }
     public String getOpenid() { return openid; }
     public byte[] getRealName() { return realName; }
@@ -127,6 +136,7 @@ public class KycRecord {
     public String getPhoneMask() { return phoneMask; }
     public String getIdCardNoMask() { return idCardNoMask; }
     public String getIdCardHash() { return idCardHash; }
+    public String getPhoneHash() { return phoneHash; }
     public String getRealNameMask() { return realNameMask; }
     public String getCertifyId() { return certifyId; }
     public String getChannel() { return channel; }

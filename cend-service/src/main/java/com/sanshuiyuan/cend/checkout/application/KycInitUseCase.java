@@ -49,6 +49,7 @@ public class KycInitUseCase {
                 byte[] phoneEnc = cipher.encrypt(phoneTrim);
                 String phoneMask = MaskingUtils.maskPhone(phoneTrim);
                 r.updatePhone(phoneEnc, phoneMask);
+                r.bindPhoneHash(cipher.phoneHash(phoneTrim));
                 kycRepo.save(r);
                 log.info("老用户补录手机号 openid={} phoneMask={}", openid, phoneMask);
                 return KycInitResponse.alreadyVerified(r.getRealNameMask(), r.getIdCardNoMask(), phoneMask);
@@ -72,10 +73,11 @@ public class KycInitUseCase {
             throw new BizException(ErrorCode.VALIDATION_FAILED, "请填写正确的 11 位手机号");
         }
 
-        // 一证一号
+        // 一证一号（同证同人则链接）：放行第二端发起实名，真正的同人跨端绑定在活体完成置 PASS 时建立
+        // （KycVerifyUseCase）。此处不再拦截，否则第二端连 KYC 都发起不了、无法拿到 PASS 聚合订单。仅记审计。
         String idCardHash = cipher.idCardHash(idNo);
         if (kycRepo.existsByIdCardHashAndStatusAndOpenidNot(idCardHash, KycStatus.PASS, openid)) {
-            throw new BizException(ErrorCode.KYC_ID_CARD_CONFLICT);
+            log.info("一证一号跨端链接：同证已在其他 openid PASS，放行本端发起实名 openid={}", openid);
         }
 
         AliyunKycClient.KycInitResult result = kycClient.init(openid, metaInfo, returnUrl);
@@ -90,6 +92,7 @@ public class KycInitUseCase {
                 MaskingUtils.maskRealName(name), MaskingUtils.maskIdCard(idNo), idCardHash,
                 result.certifyId(), "ALIYUN_LR_FR",
                 phoneEnc, phoneMask);
+        init.bindPhoneHash(cipher.phoneHash(phoneTrim));
         kycRepo.save(init);
 
         return KycInitResponse.init(result.certifyId(), result.verifyToken(), result.verifyUrl());

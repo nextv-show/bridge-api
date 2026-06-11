@@ -41,6 +41,20 @@ public class IdCardCipher {
         }
     }
 
+    /**
+     * 手机号的确定性哈希（HMAC-SHA256，密钥同 AES）。用于"微信手机号核验跨端关联"按号等值匹配同一自然人
+     * 已实名记录（phone_enc 用随机 IV 无法比对）。入参应为已规整（trim）的 11 位手机号。
+     */
+    public String phoneHash(String normalizedPhone) {
+        try {
+            Mac mac = Mac.getInstance(HMAC_ALGO);
+            mac.init(hmacKeySpec);
+            return HexFormat.of().formatHex(mac.doFinal(("phone:" + normalizedPhone).getBytes()));
+        } catch (Exception e) {
+            throw new IllegalStateException("HMAC phone hash failed", e);
+        }
+    }
+
     public byte[] encrypt(String plaintext) {
         try {
             byte[] iv = new byte[IV_LEN];

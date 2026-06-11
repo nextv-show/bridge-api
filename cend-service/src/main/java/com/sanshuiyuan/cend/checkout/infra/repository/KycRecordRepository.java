@@ -17,4 +17,20 @@ public interface KycRecordRepository extends JpaRepository<KycRecord, Long> {
 
     /** 一证一号：同一身份证哈希在「非该 openid」下是否已存在指定状态（PASS）记录。 */
     boolean existsByIdCardHashAndStatusAndOpenidNot(String idCardHash, KycStatus status, String openid);
+
+    /**
+     * 跨端身份聚合：取同一身份证哈希下指定状态（PASS）的全部实名记录。
+     *
+     * <p>用于把"同证同人"在多端（公众号/小程序）各自的 openid 归并为一个自然人，供"我的订单"按自然人聚合可见。
+     * 仅基于已活体核验的 PASS 记录，绝不使用 INIT（未核验，按其 hash 聚合会造成 IDOR 越权）。
+     * 按 {@code id_card_hash} 单点查询，命中既有索引 idx_kyc_id_card_hash，不涉及关系链层级。
+     */
+    List<KycRecord> findAllByIdCardHashAndStatus(String idCardHash, KycStatus status);
+
+    /** 微信手机号核验跨端关联：按手机号哈希取同人最近一条指定状态（PASS）实名记录，用于解析其 id_card_hash。 */
+    Optional<KycRecord> findFirstByPhoneHashAndStatusOrderByVerifiedAtDesc(String phoneHash, KycStatus status);
+
+    /** phone_hash 回填：取一批已实名(PASS)、有密文手机号但缺 phone_hash 的记录。 */
+    List<KycRecord> findByStatusAndPhoneHashIsNullAndPhoneEncIsNotNull(
+            KycStatus status, org.springframework.data.domain.Pageable pageable);
 }
