@@ -34,6 +34,7 @@ public class ClaimRequestUseCase {
     private final DeviceAssetGateway deviceAssetGateway;
     private final MatchingConfigService configService;
     private final ClaimRateLimiter rateLimiter;
+    private final MatchingMetrics metrics;
     private final ObjectMapper objectMapper;
 
     public ClaimRequestUseCase(MatchingRequestRepository requestRepository,
@@ -43,6 +44,7 @@ public class ClaimRequestUseCase {
                                DeviceAssetGateway deviceAssetGateway,
                                MatchingConfigService configService,
                                ClaimRateLimiter rateLimiter,
+                               MatchingMetrics metrics,
                                ObjectMapper objectMapper) {
         this.requestRepository = requestRepository;
         this.assignmentRepository = assignmentRepository;
@@ -51,6 +53,7 @@ public class ClaimRequestUseCase {
         this.deviceAssetGateway = deviceAssetGateway;
         this.configService = configService;
         this.rateLimiter = rateLimiter;
+        this.metrics = metrics;
         this.objectMapper = objectMapper;
     }
 
@@ -68,6 +71,7 @@ public class ClaimRequestUseCase {
     @Transactional
     public ClaimRequestResponse claim(String subject, long requestId, long deviceAssetId) {
         if (!rateLimiter.tryConsume(requestId)) {
+            metrics.claimRateLimited();
             throw ApiException.tooManyRequests("CLAIM_RATE_LIMITED", "接单过于频繁，请稍后重试");
         }
 
@@ -96,6 +100,7 @@ public class ClaimRequestUseCase {
         LocalDateTime dayStart = LocalDate.now().atStartOfDay();
         if (assignmentRepository.countByOwnerUserIdAndLockedAtGreaterThanEqual(ownerUserId, dayStart)
                 >= configService.claimDailyQuotaPerOwner()) {
+            metrics.claimQuotaExceeded();
             throw ApiException.tooManyRequests("CLAIM_QUOTA_EXCEEDED", "今日接单已达上限");
         }
 
@@ -129,8 +134,10 @@ public class ClaimRequestUseCase {
             outboxRepository.saveAndFlush(outbox);
         } catch (OptimisticLockingFailureException | DataIntegrityViolationException e) {
             // 并发竞争败者：整笔事务回滚（含步骤 1 的设备 stage），对外统一 409。
+            metrics.claimConflict();
             throw ApiException.conflict("CLAIM_CONFLICT", "需求已被他人接单");
         }
+        metrics.claimSuccess();
 
         return new ClaimRequestResponse(requestId, RequestStatus.LOCKED.name(), true);
     }
