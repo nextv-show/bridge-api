@@ -164,6 +164,9 @@ public class ContractController {
         String phoneOverride = request.get("phone");
         String nameOverride = request.get("realName");
         String idCardOverride = request.get("realIdCard");
+        // notify=true：小程序「短信短链」签署——签署方 NotifyType=SMS 并立即 StartFlow，
+        // 由腾讯电子签下发带签署短链的短信；H5/其它端不传，沿用既有行为。
+        boolean smsNotify = "true".equalsIgnoreCase(request.get("notify"));
 
         log.info("发起签署 [contractId={}, userId={}, clientType={}, phoneOverride={}, nameOverride={}, idCardOverride={}]",
                 id, userId, clientType,
@@ -174,7 +177,7 @@ public class ContractController {
         Contract.SignSource signSource = mapToSignSource(clientType);
         String[] overrides = (phoneOverride != null || nameOverride != null || idCardOverride != null)
                 ? new String[]{phoneOverride, nameOverride, idCardOverride} : null;
-        SigningInitiationResult result = signingService.initiateSigning(id, userId, signSource, overrides);
+        SigningInitiationResult result = signingService.initiateSigning(id, userId, signSource, overrides, smsNotify);
 
         return ResponseEntity.ok(Map.of(
                 "code", 0,

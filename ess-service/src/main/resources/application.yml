@@ -37,8 +37,11 @@ ess:
   connect-timeout-ms: 5000
   read-timeout-ms: 10000
   max-retries: 3
-  # 个人签署传 ApproverIdCardNumber，触发腾讯电子签内的实名+人脸核身（小程序认购签约依赖此项）。
+  # 个人签署传 ApproverIdCardNumber，配合核身（小程序认购签约依赖此项）。
   collect-id-card: ${ESS_COLLECT_ID_CARD:true}
+  # 个人签署方核身方式 ApproverSignTypes（逗号分隔）：1=人脸 2=密码 3=运营商三要素。
+  # 小程序「短信短链」签署须避开人脸，默认 3（运营商三要素 + 签署时短信验证码意愿认证）。留空则用账号侧签署要求。
+  approver-sign-types: ${ESS_APPROVER_SIGN_TYPES:3}
   # 文件模式发起（CreateFlowByFiles）：后端渲染「变量已填好」的合同 PDF，平台只放签名/签章控件。
   # 默认关闭 → 维持既有模板模式；开启前需在腾讯电子签测试账号侧确认印章/静默签配置。
   file:

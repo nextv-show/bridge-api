@@ -40,13 +40,13 @@ public class SubscribeSigningController {
     }
 
     @PostMapping("/sign-start")
-    @Operation(summary = "发起认购签约：生成合同并返回腾讯电子签跳转参数")
+    @Operation(summary = "发起认购签约：生成合同并由腾讯电子签下发签署短信短链")
     public ApiResponse<SignStartResponse> signStart(@Valid @RequestBody SignStartRequest req,
                                                     @RequestHeader(value = "Authorization", required = false) String authorization) {
         String openid = CurrentOpenid.require();
         SubscribeSigningService.SignStartResult r = service.start(
                 openid, authorization, req.userId(), req.specId(), req.realName(), req.idCardNo(), req.phone());
-        return ApiResponse.ok(new SignStartResponse(r.contractId(), r.contractNo(), r.signParams()));
+        return ApiResponse.ok(new SignStartResponse(r.contractId(), r.contractNo(), r.phoneMask()));
     }
 
     @GetMapping("/sign-status")
@@ -65,7 +65,8 @@ public class SubscribeSigningController {
             String idCardNo,
             String phone) {}
 
-    public record SignStartResponse(Long contractId, String contractNo, Object signParams) {}
+    /** phoneMask：签署短信已发往的脱敏手机号（如 138****0000），供前端提示用户去短信里打开签署。 */
+    public record SignStartResponse(Long contractId, String contractNo, String phoneMask) {}
 
     public record SignStatusResponse(Long contractId, String status) {}
 }

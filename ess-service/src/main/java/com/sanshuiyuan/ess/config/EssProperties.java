@@ -50,7 +50,16 @@ public record EssProperties(
         Integer maxRetries,
 
         /** 是否在创建签署方时传身份证号，生产环境建议开启 */
-        Boolean collectIdCard
+        Boolean collectIdCard,
+
+        /**
+         * 个人签署方核身方式（ApproverSignTypes），逗号分隔的整数。
+         * <p>腾讯电子签取值：1=人脸，2=密码，3=运营商三要素。小程序认购走「短信短链」签署，
+         * 必须避开人脸（1），默认 {@code 3}（运营商三要素，姓名+手机+身份证三要素核验，配合签署时短信验证码意愿认证）。
+         * <p>留空则不下发该参数、沿用腾讯电子签账号侧签署要求。
+         * <p>⚠️ 联调验证点：确认账号侧未强制刷脸、且 ApproverSignTypes=[3] 能生效（不同版本参数名/取值可能不同）。
+         */
+        String approverSignTypes
 ) {
 
     /**
@@ -75,5 +84,29 @@ public record EssProperties(
         if (collectIdCard == null) {
             collectIdCard = Boolean.FALSE;
         }
+        if (approverSignTypes == null) {
+            approverSignTypes = "3";
+        }
+    }
+
+    /**
+     * 解析 {@link #approverSignTypes} 为 int 列表；留空/全非法时返回空列表（不下发该参数）。
+     */
+    public java.util.List<Integer> approverSignTypeList() {
+        if (approverSignTypes == null || approverSignTypes.isBlank()) {
+            return java.util.List.of();
+        }
+        java.util.List<Integer> out = new java.util.ArrayList<>();
+        for (String part : approverSignTypes.split(",")) {
+            String t = part.trim();
+            if (!t.isEmpty()) {
+                try {
+                    out.add(Integer.valueOf(t));
+                } catch (NumberFormatException ignore) {
+                    // 跳过非法片段
+                }
+            }
+        }
+        return out;
     }
 }

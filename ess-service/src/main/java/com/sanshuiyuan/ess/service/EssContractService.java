@@ -81,10 +81,21 @@ public class EssContractService {
     }
 
     /**
-     * 创建签署流程。
+     * 创建签署流程（默认不发签署短信，沿用既有 H5 行为）。
      */
     @Transactional
     public EssFlowRecord createFlow(String contractId, String flowName, String signersJson) {
+        return createFlow(contractId, flowName, signersJson, false);
+    }
+
+    /**
+     * 创建签署流程。
+     *
+     * @param smsNotify true 时签署方 NotifyType=SMS，由腾讯电子签在 StartFlow 后下发带签署短链的短信
+     *                  （小程序认购走此路径，不再跳转电子签小程序）。
+     */
+    @Transactional
+    public EssFlowRecord createFlow(String contractId, String flowName, String signersJson, boolean smsNotify) {
         flowRecordRepository.findByContractId(contractId).ifPresent(existing -> {
             throw new EssFlowException(contractId, "合同已存在签署流程，flowId=" + existing.getEssFlowId());
         });
@@ -98,7 +109,7 @@ public class EssContractService {
             params.put("Operator", buildOperator());
             params.put("FlowName", flowName);
             // 将业务签署方信息转换为腾讯电子签 Approvers 格式
-            params.put("Approvers", buildApprovers(signersJson));
+            params.put("Approvers", buildApprovers(signersJson, smsNotify));
             if (properties.templateId() != null && !properties.templateId().isBlank()) {
                 params.put("TemplateId", properties.templateId());
             }
@@ -143,6 +154,15 @@ public class EssContractService {
     @Transactional
     public EssFlowRecord createFlowByFiles(String contractId, String flowName, String signersJson,
                                             byte[] pdfBytes, String fileName) {
+        return createFlowByFiles(contractId, flowName, signersJson, pdfBytes, fileName, false);
+    }
+
+    /**
+     * 文件模式创建签署流程，可指定是否下发签署短信（见 {@link #createFlow(String, String, String, boolean)}）。
+     */
+    @Transactional
+    public EssFlowRecord createFlowByFiles(String contractId, String flowName, String signersJson,
+                                            byte[] pdfBytes, String fileName, boolean smsNotify) {
         EssFileProperties fp = requireFileProperties();
         flowRecordRepository.findByContractId(contractId).ifPresent(existing -> {
             throw new EssFlowException(contractId, "合同已存在签署流程，flowId=" + existing.getEssFlowId());
@@ -160,7 +180,7 @@ public class EssContractService {
             params.put("FlowName", flowName);
             params.put("Unordered", false);
             params.put("FileIds", java.util.List.of(fileId));
-            params.put("Approvers", buildFileApprovers(signersJson, fp));
+            params.put("Approvers", buildFileApprovers(signersJson, fp, smsNotify));
 
             JsonNode response = apiClient.invoke("CreateFlowByFiles", params);
             String flowId = response.get("FlowId").asText();
@@ -371,7 +391,10 @@ public class EssContractService {
      * 输出格式（腾讯 API）：
      * [{"ApproverType":1, "ApproverName":"张三", "ApproverMobile":"138...", "RecipientId":"...", "NotifyType":"NONE"}]
      */
-    private java.util.List<TreeMap<String, Object>> buildApprovers(String signerInfoJson) {
+    private java.util.List<TreeMap<String, Object>> buildApprovers(String signerInfoJson, boolean smsNotify) {
+        // smsNotify=true → NotifyType=SMS：StartFlow 后由腾讯电子签给签署方手机发带签署短链的短信。
+        String notifyType = smsNotify ? "SMS" : "NONE";
+        java.util.List<Integer> signTypes = properties.approverSignTypeList();
         java.util.List<TreeMap<String, Object>> approvers = new java.util.ArrayList<>();
         try {
             JsonNode signers = objectMapper.readTree(signerInfoJson);
@@ -402,7 +425,11 @@ public class EssContractService {
                 }
                 // 使用 operatorId 作为 RecipientId（模板中的签署方 ID）
                 approver.put("RecipientId", properties.operatorId());
-                approver.put("NotifyType", "NONE");
+                approver.put("NotifyType", notifyType);
+                // 个人签署方核身方式（避开人脸，见 EssProperties.approverSignTypes）。
+                if (!signTypes.isEmpty()) {
+                    approver.put("ApproverSignTypes", signTypes);
+                }
                 approvers.add(approver);
             }
         } catch (Exception e) {
@@ -410,7 +437,10 @@ public class EssContractService {
             TreeMap<String, Object> defaultApprover = new TreeMap<>();
             defaultApprover.put("ApproverType", 1);
             defaultApprover.put("RecipientId", properties.operatorId());
-            defaultApprover.put("NotifyType", "NONE");
+            defaultApprover.put("NotifyType", notifyType);
+            if (!signTypes.isEmpty()) {
+                defaultApprover.put("ApproverSignTypes", signTypes);
+            }
             approvers.add(defaultApprover);
         }
         return approvers;
@@ -420,8 +450,9 @@ public class EssContractService {
      * 文件模式 Approvers：在个人签署方上挂关键字定位的签名/签署日期控件，
      * 并按配置可选追加乙方企业签章方。
      */
-    private java.util.List<TreeMap<String, Object>> buildFileApprovers(String signerInfoJson, EssFileProperties fp) {
-        java.util.List<TreeMap<String, Object>> approvers = buildApprovers(signerInfoJson);
+    private java.util.List<TreeMap<String, Object>> buildFileApprovers(String signerInfoJson, EssFileProperties fp,
+                                                                       boolean smsNotify) {
+        java.util.List<TreeMap<String, Object>> approvers = buildApprovers(signerInfoJson, smsNotify);
         for (TreeMap<String, Object> approver : approvers) {
             java.util.List<TreeMap<String, Object>> signComponents = new java.util.ArrayList<>();
             // 甲方签名（及可选签署日期）：用签名一组定位参数。
