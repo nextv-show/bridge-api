@@ -35,15 +35,18 @@ public class FulfillUseCase {
     private final MatchingRequestRepository requestRepository;
     private final DeviceAssetGateway deviceAssetGateway;
     private final DeviceAssetStageEventRepository stageEventRepository;
+    private final MatchingMetrics metrics;
     private final ObjectMapper objectMapper;
 
     public FulfillUseCase(MatchingRequestRepository requestRepository,
                           DeviceAssetGateway deviceAssetGateway,
                           DeviceAssetStageEventRepository stageEventRepository,
+                          MatchingMetrics metrics,
                           ObjectMapper objectMapper) {
         this.requestRepository = requestRepository;
         this.deviceAssetGateway = deviceAssetGateway;
         this.stageEventRepository = stageEventRepository;
+        this.metrics = metrics;
         this.objectMapper = objectMapper;
     }
 
@@ -87,6 +90,8 @@ public class FulfillUseCase {
         event.setPayloadJson(buildPayload(requestId, logisticsOrderId));
         stageEventRepository.saveAndFlush(event);
         log.info("Fulfill: 写 device_assets_stage_events device={} type=PENDING_ACTIVATE_READY", deviceAssetId);
+
+        metrics.fulfilled();   // P1-5 最终激活前置埋点（仅真正履约计数，幂等跳过不计）
     }
 
     private String buildPayload(long requestId, long logisticsOrderId) {

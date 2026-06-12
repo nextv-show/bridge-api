@@ -34,6 +34,7 @@ public class ClaimRequestUseCase {
     private final DeviceAssetGateway deviceAssetGateway;
     private final MatchingConfigService configService;
     private final ClaimRateLimiter rateLimiter;
+    private final MatchingMetrics metrics;
     private final ObjectMapper objectMapper;
 
     public ClaimRequestUseCase(MatchingRequestRepository requestRepository,
@@ -43,6 +44,7 @@ public class ClaimRequestUseCase {
                                DeviceAssetGateway deviceAssetGateway,
                                MatchingConfigService configService,
                                ClaimRateLimiter rateLimiter,
+                               MatchingMetrics metrics,
                                ObjectMapper objectMapper) {
         this.requestRepository = requestRepository;
         this.assignmentRepository = assignmentRepository;
@@ -51,6 +53,7 @@ public class ClaimRequestUseCase {
         this.deviceAssetGateway = deviceAssetGateway;
         this.configService = configService;
         this.rateLimiter = rateLimiter;
+        this.metrics = metrics;
         this.objectMapper = objectMapper;
     }
 
@@ -68,6 +71,7 @@ public class ClaimRequestUseCase {
     @Transactional
     public ClaimRequestResponse claim(String subject, long requestId, long deviceAssetId) {
         if (!rateLimiter.tryConsume(requestId)) {
+            metrics.claimRateLimited();
             throw ApiException.tooManyRequests("CLAIM_RATE_LIMITED", "接单过于频繁，请稍后重试");
         }
 
@@ -76,13 +80,16 @@ public class ClaimRequestUseCase {
                 .orElseThrow(() -> ApiException.notFound("NOT_FOUND", "需求不存在"));
 
         // —— 前置校验（快路径，最终一致由下方三道并发闸保证）——
+        // 争抢类 409（早检测/晚提交）统一计入 conflict，使热门单/热门设备争抢指标完整（不漏报）。
         if (request.getStatus() != RequestStatus.OPEN || request.getLockedByUserId() != null) {
+            metrics.claimConflict();
             throw ApiException.conflict("REQUEST_NOT_OPEN", "需求已被处理或接单");
         }
         if (!deviceAssetGateway.existsOwnedByUser(deviceAssetId, ownerUserId)) {
             throw ApiException.forbidden("NOT_OWNER_ASSET", "设备不属于当前用户");
         }
         if (assignmentRepository.findByRequestIdAndReleasedAtIsNull(requestId).isPresent()) {
+            metrics.claimConflict();
             throw ApiException.conflict("REQUEST_ALREADY_CLAIMED", "需求已被接单");
         }
         if (assignmentRepository.countByOwnerUserIdAndReleasedAtIsNull(ownerUserId)
@@ -96,6 +103,7 @@ public class ClaimRequestUseCase {
         LocalDateTime dayStart = LocalDate.now().atStartOfDay();
         if (assignmentRepository.countByOwnerUserIdAndLockedAtGreaterThanEqual(ownerUserId, dayStart)
                 >= configService.claimDailyQuotaPerOwner()) {
+            metrics.claimQuotaExceeded();
             throw ApiException.tooManyRequests("CLAIM_QUOTA_EXCEEDED", "今日接单已达上限");
         }
 
@@ -103,6 +111,7 @@ public class ClaimRequestUseCase {
         int staged = deviceAssetGateway.advanceStage(
                 deviceAssetId, ownerUserId, DeviceStage.PENDING_MATCH, DeviceStage.LOCKED);
         if (staged != 1) {
+            metrics.claimConflict();   // 设备 CAS 竞争败者（热门设备争抢主路径）
             throw ApiException.conflict("DEVICE_STAGE_INVALID", "设备状态不允许接单");
         }
 
@@ -129,8 +138,10 @@ public class ClaimRequestUseCase {
             outboxRepository.saveAndFlush(outbox);
         } catch (OptimisticLockingFailureException | DataIntegrityViolationException e) {
             // 并发竞争败者：整笔事务回滚（含步骤 1 的设备 stage），对外统一 409。
+            metrics.claimConflict();
             throw ApiException.conflict("CLAIM_CONFLICT", "需求已被他人接单");
         }
+        metrics.claimSuccess();
 
         return new ClaimRequestResponse(requestId, RequestStatus.LOCKED.name(), true);
     }

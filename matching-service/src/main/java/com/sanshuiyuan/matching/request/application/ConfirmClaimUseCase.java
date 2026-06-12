@@ -26,11 +26,14 @@ public class ConfirmClaimUseCase {
 
     private final MatchingRequestRepository requestRepository;
     private final MatchingUserResolver userResolver;
+    private final MatchingMetrics metrics;
 
     public ConfirmClaimUseCase(MatchingRequestRepository requestRepository,
-                               MatchingUserResolver userResolver) {
+                               MatchingUserResolver userResolver,
+                               MatchingMetrics metrics) {
         this.requestRepository = requestRepository;
         this.userResolver = userResolver;
+        this.metrics = metrics;
     }
 
     @Transactional
@@ -54,6 +57,7 @@ public class ConfirmClaimUseCase {
                 requestRepository.saveAndFlush(request);
             } catch (OptimisticLockingFailureException e) {
                 // 加载后被并发 release/expire/fulfill 改写 → 统一 409，而非 500。
+                metrics.confirmConflict();
                 throw ApiException.conflict("CONFIRM_CONFLICT", "需求状态已变更，请刷新重试");
             }
             log.info("Confirm: request_id={} 已确认推进（脱离 SLA 自动释放）", requestId);
