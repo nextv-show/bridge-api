@@ -9,13 +9,13 @@ class EssStatusMapperTest {
 
     @Test
     void numericCodes_mapToTencentSemantics() {
-        // 腾讯 ESS DescribeFlowInfo 实际枚举
-        assertEquals(FlowStatus.SIGNING, EssStatusMapper.map("1"));
-        assertEquals(FlowStatus.COMPLETED, EssStatusMapper.map("2"));
-        assertEquals(FlowStatus.REJECTED, EssStatusMapper.map("3"));
-        assertEquals(FlowStatus.CANCELLED, EssStatusMapper.map("4"));
-        assertEquals(FlowStatus.EXPIRED, EssStatusMapper.map("5"));
-        assertEquals(FlowStatus.CANCELLED, EssStatusMapper.map("6")); // 终止按取消处理
+        // 腾讯电子签 DescribeFlowInfo.FlowStatus 官方枚举
+        assertEquals(FlowStatus.SIGNING, EssStatusMapper.map("1"));    // 待签署
+        assertEquals(FlowStatus.SIGNING, EssStatusMapper.map("2"));    // 部分签署（仍在签署中）
+        assertEquals(FlowStatus.REJECTED, EssStatusMapper.map("3"));   // 已拒签
+        assertEquals(FlowStatus.COMPLETED, EssStatusMapper.map("4"));  // 已签署完成
+        assertEquals(FlowStatus.EXPIRED, EssStatusMapper.map("5"));    // 已过期
+        assertEquals(FlowStatus.CANCELLED, EssStatusMapper.map("6"));  // 已撤销
     }
 
     @Test
@@ -41,8 +41,9 @@ class EssStatusMapperTest {
 
     @Test
     void intOverload_delegatesToString() {
-        assertEquals(FlowStatus.COMPLETED, EssStatusMapper.map(2));
+        assertEquals(FlowStatus.COMPLETED, EssStatusMapper.map(4));
         assertEquals(FlowStatus.SIGNING, EssStatusMapper.map(1));
+        assertEquals(FlowStatus.SIGNING, EssStatusMapper.map(2));
         assertNull(EssStatusMapper.map(99));
     }
 }

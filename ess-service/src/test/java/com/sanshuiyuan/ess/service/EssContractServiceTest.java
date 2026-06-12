@@ -160,7 +160,7 @@ class EssContractServiceTest {
 
     @Test
     void describeFlowStatus_parsesRealEssResponseShape_FlowDetailInfos() {
-        // 真实线上响应：FlowDetailInfos[0].FlowStatus = 2 (已签署)
+        // 真实线上响应：FlowDetailInfos[0].FlowStatus = 4 (已签署完成)
         EssFlowRecord record = EssFlowRecord.create("c-001", "[{}]");
         record.assignFlowId("flow-001");
         record.startSigning();
@@ -171,7 +171,7 @@ class EssContractServiceTest {
         com.fasterxml.jackson.databind.node.ArrayNode arr = objectMapper.createArrayNode();
         ObjectNode detail = objectMapper.createObjectNode();
         detail.put("FlowId", "flow-001");
-        detail.put("FlowStatus", 2); // 腾讯 2 = 已签署完成
+        detail.put("FlowStatus", 4); // 腾讯 4 = 已签署完成
         arr.add(detail);
         apiResponse.set("FlowDetailInfos", arr);
         when(apiClient.invoke(eq("DescribeFlowInfo"), any())).thenReturn(apiResponse);
@@ -179,7 +179,7 @@ class EssContractServiceTest {
         FlowStatus status = service.describeFlowStatus("c-001");
 
         assertEquals(FlowStatus.COMPLETED, status,
-                "FlowDetailInfos[0].FlowStatus=2 必须映射为内部 COMPLETED（修复响应解析 + 状态码映射）");
+                "FlowDetailInfos[0].FlowStatus=4 必须映射为内部 COMPLETED（修复响应解析 + 状态码映射）");
     }
 
     @Test
@@ -193,7 +193,7 @@ class EssContractServiceTest {
 
         ObjectNode apiResponse = objectMapper.createObjectNode();
         ObjectNode flowInfo = objectMapper.createObjectNode();
-        flowInfo.put("Status", "2"); // 已签署，老 mock 结构
+        flowInfo.put("Status", "4"); // 已签署完成，老 mock 结构
         apiResponse.set("FlowInfo", flowInfo);
         when(apiClient.invoke(eq("DescribeFlowInfo"), any())).thenReturn(apiResponse);
 
