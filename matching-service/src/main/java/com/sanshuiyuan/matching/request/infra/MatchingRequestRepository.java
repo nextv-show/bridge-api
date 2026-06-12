@@ -1,8 +1,11 @@
 package com.sanshuiyuan.matching.request.infra;
 
 import com.sanshuiyuan.matching.request.domain.MatchingRequest;
+import com.sanshuiyuan.matching.request.domain.PriceTier;
 import com.sanshuiyuan.matching.request.domain.RequestStatus;
+import com.sanshuiyuan.matching.request.domain.SceneType;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -10,6 +13,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 
 public interface MatchingRequestRepository extends JpaRepository<MatchingRequest, Long> {
@@ -35,15 +39,26 @@ public interface MatchingRequestRepository extends JpaRepository<MatchingRequest
     List<MatchingRequest> findByStatusAndLockedAtBefore(RequestStatus status, LocalDateTime lockedAtBefore);
 
     /**
-     * nearby bbox 候选：status=OPEN + lat/lng 包围盒，排除调用方自己。走 idx_status_lat 的 lat 范围。
-     * Haversine 精算与 min_price_tier 过滤在内存做。
+     * P1-1 nearby 第一层候选（design §5.2「两层架构」）：status=OPEN + lat/lng 包围盒，排除调用方自己，
+     * 下推 scene_type（可空）与 expected_price_tier ∈ tiers（调用方据 min_price_tier 展开为允许档位集合，
+     * 不过滤时传全 4 档）。走 idx_status_lat 的 lat 范围。
+     *
+     * <p>候选用 {@link Pageable} 截断到 nearby.candidate.limit，并 ORDER BY created_at DESC：
+     * 超大 bbox（高密度区）截断时优先保留最新单，保证截断确定性、避免 OOM。
+     * Haversine 精算裁圆、分桶评分、最终排序与分页均在应用层完成。
      */
     @Query("SELECT r FROM MatchingRequest r WHERE r.status = com.sanshuiyuan.matching.request.domain.RequestStatus.OPEN " +
             "AND r.lat BETWEEN :latMin AND :latMax AND r.lng BETWEEN :lngMin AND :lngMax " +
-            "AND r.userId <> :excludeUserId")
-    List<MatchingRequest> findOpenInBoundingBox(@Param("latMin") BigDecimal latMin,
-                                                @Param("latMax") BigDecimal latMax,
-                                                @Param("lngMin") BigDecimal lngMin,
-                                                @Param("lngMax") BigDecimal lngMax,
-                                                @Param("excludeUserId") Long excludeUserId);
+            "AND r.userId <> :excludeUserId " +
+            "AND (:sceneType IS NULL OR r.sceneType = :sceneType) " +
+            "AND r.expectedPriceTier IN :tiers " +
+            "ORDER BY r.createdAt DESC")
+    List<MatchingRequest> findOpenCandidates(@Param("latMin") BigDecimal latMin,
+                                             @Param("latMax") BigDecimal latMax,
+                                             @Param("lngMin") BigDecimal lngMin,
+                                             @Param("lngMax") BigDecimal lngMax,
+                                             @Param("excludeUserId") Long excludeUserId,
+                                             @Param("sceneType") SceneType sceneType,
+                                             @Param("tiers") Collection<PriceTier> tiers,
+                                             Pageable pageable);
 }
