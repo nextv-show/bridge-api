@@ -15,6 +15,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * 合同签署编排服务。
@@ -236,12 +238,32 @@ public class ContractSigningService {
                 ContractAuditTrail.Action.SIGN_COMPLETE,
                 String.format("{\"pdfHash\":\"%s\"}", pdfHash));
 
-        // 自动触发归档
+        // 自动触发归档——必须在 SIGNED 事务【提交后】执行。
+        // archiveContract 是 @Transactional 且失败会抛异常：若在本事务内调用，异常会把事务标记成
+        // rollback-only，连同刚写入的 SIGNED 一起回滚（即使这里 catch 也无效），导致签署完成被整体回滚
+        // ——线上表现为「签完合同小程序仍显示尚未完成签约」。归档失败已有 markPendingArchive + 归档重试兜底，
+        // 绝不能反向回滚签署完成状态。故放到 afterCommit 中以独立事务执行。
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    tryAutoArchive(contractId);
+                }
+            });
+        } else {
+            tryAutoArchive(contractId);
+        }
+    }
+
+    /**
+     * 归档尝试（best-effort）：失败仅记录日志，由 {@code markPendingArchive} + 归档重试任务兜底，
+     * 不向上抛出、不影响已完成的签署状态。
+     */
+    private void tryAutoArchive(Long contractId) {
         try {
             archiveService.archiveContract(contractId);
         } catch (Exception e) {
             log.error("签署后自动归档失败，将等待重试 [contractId={}]: {}", contractId, e.getMessage());
-            // 归档失败不影响签署完成状态，后续重试机制处理
         }
     }
 

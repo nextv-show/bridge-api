@@ -136,7 +136,8 @@ class ContractEndToEndTest {
                 com.sanshuiyuan.ess.domain.EssFlowRecord.create(
                         "CT-20260527-E2E001", savedContract.getSignerInfoJson());
         flowRecord.assignFlowId("flow-ess-e2e-001");
-        when(essContractService.createFlow(eq("CT-20260527-E2E001"), anyString(), anyString()))
+        when(essContractService.createFlow(eq("CT-20260527-E2E001"), anyString(), anyString(),
+                org.mockito.ArgumentMatchers.anyBoolean()))
                 .thenReturn(flowRecord);
 
         ContractSigningService.SigningInitiationResult signResult =
