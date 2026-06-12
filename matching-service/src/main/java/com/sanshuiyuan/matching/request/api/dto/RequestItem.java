@@ -27,6 +27,7 @@ public record RequestItem(
         @JsonProperty("status") String status,
         @JsonProperty("distance_km") Double distanceKm,
         @JsonProperty("locked_at") LocalDateTime lockedAt,
+        @JsonProperty("claim_confirmed_at") LocalDateTime claimConfirmedAt,
         @JsonProperty("created_at") LocalDateTime createdAt,
         @JsonProperty("user_id") Long userId,
         @JsonProperty("locked_by_user_id") Long lockedByUserId,
