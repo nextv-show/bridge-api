@@ -173,12 +173,10 @@ public class ContractSigningService {
             flowRecord = essContractService.createFlow(contractNoStr, flowName, signerJson, smsNotify);
         }
 
-        // 短信送达：创建流程后立即启动，腾讯电子签随即给签署人下发带签署短链的短信。
-        // 非短信路径（既有 H5/跳转）保持不启动，行为不变。
-        if (smsNotify) {
-            essContractService.startFlow(contractNoStr);
-            log.info("已启动签署流程并触发短信送达 [contractNo={}]", contractNoStr);
-        }
+        // 短信送达：CreateFlow / CreateFlowByFiles 创建的流程本账号下即「已发起」(自动 StartFlow)，
+        // NotifyType=SMS 会在流程发起时由腾讯电子签直接给签署人下发带签署短链的短信——无需、也不能再显式调
+        // StartFlow（会撞 OperationDenied.FlowHasStarted，且 EssApiClient 重试该错误会拖垮 cend 读超时致 500）。
+        // 既有 H5/跳转路径同样从不显式 StartFlow，与此一致。
 
         // 更新合同状态（带签署来源）
         if (signSource != null) {
