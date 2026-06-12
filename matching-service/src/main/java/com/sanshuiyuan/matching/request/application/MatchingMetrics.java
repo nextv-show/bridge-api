@@ -13,6 +13,7 @@ public class MatchingMetrics {
 
     private static final String CLAIM = "matching.claim";
     private static final String CONFIRM = "matching.confirm";
+    private static final String FULFILL = "matching.fulfill";
 
     private final MeterRegistry registry;
 
@@ -38,5 +39,10 @@ public class MatchingMetrics {
 
     public void confirmConflict() {
         registry.counter(CONFIRM, "result", "conflict").increment();
+    }
+
+    /** 撮合履约：需求 → FULFILLED、设备 → PENDING_ACTIVATE（最终激活前置）。 */
+    public void fulfilled() {
+        registry.counter(FULFILL, "result", "success").increment();
     }
 }
