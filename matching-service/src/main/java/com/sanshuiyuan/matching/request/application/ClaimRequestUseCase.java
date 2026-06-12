@@ -18,6 +18,7 @@ import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -88,6 +89,12 @@ public class ClaimRequestUseCase {
                 >= configService.lockMaxPerOwner()) {
             throw ApiException.conflict("LOCK_LIMIT", "已达接单上限");
         }
+        // P1-2 每日 claim 配额（含已释放，防接单→释放→再接的批量扫单）。
+        LocalDateTime dayStart = LocalDate.now().atStartOfDay();
+        if (assignmentRepository.countByOwnerUserIdAndLockedAtGreaterThanEqual(ownerUserId, dayStart)
+                >= configService.claimDailyQuotaPerOwner()) {
+            throw ApiException.tooManyRequests("CLAIM_QUOTA_EXCEEDED", "今日接单已达上限");
+        }
 
         // 1) 设备 CAS：PENDING_MATCH → LOCKED。命中 0 行＝前置态非 PENDING_MATCH（已被占/不可接）。
         int staged = deviceAssetGateway.advanceStage(
@@ -101,6 +108,7 @@ public class ClaimRequestUseCase {
             request.setStatus(RequestStatus.LOCKED);
             request.setLockedByUserId(ownerUserId);
             request.setLockedAt(LocalDateTime.now());
+            request.setClaimConfirmedAt(null);   // P1-2：新接单待确认（重置上一轮可能残留的确认时间）
             requestRepository.saveAndFlush(request);
 
             // 3) 活跃占用：uk_request_active / uk_device_active 为最终兜底。
