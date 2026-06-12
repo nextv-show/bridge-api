@@ -38,6 +38,10 @@ public interface MatchingRequestRepository extends JpaRepository<MatchingRequest
     /** FR-5 超时回滚扫描：指定状态且 locked_at 早于阈值的需求（锁定超时候选）。 */
     List<MatchingRequest> findByStatusAndLockedAtBefore(RequestStatus status, LocalDateTime lockedAtBefore);
 
+    /** P1-2 SLA 扫描：LOCKED 且未确认（claim_confirmed_at IS NULL）且 locked_at 早于阈值的候选（提醒/自动释放）。 */
+    List<MatchingRequest> findByStatusAndClaimConfirmedAtIsNullAndLockedAtBefore(
+            RequestStatus status, LocalDateTime lockedAtBefore);
+
     /**
      * P1-1 nearby 第一层候选（design §5.2「两层架构」）：status=OPEN + lat/lng 包围盒，排除调用方自己，
      * 下推 scene_type（可空）与 expected_price_tier ∈ tiers（调用方据 min_price_tier 展开为允许档位集合，
