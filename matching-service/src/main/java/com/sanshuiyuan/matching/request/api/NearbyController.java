@@ -26,7 +26,12 @@ public class NearbyController {
             @RequestParam("lat") double lat,
             @RequestParam("lng") double lng,
             @RequestParam(value = "radius_km", required = false) Double radiusKm,
-            @RequestParam(value = "min_price_tier", required = false) String minPriceTier) {
-        return nearbyQueryService.nearby(CurrentUser.subject(), lat, lng, radiusKm, minPriceTier);
+            @RequestParam(value = "min_price_tier", required = false) String minPriceTier,
+            @RequestParam(value = "scene_type", required = false) String sceneType,
+            @RequestParam(value = "sort", required = false) String sort,
+            @RequestParam(value = "page", required = false, defaultValue = "0") int page,
+            @RequestParam(value = "size", required = false, defaultValue = "20") int size) {
+        return nearbyQueryService.nearby(CurrentUser.subject(), lat, lng, radiusKm,
+                minPriceTier, sceneType, sort, page, size);
     }
 }
