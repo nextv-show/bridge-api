@@ -20,6 +20,11 @@ public enum PriceTier {
         return order;
     }
 
+    /** 期望水费（元/升）：order/100，即 T_040→0.40 … T_150→1.50。 */
+    public java.math.BigDecimal yuanPerLiter() {
+        return java.math.BigDecimal.valueOf(order).movePointLeft(2);
+    }
+
     /** this 是否 &gt;= other（按价格档位序）。 */
     public boolean atLeast(PriceTier other) {
         return this.order >= other.order;
