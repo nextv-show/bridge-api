@@ -2,6 +2,7 @@ package com.sanshuiyuan.matching.request.application;
 
 import com.sanshuiyuan.matching.crypto.IdCardCipher;
 import com.sanshuiyuan.matching.crypto.PhoneMasking;
+import com.sanshuiyuan.matching.identity.KycGuard;
 import com.sanshuiyuan.matching.identity.MatchingUserResolver;
 import com.sanshuiyuan.matching.request.api.ApiException;
 import com.sanshuiyuan.matching.request.api.dto.CreateRequestBody;
@@ -26,6 +27,7 @@ public class CreateRequestUseCase {
 
     private final MatchingRequestRepository repo;
     private final MatchingUserResolver userResolver;
+    private final KycGuard kycGuard;
     private final IdCardCipher cipher;
     private final GeoHashIndexer geoHashIndexer;
     private final PhoneRateLimiter phoneRateLimiter;
@@ -35,11 +37,13 @@ public class CreateRequestUseCase {
 
     public CreateRequestUseCase(MatchingRequestRepository repo,
                                 MatchingUserResolver userResolver,
+                                KycGuard kycGuard,
                                 IdCardCipher cipher,
                                 GeoHashIndexer geoHashIndexer,
                                 PhoneRateLimiter phoneRateLimiter) {
         this.repo = repo;
         this.userResolver = userResolver;
+        this.kycGuard = kycGuard;
         this.cipher = cipher;
         this.geoHashIndexer = geoHashIndexer;
         this.phoneRateLimiter = phoneRateLimiter;
@@ -47,6 +51,11 @@ public class CreateRequestUseCase {
 
     @Transactional
     public CreateRequestResponse create(String subject, CreateRequestBody body) {
+        // P1-3（N5，覆盖 spec FR-1.4）：发需求前置=登录 + 实名(KYC PASS)。未实名直接 403。
+        if (!kycGuard.hasPassedKyc(subject)) {
+            throw ApiException.forbidden("KYC_REQUIRED", "请先完成实名认证后再发布需求");
+        }
+
         SceneType sceneType = parseScene(body.sceneType());
         PriceTier tier = parseTier(body.expectedPriceTier());
 
