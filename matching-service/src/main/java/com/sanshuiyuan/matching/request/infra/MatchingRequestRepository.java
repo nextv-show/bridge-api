@@ -43,16 +43,18 @@ public interface MatchingRequestRepository extends JpaRepository<MatchingRequest
      * 下推 scene_type（可空）与 expected_price_tier ∈ tiers（调用方据 min_price_tier 展开为允许档位集合，
      * 不过滤时传全 4 档）。走 idx_status_lat 的 lat 范围。
      *
-     * <p>候选用 {@link Pageable} 截断到 nearby.candidate.limit，并 ORDER BY created_at DESC：
-     * 超大 bbox（高密度区）截断时优先保留最新单，保证截断确定性、避免 OOM。
-     * Haversine 精算裁圆、分桶评分、最终排序与分页均在应用层完成。
+     * <p>候选用 {@link Pageable} 截断到 nearby.candidate.limit，<b>ORDER BY 平面近似距离 ASC, id ASC</b>：
+     * 高密度区 bbox 超过上限时优先保留<b>近端</b>候选——近的需求绝不因新旧被丢弃（贴合「附近」语义、
+     * 不偏向 distance/revenue/latest 任一排序），id 兜底消除 created_at 并列导致的非确定截断。
+     * 平面距离（不含 cos 修正）仅用于<b>截断粗排</b>；最终距离仍走应用层 Haversine 精算裁圆。
      */
     @Query("SELECT r FROM MatchingRequest r WHERE r.status = com.sanshuiyuan.matching.request.domain.RequestStatus.OPEN " +
             "AND r.lat BETWEEN :latMin AND :latMax AND r.lng BETWEEN :lngMin AND :lngMax " +
             "AND r.userId <> :excludeUserId " +
             "AND (:sceneType IS NULL OR r.sceneType = :sceneType) " +
             "AND r.expectedPriceTier IN :tiers " +
-            "ORDER BY r.createdAt DESC")
+            "ORDER BY (r.lat - :centerLat) * (r.lat - :centerLat) " +
+            "       + (r.lng - :centerLng) * (r.lng - :centerLng) ASC, r.id ASC")
     List<MatchingRequest> findOpenCandidates(@Param("latMin") BigDecimal latMin,
                                              @Param("latMax") BigDecimal latMax,
                                              @Param("lngMin") BigDecimal lngMin,
@@ -60,5 +62,7 @@ public interface MatchingRequestRepository extends JpaRepository<MatchingRequest
                                              @Param("excludeUserId") Long excludeUserId,
                                              @Param("sceneType") SceneType sceneType,
                                              @Param("tiers") Collection<PriceTier> tiers,
+                                             @Param("centerLat") BigDecimal centerLat,
+                                             @Param("centerLng") BigDecimal centerLng,
                                              Pageable pageable);
 }

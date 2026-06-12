@@ -7,6 +7,8 @@ import com.sanshuiyuan.matching.request.domain.MatchingRequest;
 import com.sanshuiyuan.matching.request.domain.PriceTier;
 import com.sanshuiyuan.matching.request.domain.SceneType;
 import com.sanshuiyuan.matching.request.infra.MatchingRequestRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,14 +23,16 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * FR-2 + P1-1 nearby：Owner 门控 → bbox 候选（DB 截断 + scene/tier 下推） → Haversine 裁圆
+ * FR-2 + P1-1 nearby：Owner 门控 → bbox 候选（近端截断 + scene/tier 下推） → Haversine 裁圆
  * → 分桶评分 → 排序（带 tie-breaker） → 分页（design §2 §5）。手机号脱敏（未接单 owner）。
  *
- * <p>两层架构守 NFR P95≤400ms@10万 OPEN：第一层 DB 只取 ≤candidate.limit 条候选，
- * 第二层应用层算距离/分/排序/分页。撮合分仅用于排序，不进 DTO。
+ * <p>两层架构守 NFR P95≤400ms@10万 OPEN：第一层 DB 按平面近似距离只取最近 ≤candidate.limit 条候选
+ * （近端优先，不偏向任一排序），第二层应用层算 Haversine/分/排序/分页。撮合分仅用于排序，不进 DTO。
  */
 @Service
 public class NearbyQueryService {
+
+    private static final Logger log = LoggerFactory.getLogger(NearbyQueryService.class);
 
     private final MatchingRequestRepository repo;
     private final MatchingUserResolver userResolver;
@@ -98,7 +102,13 @@ public class NearbyQueryService {
         int candidateLimit = configService.nearbyCandidateLimit();
         List<MatchingRequest> candidates = repo.findOpenCandidates(
                 latMin, latMax, lngMin, lngMax, userId, sceneType, tiers,
+                BigDecimal.valueOf(lat), BigDecimal.valueOf(lng),
                 PageRequest.of(0, candidateLimit));
+        if (candidates.size() >= candidateLimit) {
+            // 高密度区截断：候选已被裁到近端 candidateLimit 条（design §7 不静默截断）。
+            log.warn("nearby candidate truncated at limit={} (lat={}, lng={}, radiusKm={}); "
+                    + "远端/深翻页结果可能不全", candidateLimit, lat, lng, radiusKm);
+        }
 
         final double radius = radiusKm;
         LocalDateTime now = LocalDateTime.now();
@@ -114,9 +124,9 @@ public class NearbyQueryService {
             double rounded = BigDecimal.valueOf(dist).setScale(2, RoundingMode.HALF_UP).doubleValue();
             // P1 无偏好沉淀（P3 引入），场景偏好传空集 → 场景分恒中性。
             RankScorer.Ranked ranked = scorer.rank(r, rounded, EnumSet.noneOf(SceneType.class), now);
-            // recommended 加同桶稳定抖动（基于 id，翻页一致）。
-            double effScore = ranked.score() + RankScorer.jitter(r.getId(), epsilon);
-            scored.add(new Scored(r, rounded, effScore, ranked.monthlyGmv(), ranked.reasons()));
+            // 抖动独立保存，仅作 recommended 同分（同桶）tie-breaker，不混入 score（避免错排相差<epsilon 的单）。
+            double jitter = RankScorer.jitter(r.getId(), epsilon);
+            scored.add(new Scored(r, rounded, ranked.score(), jitter, ranked.monthlyGmv(), ranked.reasons()));
         }
 
         scored.sort(comparator(sort));
@@ -161,23 +171,30 @@ public class NearbyQueryService {
         }
     }
 
-    /** 主排序键 + 统一 tie-breaker：distance asc, created_at desc, id desc（design §2.4）。 */
+    /**
+     * 主排序键 + 统一 tie-breaker：distance asc, created_at desc, id desc（design §2.4）。
+     * RECOMMENDED 在主键（score desc）之后、通用 tie-breaker 之前插入 jitter desc：
+     * 仅在 score 完全相等（同桶）时由 jitter 打散，绝不改变不同分单的相对次序。
+     */
     private static Comparator<Scored> comparator(SortMode sort) {
         Comparator<Scored> tieBreak = Comparator
                 .comparingDouble(Scored::dist)
                 .thenComparing(Scored::createdAt, Comparator.nullsLast(Comparator.reverseOrder()))
                 .thenComparing(Comparator.comparingLong(Scored::id).reversed());
-        Comparator<Scored> primary = switch (sort) {
-            case RECOMMENDED -> Comparator.comparingDouble(Scored::effScore).reversed();
-            case DISTANCE -> Comparator.comparingDouble(Scored::dist);
-            case REVENUE -> Comparator.comparing(Scored::gmv).reversed();
-            case TIER -> Comparator.comparingInt((Scored s) -> s.req().getExpectedPriceTier().order()).reversed();
-            case LATEST -> Comparator.comparing(Scored::createdAt, Comparator.nullsLast(Comparator.reverseOrder()));
+        return switch (sort) {
+            case RECOMMENDED -> Comparator.comparingDouble(Scored::score).reversed()
+                    .thenComparing(Comparator.comparingDouble(Scored::jitter).reversed())
+                    .thenComparing(tieBreak);
+            case DISTANCE -> Comparator.comparingDouble(Scored::dist).thenComparing(tieBreak);
+            case REVENUE -> Comparator.comparing(Scored::gmv).reversed().thenComparing(tieBreak);
+            case TIER -> Comparator.comparingInt((Scored s) -> s.req().getExpectedPriceTier().order())
+                    .reversed().thenComparing(tieBreak);
+            case LATEST -> Comparator.comparing(Scored::createdAt, Comparator.nullsLast(Comparator.reverseOrder()))
+                    .thenComparing(tieBreak);
         };
-        return primary.thenComparing(tieBreak);
     }
 
-    private record Scored(MatchingRequest req, double dist, double effScore,
+    private record Scored(MatchingRequest req, double dist, double score, double jitter,
                           BigDecimal gmv, List<String> reasons) {
         long id() { return req.getId(); }
         LocalDateTime createdAt() { return req.getCreatedAt(); }
