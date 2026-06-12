@@ -12,7 +12,6 @@ import com.sanshuiyuan.cend.common.ErrorCode;
 import com.sanshuiyuan.cend.infra.client.EssServiceClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,20 +38,17 @@ public class SubscribeSigningService {
     private final DeviceSpecRepository specRepo;
     private final IdCardCipher cipher;
     private final EssServiceClient essClient;
-    private final String wxMpAppId;
 
-    public record SignStartResult(Long contractId, String contractNo, Object signParams) {}
+    public record SignStartResult(Long contractId, String contractNo, String phoneMask) {}
     public record KycStatusResult(boolean passed, String realNameMask, String idCardMask, String phoneMask) {}
     private record Identity(String realName, String idCardNo, String phone) {}
 
     public SubscribeSigningService(KycRecordRepository kycRepo, DeviceSpecRepository specRepo,
-                                   IdCardCipher cipher, EssServiceClient essClient,
-                                   @Value("${wx.miniprogram.app-id:}") String wxMpAppId) {
+                                   IdCardCipher cipher, EssServiceClient essClient) {
         this.kycRepo = kycRepo;
         this.specRepo = specRepo;
         this.cipher = cipher;
         this.essClient = essClient;
-        this.wxMpAppId = wxMpAppId;
     }
 
     public SignStartResult start(String openid, String bearer, Long userId, String specId,
@@ -74,17 +70,17 @@ public class SubscribeSigningService {
                 .orElseThrow(() -> new BizException(ErrorCode.SPEC_NOT_FOUND));
         String devicePrice = BigDecimal.valueOf(spec.getPriceCents()).movePointLeft(2).toPlainString();
 
-        // 经 ess 生成合同 + 发起 MINI 签署 + 取签署参数。
+        // 经 ess 生成合同 + 发起 MINI 签署（notify=true → 腾讯电子签给手机发签署短链短信，不跳转电子签小程序）。
         EssServiceClient.GenerateResult gen = essClient.generate(
                 bearer, userId, spec.getModelCode(), devicePrice, name, idNo, phoneTrim);
         essClient.initiateSigning(bearer, gen.contractId(), userId, phoneTrim, name, idNo);
-        Object signParams = essClient.signParams(bearer, gen.contractId(), wxMpAppId);
 
         // 落 INIT KycRecord，绑定本次合同（certifyId=ESS-{contractId}）；签署完成后 promote。
         String certifyId = certifyId(gen.contractId());
         saveInit(openid, name, idNo, idCardHash, phoneTrim, certifyId);
 
-        return new SignStartResult(gen.contractId(), gen.contractNo(), signParams);
+        // 回前端：签署短信已发往该手机（脱敏展示），前端轮询 sign-status 进入支付。
+        return new SignStartResult(gen.contractId(), gen.contractNo(), MaskingUtils.maskPhone(phoneTrim));
     }
 
     @Transactional(readOnly = true)

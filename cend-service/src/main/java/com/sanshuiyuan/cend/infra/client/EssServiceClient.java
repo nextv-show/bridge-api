@@ -61,20 +61,14 @@ public class EssServiceClient {
         // userId 仅作参考：ess 以会话 openid 为准解析。为 null 时省略，勿发字符串 "null"。
         if (userId != null) body.put("userId", String.valueOf(userId));
         body.put("clientType", "MINI");
+        // notify=true：小程序认购走「短信短链」签署——ess 侧给签署方 NotifyType=SMS 并 StartFlow，
+        // 由腾讯电子签下发带签署短链的短信；用户在浏览器签完，本端轮询 sign-status 进入支付。不再跳转电子签小程序。
+        body.put("notify", "true");
         if (phone != null) body.put("phone", phone);
         if (realName != null) body.put("realName", realName);
         if (realIdCard != null) body.put("realIdCard", realIdCard);
         Map<String, Object> resp = post(bearer, "/api/c/contracts/" + contractId + "/initiate-signing", body, "发起签署");
         return str(resp.get("status"), null);
-    }
-
-    /** 取小程序签署参数 GET /api/c/contracts/{id}/sign-params?clientType=MINI&wxAppId=。 */
-    public Object signParams(String bearer, Long contractId, String wxAppId) {
-        String url = baseUrl + "/api/c/contracts/" + contractId
-                + "/sign-params?clientType=MINI"
-                + (wxAppId != null && !wxAppId.isBlank() ? "&wxAppId=" + wxAppId : "");
-        Map<String, Object> resp = get(bearer, url, "取签署参数");
-        return resp.get("signParams");
     }
 
     /** 查询合同状态 GET /api/c/contracts/{id}/status。 */

@@ -39,7 +39,7 @@ class EssContractServiceTest {
     @BeforeEach
     void setUp() {
         properties = new EssProperties("sid", "skey", "op-001", "corp-001",
-                "tpl-001", "https://cb.example.com", null, null, 5000, 10000, 3, Boolean.FALSE);
+                "tpl-001", "https://cb.example.com", null, null, 5000, 10000, 3, Boolean.FALSE, "3");
         objectMapper = new ObjectMapper();
         service = new EssContractService(apiClient, properties, flowRecordRepository,
                 apiLogService, objectMapper, signingPreCheck);

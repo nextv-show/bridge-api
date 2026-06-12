@@ -109,6 +109,20 @@ public class ContractSigningService {
     public SigningInitiationResult initiateSigning(Long contractId, Long userId,
                                                     Contract.SignSource signSource,
                                                     String[] overrides) {
+        return initiateSigning(contractId, userId, signSource, overrides, false);
+    }
+
+    /**
+     * 发起签署流程（带签署来源 + 是否短信送达）。
+     *
+     * @param smsNotify true 时签署方 NotifyType=SMS，并在创建流程后立即 StartFlow，
+     *                  由腾讯电子签给签署人手机下发带签署短链的短信（小程序认购走此路径，不跳转电子签小程序）。
+     */
+    @Transactional
+    public SigningInitiationResult initiateSigning(Long contractId, Long userId,
+                                                    Contract.SignSource signSource,
+                                                    String[] overrides,
+                                                    boolean smsNotify) {
         Contract contract = stateMachineService.getContract(contractId);
 
         // 校验状态
@@ -152,11 +166,18 @@ public class ContractSigningService {
             String markdown = generationService.getContractContent(contractId).mainContractContent();
             byte[] pdf = pdfRenderService.renderMarkdownToPdf(markdown, flowName);
             flowRecord = essContractService.createFlowByFiles(
-                    contractNoStr, flowName, signerJson, pdf, contractNoStr + ".pdf");
+                    contractNoStr, flowName, signerJson, pdf, contractNoStr + ".pdf", smsNotify);
             log.info("文件模式发起签署 [contractNo={}, pdfBytes={}]", contractNoStr, pdf.length);
         } else {
             // 模板模式（既有行为）：变量交给腾讯电子签模板控件。
-            flowRecord = essContractService.createFlow(contractNoStr, flowName, signerJson);
+            flowRecord = essContractService.createFlow(contractNoStr, flowName, signerJson, smsNotify);
+        }
+
+        // 短信送达：创建流程后立即启动，腾讯电子签随即给签署人下发带签署短链的短信。
+        // 非短信路径（既有 H5/跳转）保持不启动，行为不变。
+        if (smsNotify) {
+            essContractService.startFlow(contractNoStr);
+            log.info("已启动签署流程并触发短信送达 [contractNo={}]", contractNoStr);
         }
 
         // 更新合同状态（带签署来源）

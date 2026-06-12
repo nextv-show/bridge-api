@@ -35,7 +35,8 @@ class EssApiClientTest {
                 5000,
                 10000,
                 3,
-                Boolean.FALSE
+                Boolean.FALSE,
+                "3"
         );
     }
 
@@ -89,7 +90,7 @@ class EssApiClientTest {
     @Test
     void essProperties_shouldHaveCorrectDefaults() {
         EssProperties p = new EssProperties(
-                "sid", "skey", "op", "corp", null, null, null, null, null, null, null, null
+                "sid", "skey", "op", "corp", null, null, null, null, null, null, null, null, null
         );
         assertEquals("ap-guangzhou", p.apiRegion());
         assertEquals("ess.test.ess.tencent.cn", p.apiEndpoint());
