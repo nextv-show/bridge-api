@@ -91,6 +91,7 @@ public class ReleaseRequestUseCase {
         request.setStatus(RequestStatus.OPEN);
         request.setLockedByUserId(null);
         request.setLockedAt(null);
+        request.setClaimConfirmedAt(null);
         requestRepository.saveAndFlush(request);
         log.info("Release: request_id={} LOCKED → OPEN（已释放占用/回退设备/取消物流）", requestId);
         return new ReleaseResponse(requestId, RequestStatus.OPEN.name());

@@ -3,6 +3,7 @@ package com.sanshuiyuan.matching.assignment.infra;
 import com.sanshuiyuan.matching.assignment.domain.MatchingAssignment;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -19,4 +20,7 @@ public interface MatchingAssignmentRepository extends JpaRepository<MatchingAssi
     List<MatchingAssignment> findByOwnerUserIdAndReleasedAtIsNullOrderByLockedAtDesc(Long ownerUserId);
 
     long countByOwnerUserIdAndReleasedAtIsNull(Long ownerUserId);
+
+    /** P1-2 每日配额：owner 自 since 起的 claim 次数（含已释放，防接单→释放→再接的批量扫单）。 */
+    long countByOwnerUserIdAndLockedAtGreaterThanEqual(Long ownerUserId, LocalDateTime since);
 }

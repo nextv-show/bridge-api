@@ -26,6 +26,13 @@ public class MatchingConfigService {
     static final String K_JITTER_EPSILON = "match.jitter.epsilon";
     static final String K_NEARBY_CANDIDATE_LIMIT = "nearby.candidate.limit";
 
+    // P1-2 claim 确认 SLA + 每日配额（V017）
+    static final String K_CLAIM_CONFIRM_SLA_HOURS = "claim.confirm.sla.hours";
+    static final String K_CLAIM_REMIND1_HOURS = "claim.confirm.remind1.hours";
+    static final String K_CLAIM_REMIND2_HOURS = "claim.confirm.remind2.hours";
+    static final String K_CLAIM_DAILY_QUOTA = "claim.daily.quota.per.owner";
+    static final String K_CLAIM_DAILY_QUOTA_ACTIVITY = "claim.daily.quota.activity";
+
     private final MatchingConfigRepository repo;
 
     public MatchingConfigService(MatchingConfigRepository repo) {
@@ -126,5 +133,38 @@ public class MatchingConfigService {
     /** nearby 第一层候选上限（DB LIMIT）。 */
     public int nearbyCandidateLimit() {
         return getInt(K_NEARBY_CANDIDATE_LIMIT, 2000);
+    }
+
+    // ─── P1-2 claim 确认 SLA + 每日配额（design §4 §5.3） ───────────
+
+    /** 接单后须确认推进的 SLA（小时）；逾期未确认自动释放回 OPEN。 */
+    public int claimConfirmSlaHours() {
+        return getInt(K_CLAIM_CONFIRM_SLA_HOURS, 24);
+    }
+
+    /** 软提醒节点（小时）。 */
+    public int claimConfirmRemind1Hours() {
+        return getInt(K_CLAIM_REMIND1_HOURS, 12);
+    }
+
+    /** 最终预警节点（小时）。 */
+    public int claimConfirmRemind2Hours() {
+        return getInt(K_CLAIM_REMIND2_HOURS, 22);
+    }
+
+    /**
+     * 每 owner 每日 claim 配额：活动期 {@code claim.daily.quota.activity} 非空则覆盖基准
+     * {@code claim.daily.quota.per.owner}（design N2）。
+     */
+    public int claimDailyQuotaPerOwner() {
+        String activity = getRaw(K_CLAIM_DAILY_QUOTA_ACTIVITY, "");
+        if (activity != null && !activity.isBlank()) {
+            try {
+                return Integer.parseInt(activity.trim());
+            } catch (NumberFormatException ignored) {
+                // 活动期值非法 → 回退基准
+            }
+        }
+        return getInt(K_CLAIM_DAILY_QUOTA, 10);
     }
 }

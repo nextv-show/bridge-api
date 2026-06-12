@@ -61,6 +61,7 @@ public class RequestItemMapper {
                 r.getStatus().name(),
                 distanceKm,
                 r.getLockedAt(),
+                r.getClaimConfirmedAt(),
                 r.getCreatedAt(),
                 r.getUserId(),
                 r.getLockedByUserId(),

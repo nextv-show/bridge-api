@@ -101,6 +101,7 @@ public class ExpireLockedRequestsJob {
         request.setStatus(RequestStatus.EXPIRED);
         request.setLockedByUserId(null);
         request.setLockedAt(null);
+        request.setClaimConfirmedAt(null);
         requestRepository.saveAndFlush(request);
         log.info("ExpireLocked: request_id={} LOCKED → EXPIRED（锁定超时回滚）", requestId);
 
