@@ -4,7 +4,8 @@ package com.sanshuiyuan.cend.referral.api;
  * 单条推荐记录（015）。<b>零层级字段</b>：不含 inviter_id / grand_inviter_id / level / L1 / L2。
  *
  * @param userId         被推荐人 H5 user_id，仅供前端列表 key 使用（非展示用，亦不可定位他人 PII）
- * @param nicknameMasked 脱敏昵称（首字 * 尾字，规则同 014）
+ * @param nicknameMasked 脱敏昵称（首字 * 尾字，规则同 014）；微信未授权时为空串
+ * @param displayName    可识别展示名：微信昵称脱敏 &gt; 实名脱敏 &gt; 手机尾号；均缺失为空串（前端兜底「微信用户」）
  * @param avatarUrl      微信头像 URL（非可定位 PII）
  * @param registeredAt   注册日期 {@code yyyy-MM-dd}
  * @param status         {@code REGISTERED}（未购买）/ {@code PURCHASED}（已购买）
@@ -13,6 +14,7 @@ package com.sanshuiyuan.cend.referral.api;
 public record ReferralItemResponse(
         long userId,
         String nicknameMasked,
+        String displayName,
         String avatarUrl,
         String registeredAt,
         String status,

@@ -37,10 +37,13 @@ public class ReferralQueryService {
 
     private final CendUserRepository userRepo;
     private final CendOrderRepository orderRepo;
+    private final ReferralDisplayNameResolver displayNameResolver;
 
-    public ReferralQueryService(CendUserRepository userRepo, CendOrderRepository orderRepo) {
+    public ReferralQueryService(CendUserRepository userRepo, CendOrderRepository orderRepo,
+                                ReferralDisplayNameResolver displayNameResolver) {
         this.userRepo = userRepo;
         this.orderRepo = orderRepo;
+        this.displayNameResolver = displayNameResolver;
     }
 
     /**
@@ -59,6 +62,14 @@ public class ReferralQueryService {
 
         // 批量取被推荐人各自最近一笔已支付订单的支付时间（按 openid 单点匹配）。
         Map<String, LocalDateTime> latestPaidByOpenid = latestPaidAt(referred);
+
+        // 批量解析展示名：微信昵称脱敏 > 实名脱敏 > 手机尾号（单次 KYC 查询，避免 N+1）。
+        Map<String, String> nicknameByOpenid = new HashMap<>();
+        for (CendUser u : referred) {
+            nicknameByOpenid.put(u.getOpenid(), u.getNickname());
+        }
+        Map<String, String> displayNameByOpenid = displayNameResolver.resolveBatch(
+                nicknameByOpenid.keySet(), nicknameByOpenid);
 
         int registeredCount = 0;
         int purchasedCount = 0;
@@ -81,6 +92,7 @@ public class ReferralQueryService {
             items.add(new ReferralItemResponse(
                     u.getId(),
                     NicknameMasker.mask(u.getNickname()),
+                    displayNameByOpenid.getOrDefault(u.getOpenid(), ""),
                     u.getAvatarUrl(),
                     formatDate(u.getCreatedAt()),
                     purchased ? "PURCHASED" : "REGISTERED",

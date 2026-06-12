@@ -13,6 +13,12 @@ public interface KycRecordRepository extends JpaRepository<KycRecord, Long> {
 
     List<KycRecord> findAllByOpenidAndStatus(String openid, KycStatus status);
 
+    /**
+     * 批量取一组 openid 下指定状态（PASS）的实名记录，用于「我的推荐」列表展示名兜底（实名脱敏/手机尾号），避免 N+1。
+     * 仅命中 idx_kyc_openid，仅取脱敏字段（real_name_mask / phone_mask）使用，绝不解密明文。
+     */
+    List<KycRecord> findAllByOpenidInAndStatus(java.util.Collection<String> openids, KycStatus status);
+
     Optional<KycRecord> findFirstByCertifyIdAndOpenidAndStatus(String certifyId, String openid, KycStatus status);
 
     /** 一证一号：同一身份证哈希在「非该 openid」下是否已存在指定状态（PASS）记录。 */

@@ -1,8 +1,11 @@
 package com.sanshuiyuan.cend.referral;
 
 import com.sanshuiyuan.cend.checkout.domain.CendOrder;
+import com.sanshuiyuan.cend.checkout.domain.KycRecord;
+import com.sanshuiyuan.cend.checkout.domain.KycStatus;
 import com.sanshuiyuan.cend.checkout.domain.OrderStatus;
 import com.sanshuiyuan.cend.checkout.infra.repository.CendOrderRepository;
+import com.sanshuiyuan.cend.checkout.infra.repository.KycRecordRepository;
 import com.sanshuiyuan.cend.common.BizException;
 import com.sanshuiyuan.cend.referral.api.MyReferralsResponse;
 import com.sanshuiyuan.cend.referral.api.ReferralItemResponse;
@@ -22,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -39,12 +43,23 @@ class ReferralQueryServiceTest {
 
     @Mock CendUserRepository userRepo;
     @Mock CendOrderRepository orderRepo;
+    @Mock KycRecordRepository kycRepo;
 
     private ReferralQueryService service;
 
     @BeforeEach
     void setUp() {
-        service = new ReferralQueryService(userRepo, orderRepo);
+        // 用真实展示名解析器 + mock KYC 仓库，既验证昵称脱敏不回归，又能覆盖实名/手机尾号兜底。
+        service = new ReferralQueryService(userRepo, orderRepo, new ReferralDisplayNameResolver(kycRepo));
+        // 默认无 KYC 记录（有昵称的用例走昵称脱敏，不读 KYC）；个别用例覆盖此桩。
+        lenient().when(kycRepo.findAllByOpenidInAndStatus(anyCollection(), eq(KycStatus.PASS)))
+                .thenReturn(List.of());
+    }
+
+    private static KycRecord passKyc(String openid, String realNameMask, String phoneMask) {
+        return KycRecord.create(openid, new byte[]{1}, new byte[]{1},
+                realNameMask, "110***********12", "hash-" + openid,
+                "cert-" + openid, "alipay", new byte[]{1}, phoneMask);
     }
 
     private static CendUser user(long id, String openid, String nickname, LocalDateTime createdAt) {
@@ -96,6 +111,7 @@ class ReferralQueryServiceTest {
         ReferralItemResponse first = resp.items().get(0);
         assertThat(first.userId()).isEqualTo(11L);
         assertThat(first.nicknameMasked()).isEqualTo("小*"); // 2 字昵称仅「首字 + *」
+        assertThat(first.displayName()).isEqualTo("小*");    // 有昵称：展示名 = 昵称脱敏
         assertThat(first.status()).isEqualTo("REGISTERED");
         assertThat(first.purchasedAt()).isNull();
 
@@ -104,6 +120,49 @@ class ReferralQueryServiceTest {
         assertThat(second.status()).isEqualTo("PURCHASED");
         assertThat(second.registeredAt()).isEqualTo("2026-05-01");
         assertThat(second.purchasedAt()).isEqualTo("2026-05-20"); // 最近购买
+    }
+
+    @Test
+    void myReferrals_nullNickname_fallsBackToKycMaskThenWeChatUser() {
+        CendUser me = user(1L, "me", "我", LocalDateTime.of(2026, 1, 1, 0, 0));
+        // 无微信昵称（最常见）：alice 有 PASS 实名 → 展示实名脱敏；bob 无 KYC → 空串（前端兜底「微信用户」）。
+        CendUser a = user(10L, "alice", null, LocalDateTime.of(2026, 5, 1, 0, 0));
+        CendUser b = user(11L, "bob", null, LocalDateTime.of(2026, 5, 2, 0, 0));
+        when(userRepo.findByOpenid("me")).thenReturn(Optional.of(me));
+        when(userRepo.findByInviterId(1L)).thenReturn(List.of(a, b));
+        when(orderRepo.findByOpenidInAndStatus(anyCollection(), eq(OrderStatus.PAID)))
+                .thenReturn(List.of());
+        when(kycRepo.findAllByOpenidInAndStatus(anyCollection(), eq(KycStatus.PASS)))
+                .thenReturn(List.of(passKyc("alice", "张 **", "138****8888")));
+
+        MyReferralsResponse resp = service.myReferrals("me", "ALL");
+
+        // 倒序：bob(05-02) 在前。
+        ReferralItemResponse bob = resp.items().get(0);
+        assertThat(bob.userId()).isEqualTo(11L);
+        assertThat(bob.nicknameMasked()).isEmpty();
+        assertThat(bob.displayName()).isEmpty(); // 无昵称无 KYC → 空串，前端显示「微信用户」
+
+        ReferralItemResponse alice = resp.items().get(1);
+        assertThat(alice.userId()).isEqualTo(10L);
+        assertThat(alice.nicknameMasked()).isEmpty();
+        assertThat(alice.displayName()).isEqualTo("张 **"); // 无昵称 → 回落到 KYC 实名脱敏
+    }
+
+    @Test
+    void myReferrals_nullNickname_noRealNameMask_fallsBackToPhoneTail() {
+        CendUser me = user(1L, "me", "我", LocalDateTime.of(2026, 1, 1, 0, 0));
+        CendUser a = user(10L, "alice", null, LocalDateTime.of(2026, 5, 1, 0, 0));
+        when(userRepo.findByOpenid("me")).thenReturn(Optional.of(me));
+        when(userRepo.findByInviterId(1L)).thenReturn(List.of(a));
+        when(orderRepo.findByOpenidInAndStatus(anyCollection(), eq(OrderStatus.PAID)))
+                .thenReturn(List.of());
+        when(kycRepo.findAllByOpenidInAndStatus(anyCollection(), eq(KycStatus.PASS)))
+                .thenReturn(List.of(passKyc("alice", "", "138****8888")));
+
+        MyReferralsResponse resp = service.myReferrals("me", "ALL");
+
+        assertThat(resp.items().get(0).displayName()).isEqualTo("138****8888"); // 实名脱敏缺失 → 手机尾号
     }
 
     @Test
