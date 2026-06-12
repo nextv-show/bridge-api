@@ -90,6 +90,9 @@ public class ClaimRequestUseCase {
             throw ApiException.conflict("LOCK_LIMIT", "已达接单上限");
         }
         // P1-2 每日 claim 配额（含已释放，防接单→释放→再接的批量扫单）。
+        // 注：与上方 lock.max.per.owner 同为「count-then-act」软限，并发下可轻微超额（无 DB 约束兜底）；
+        // 硬完整性由设备 CAS + uk_device_active 保证（一设备一活跃占用）。如需严格原子，
+        // 应对两处软限统一加 per-owner 串行化（users 行 FOR UPDATE），属后续硬化项，不在 P1 局部 bolt-on。
         LocalDateTime dayStart = LocalDate.now().atStartOfDay();
         if (assignmentRepository.countByOwnerUserIdAndLockedAtGreaterThanEqual(ownerUserId, dayStart)
                 >= configService.claimDailyQuotaPerOwner()) {

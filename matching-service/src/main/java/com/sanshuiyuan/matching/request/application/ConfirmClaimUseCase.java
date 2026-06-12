@@ -8,6 +8,7 @@ import com.sanshuiyuan.matching.request.domain.RequestStatus;
 import com.sanshuiyuan.matching.request.infra.MatchingRequestRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,7 +50,12 @@ public class ConfirmClaimUseCase {
 
         if (request.getClaimConfirmedAt() == null) {
             request.setClaimConfirmedAt(LocalDateTime.now());
-            requestRepository.saveAndFlush(request);
+            try {
+                requestRepository.saveAndFlush(request);
+            } catch (OptimisticLockingFailureException e) {
+                // 加载后被并发 release/expire/fulfill 改写 → 统一 409，而非 500。
+                throw ApiException.conflict("CONFIRM_CONFLICT", "需求状态已变更，请刷新重试");
+            }
             log.info("Confirm: request_id={} 已确认推进（脱离 SLA 自动释放）", requestId);
         }
         return new ConfirmResponse(requestId, request.getStatus().name(), request.getClaimConfirmedAt());
