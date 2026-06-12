@@ -10,6 +10,7 @@ import com.sanshuiyuan.ess.infra.client.EssApiClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
@@ -47,17 +48,21 @@ public class EssDocumentService {
      * @param contractId 业务合同 ID
      * @return PDF 下载 URL 列表
      */
-    @Transactional
+    // NOT_SUPPORTED：挂起调用方事务、本方法不开事务运行。
+    // 否则当桥接/对账（describeFlowStatus 的 @Transactional 内）调用本方法时，DescribeFileUrls 失败会把
+    // 调用方事务标记 rollback-only，连同刚写入的 SIGNED/COMPLETED 一起回滚（即使上层 catch 也无效）。
+    // PDF/归档是签署完成的下游，失败绝不能反向回滚签署状态。
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public List<String> getFileUrls(String contractId) {
         EssFlowRecord record = contractService.findByContractId(contractId);
 
         try {
+            // 企业版 DescribeFileUrls：Operator + BusinessType=FLOW + BusinessIds=[flowId]。
+            // （旧代码错传 Agent + FlowId(单数) → 腾讯报「businessIds 不能为空」。）
             TreeMap<String, Object> params = new TreeMap<>();
-            ObjectNode agent = objectMapper.createObjectNode();
-            agent.put("AppId", properties.corpId());
-            params.put("Agent", agent);
             params.put("Operator", buildOperator());
-            params.put("FlowId", record.getEssFlowId());
+            params.put("BusinessType", "FLOW");
+            params.put("BusinessIds", java.util.List.of(record.getEssFlowId()));
 
             JsonNode response = apiClient.invoke("DescribeFileUrls", params);
 
@@ -89,7 +94,7 @@ public class EssDocumentService {
      * @param fileId     文件 ID
      * @return 下载 URL
      */
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public String getFileUrl(String contractId, String fileId) {
         EssFlowRecord record = contractService.findByContractId(contractId);
 
