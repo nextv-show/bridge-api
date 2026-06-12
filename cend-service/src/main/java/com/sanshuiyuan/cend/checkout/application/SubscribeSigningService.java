@@ -184,10 +184,19 @@ public class SubscribeSigningService {
     @Transactional
     public String status(String openid, String bearer, Long contractId) {
         String status = essClient.status(bearer, contractId);
-        if ("SIGNED".equals(status) || "COMPLETED".equals(status)) {
+        // 合同状态机 SIGNED 之后会继续推进到 ARCHIVED（归档成功）。SIGNED 与 ARCHIVED 都代表「签署已完成」。
+        // 旧代码只认 SIGNED/COMPLETED → 合同一旦归档就被误判「尚未完成签约」、KYC 也不提升、前端进不了支付。
+        // 这里把「已签署及之后」的状态归一化为 SIGNED 回前端（前端只认 SIGNED/COMPLETED），并提升 KYC。
+        if (isSigningComplete(status)) {
             promoteKyc(openid, certifyId(contractId));
+            return "SIGNED";
         }
         return status;
+    }
+
+    /** 「签署已完成」判定：SIGNED 及其之后的状态（COMPLETED/ARCHIVED）。 */
+    private static boolean isSigningComplete(String status) {
+        return "SIGNED".equals(status) || "COMPLETED".equals(status) || "ARCHIVED".equals(status);
     }
 
     private void promoteKyc(String openid, String certifyId) {
