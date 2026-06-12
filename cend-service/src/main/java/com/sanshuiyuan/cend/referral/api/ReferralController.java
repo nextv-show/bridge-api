@@ -10,6 +10,7 @@ import com.sanshuiyuan.cend.referral.InvalidRefIdException;
 import com.sanshuiyuan.cend.referral.NicknameMasker;
 import com.sanshuiyuan.cend.referral.RefIdCodec;
 import com.sanshuiyuan.cend.referral.ReferralBindingService;
+import com.sanshuiyuan.cend.referral.ReferralDisplayNameResolver;
 import com.sanshuiyuan.cend.referral.ReferralQueryService;
 import com.sanshuiyuan.cend.referral.WxMiniCodeClient;
 import io.swagger.v3.oas.annotations.Operation;
@@ -39,6 +40,7 @@ public class ReferralController {
     private final RefIdCodec refIdCodec;
     private final ReferralBindingService referralBindingService;
     private final ReferralQueryService referralQueryService;
+    private final ReferralDisplayNameResolver displayNameResolver;
     private final WxMiniCodeClient wxMiniCodeClient;
     private final String linkBase;
 
@@ -46,12 +48,14 @@ public class ReferralController {
                               RefIdCodec refIdCodec,
                               ReferralBindingService referralBindingService,
                               ReferralQueryService referralQueryService,
+                              ReferralDisplayNameResolver displayNameResolver,
                               WxMiniCodeClient wxMiniCodeClient,
                               @Value("${h5.public-base-url:}") String publicBaseUrl) {
         this.userRepo = userRepo;
         this.refIdCodec = refIdCodec;
         this.referralBindingService = referralBindingService;
         this.referralQueryService = referralQueryService;
+        this.displayNameResolver = displayNameResolver;
         this.wxMiniCodeClient = wxMiniCodeClient;
         this.linkBase = publicBaseUrl == null ? "" : publicBaseUrl.replaceAll("/+$", "");
     }
@@ -139,6 +143,7 @@ public class ReferralController {
         }
         return ApiResponse.ok(new MyInviterResponse(
                 NicknameMasker.mask(inviter.getNickname()),
+                displayNameResolver.resolve(inviter.getOpenid(), inviter.getNickname()),
                 inviter.getAvatarUrl(),
                 me.getCreatedAt() != null ? me.getCreatedAt().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd")) : null));
     }
