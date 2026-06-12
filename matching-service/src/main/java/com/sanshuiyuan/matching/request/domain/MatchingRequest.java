@@ -67,6 +67,10 @@ public class MatchingRequest {
     @Column(name = "locked_at")
     private LocalDateTime lockedAt;
 
+    /** P1-2 软标记：接单后确认推进时间；NULL=待确认（24h 内未确认由 SLA 任务自动释放）。 */
+    @Column(name = "claim_confirmed_at")
+    private LocalDateTime claimConfirmedAt;
+
     @Version
     @Column(name = "version", nullable = false)
     private Integer version;
@@ -121,6 +125,9 @@ public class MatchingRequest {
 
     public LocalDateTime getLockedAt() { return lockedAt; }
     public void setLockedAt(LocalDateTime lockedAt) { this.lockedAt = lockedAt; }
+
+    public LocalDateTime getClaimConfirmedAt() { return claimConfirmedAt; }
+    public void setClaimConfirmedAt(LocalDateTime claimConfirmedAt) { this.claimConfirmedAt = claimConfirmedAt; }
 
     public Integer getVersion() { return version; }
     public void setVersion(Integer version) { this.version = version; }
