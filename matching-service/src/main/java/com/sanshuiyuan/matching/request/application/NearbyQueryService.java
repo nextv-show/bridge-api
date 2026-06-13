@@ -79,38 +79,56 @@ public class NearbyQueryService {
             throw ApiException.forbidden("NOT_OWNER", "仅持机用户可查看附近需求");
         }
 
-        double defaultRadius = configService.nearbyDefaultRadiusKm();
-        double maxRadius = configService.nearbyMaxRadiusKm();
-        double radiusKm = (radiusKmParam == null) ? defaultRadius : radiusKmParam;
-        if (radiusKm <= 0) radiusKm = defaultRadius;
-        if (radiusKm > maxRadius) radiusKm = maxRadius;   // 越界裁剪到上限
-
         Set<PriceTier> tiers = allowedTiers(parseTier(minPriceTierParam));
         SceneType sceneType = parseScene(sceneTypeParam);
         SortMode sort = SortMode.parse(sortParam);
-
-        // bbox：Δlat=r/111；Δlng=r/(111*cos(lat))。高纬 cos→0 时 Δlng 放宽（保守扩大候选）。
-        double dLat = radiusKm / 111.0;
-        double cosLat = Math.cos(Math.toRadians(lat));
-        double dLng = (Math.abs(cosLat) < 1e-6) ? 180.0 : radiusKm / (111.0 * Math.abs(cosLat));
-
-        BigDecimal latMin = BigDecimal.valueOf(lat - dLat);
-        BigDecimal latMax = BigDecimal.valueOf(lat + dLat);
-        BigDecimal lngMin = BigDecimal.valueOf(lng - dLng);
-        BigDecimal lngMax = BigDecimal.valueOf(lng + dLng);
-
         int candidateLimit = configService.nearbyCandidateLimit();
-        List<MatchingRequest> candidates = repo.findOpenCandidates(
-                latMin, latMax, lngMin, lngMax, userId, sceneType, tiers,
-                BigDecimal.valueOf(lat), BigDecimal.valueOf(lng),
-                PageRequest.of(0, candidateLimit));
-        if (candidates.size() >= candidateLimit) {
-            // 高密度区截断：候选已被裁到近端 candidateLimit 条（design §7 不静默截断）。
-            log.warn("nearby candidate truncated at limit={} (lat={}, lng={}, radiusKm={}); "
-                    + "远端/深翻页结果可能不全", candidateLimit, lat, lng, radiusKm);
+
+        // radius_km 缺省 = 「距离不限」模式：跨城/跨省运营场景，返回全部 OPEN（按距离就近排序），不裁圆。
+        boolean unlimited = (radiusKmParam == null);
+
+        // unlimited 模式下 radius 取 MAX_VALUE，Haversine 过滤自然恒不裁圆（仍计算距离用于排序/展示）。
+        final double radius;
+        List<MatchingRequest> candidates;
+        if (unlimited) {
+            radius = Double.MAX_VALUE;
+            candidates = repo.findAllOpenCandidates(
+                    userId, sceneType, tiers,
+                    BigDecimal.valueOf(lat), BigDecimal.valueOf(lng),
+                    PageRequest.of(0, candidateLimit));
+            if (candidates.size() >= candidateLimit) {
+                log.warn("nearby(UNLIMITED) candidate truncated at limit={} (lat={}, lng={}); "
+                        + "远端/深翻页结果可能不全", candidateLimit, lat, lng);
+            }
+        } else {
+            double defaultRadius = configService.nearbyDefaultRadiusKm();
+            double maxRadius = configService.nearbyMaxRadiusKm();
+            double radiusKm = radiusKmParam;
+            if (radiusKm <= 0) radiusKm = defaultRadius;
+            if (radiusKm > maxRadius) radiusKm = maxRadius;   // 越界裁剪到上限
+            radius = radiusKm;
+
+            // bbox：Δlat=r/111；Δlng=r/(111*cos(lat))。高纬 cos→0 时 Δlng 放宽（保守扩大候选）。
+            double dLat = radiusKm / 111.0;
+            double cosLat = Math.cos(Math.toRadians(lat));
+            double dLng = (Math.abs(cosLat) < 1e-6) ? 180.0 : radiusKm / (111.0 * Math.abs(cosLat));
+
+            BigDecimal latMin = BigDecimal.valueOf(lat - dLat);
+            BigDecimal latMax = BigDecimal.valueOf(lat + dLat);
+            BigDecimal lngMin = BigDecimal.valueOf(lng - dLng);
+            BigDecimal lngMax = BigDecimal.valueOf(lng + dLng);
+
+            candidates = repo.findOpenCandidates(
+                    latMin, latMax, lngMin, lngMax, userId, sceneType, tiers,
+                    BigDecimal.valueOf(lat), BigDecimal.valueOf(lng),
+                    PageRequest.of(0, candidateLimit));
+            if (candidates.size() >= candidateLimit) {
+                // 高密度区截断：候选已被裁到近端 candidateLimit 条（design §7 不静默截断）。
+                log.warn("nearby candidate truncated at limit={} (lat={}, lng={}, radiusKm={}); "
+                        + "远端/深翻页结果可能不全", candidateLimit, lat, lng, radiusKm);
+            }
         }
 
-        final double radius = radiusKm;
         LocalDateTime now = LocalDateTime.now();
         double epsilon = configService.jitterEpsilon();
 
@@ -119,7 +137,7 @@ public class NearbyQueryService {
             double dist = GeoHashIndexer.distanceKm(
                     lat, lng, r.getLat().doubleValue(), r.getLng().doubleValue());
             if (dist > radius) {
-                continue;   // bbox 是外接矩形，需 Haversine 精算裁圆
+                continue;   // bbox 是外接矩形，需 Haversine 精算裁圆（unlimited 时 radius=MAX 恒不裁）
             }
             double rounded = BigDecimal.valueOf(dist).setScale(2, RoundingMode.HALF_UP).doubleValue();
             // P1 无偏好沉淀（P3 引入），场景偏好传空集 → 场景分恒中性。
@@ -127,6 +145,11 @@ public class NearbyQueryService {
             // 抖动独立保存，仅作 recommended 同分（同桶）tie-breaker，不混入 score（避免错排相差<epsilon 的单）。
             double jitter = RankScorer.jitter(r.getId(), epsilon);
             scored.add(new Scored(r, rounded, ranked.score(), jitter, ranked.monthlyGmv(), ranked.reasons()));
+        }
+
+        if (scored.isEmpty()) {
+            log.warn("nearby returned 0 results | subject={} lat={} lng={} radiusKm={} mode={} candidateCount={}",
+                    subject, lat, lng, radiusKmParam, unlimited ? "UNLIMITED" : "FIXED", candidates.size());
         }
 
         scored.sort(comparator(sort));
