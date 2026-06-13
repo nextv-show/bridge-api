@@ -4,6 +4,8 @@ import com.sanshuiyuan.matching.crypto.IdCardCipher;
 import com.sanshuiyuan.matching.crypto.PhoneMasking;
 import com.sanshuiyuan.matching.request.api.dto.RequestItem;
 import com.sanshuiyuan.matching.request.domain.MatchingRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -12,6 +14,8 @@ import java.util.List;
 /** MatchingRequest → RequestItem，按调用方权限决定手机号明文/脱敏。 */
 @Component
 public class RequestItemMapper {
+
+    private static final Logger log = LoggerFactory.getLogger(RequestItemMapper.class);
 
     private final IdCardCipher cipher;
 
@@ -39,8 +43,14 @@ public class RequestItemMapper {
      */
     public RequestItem toItem(MatchingRequest r, boolean plainPhone, Double distanceKm,
                               Long viewerUserId, List<String> recommendReasons) {
-        String plain = cipher.decrypt(r.getContactPhoneEnc());
-        String phone = plainPhone ? plain : PhoneMasking.mask(plain);
+        String phone;
+        try {
+            String plain = cipher.decrypt(r.getContactPhoneEnc());
+            phone = plainPhone ? plain : PhoneMasking.mask(plain);
+        } catch (Exception e) {
+            log.warn("Failed to decrypt contact phone for request id={}, returning placeholder", r.getId(), e);
+            phone = "***（解密异常）";
+        }
         boolean isOwner = viewerUserId != null && viewerUserId.equals(r.getUserId());
         boolean isLockOwner = viewerUserId != null
                 && r.getLockedByUserId() != null
