@@ -22,6 +22,7 @@ jobs:
       SHARED_H5_JWT_SECRET: ${{ secrets.H5_JWT_SECRET }}
       SHARED_S2S_TOKEN: ${{ secrets.S2S_TOKEN }}
       SHARED_ADMIN_JWT_SECRET: ${{ secrets.ADMIN_JWT_SECRET }}
+      SHARED_H5_AES_MASTER_KEY: ${{ secrets.H5_AES_MASTER_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -739,6 +740,8 @@ jobs:
             }
             seed_secret H5_JWT_SECRET "${SHARED_H5_JWT_SECRET:-}" "dev-h5-jwt-secret-please-override-in-prod-0001" "$ENV_FILE"
             seed_secret S2S_TOKEN "${SHARED_S2S_TOKEN:-}" "local-dev-static-token" "$ENV_FILE"
+            # H5_AES_MASTER_KEY 须与 cend-service 同值——matching-service 用它解密 kyc_records.real_name/phone_enc（联系人自动补全）
+            seed_secret H5_AES_MASTER_KEY "${SHARED_H5_AES_MASTER_KEY:-}" "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" "$ENV_FILE"
 
             # 标准 systemd 单元（迁移后重写为指向标准目录；旧单元若指向 /opt/matching-service 一并覆盖）
             SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"

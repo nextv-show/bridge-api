@@ -47,13 +47,25 @@ public class KycGuard {
                     if (!rs.next()) {
                         return Optional.<KycContactInfo>empty();
                     }
-                    byte[] realNameEnc = rs.getBytes("real_name");
-                    byte[] phoneEnc = rs.getBytes("phone_enc");
-                    String realName = realNameEnc == null ? null : cipher.decrypt(realNameEnc);
-                    String phone = phoneEnc == null ? null : cipher.decrypt(phoneEnc);
+                    String realName = decryptSafe(rs.getBytes("real_name"));
+                    String phone = decryptSafe(rs.getBytes("phone_enc"));
                     return Optional.of(new KycContactInfo(realName, phone));
                 },
                 openid);
+    }
+
+    /**
+     * 安全解密：密钥不一致或数据损坏时返回 null 而非抛异常。
+     * findContactInfo 仅用于联系人信息自动补全（便利功能），解密失败不应阻断发需求主流程。
+     * 此场景下用户需手动填写联系人姓名/手机号。
+     */
+    private String decryptSafe(byte[] encrypted) {
+        if (encrypted == null) return null;
+        try {
+            return cipher.decrypt(encrypted);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /** PASS 实名记录解密后的联系人信息（realName / phone 均可能为 null）。 */
