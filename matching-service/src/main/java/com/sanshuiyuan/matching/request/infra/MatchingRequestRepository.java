@@ -69,4 +69,23 @@ public interface MatchingRequestRepository extends JpaRepository<MatchingRequest
                                              @Param("centerLat") BigDecimal centerLat,
                                              @Param("centerLng") BigDecimal centerLng,
                                              Pageable pageable);
+
+    /**
+     * 「距离不限」模式候选：与 {@link #findOpenCandidates} 同签名/同 JPQL，但<b>不含 lat/lng bbox 过滤</b>，
+     * 返回全部 OPEN 候选（排除自己 + scene/tier 下推），按平面近似距离 ASC, id ASC 排序。
+     * 上线初期用户稀疏、需跨城/跨省运营时使用：不限距离但仍按距离就近排序。
+     * 候选用 {@link Pageable} 截断到 nearby.candidate.limit；最终距离仍走应用层 Haversine 精算（仅排序/展示，不裁圆）。
+     */
+    @Query("SELECT r FROM MatchingRequest r WHERE r.status = com.sanshuiyuan.matching.request.domain.RequestStatus.OPEN " +
+            "AND r.userId <> :excludeUserId " +
+            "AND (:sceneType IS NULL OR r.sceneType = :sceneType) " +
+            "AND r.expectedPriceTier IN :tiers " +
+            "ORDER BY (r.lat - :centerLat) * (r.lat - :centerLat) " +
+            "       + (r.lng - :centerLng) * (r.lng - :centerLng) ASC, r.id ASC")
+    List<MatchingRequest> findAllOpenCandidates(@Param("excludeUserId") Long excludeUserId,
+                                                @Param("sceneType") SceneType sceneType,
+                                                @Param("tiers") Collection<PriceTier> tiers,
+                                                @Param("centerLat") BigDecimal centerLat,
+                                                @Param("centerLng") BigDecimal centerLng,
+                                                Pageable pageable);
 }
