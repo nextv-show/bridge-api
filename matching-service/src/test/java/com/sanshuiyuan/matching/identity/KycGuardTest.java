@@ -1,5 +1,6 @@
 package com.sanshuiyuan.matching.identity;
 
+import com.sanshuiyuan.matching.crypto.IdCardCipher;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -14,7 +15,8 @@ import static org.mockito.Mockito.when;
 class KycGuardTest {
 
     private final JdbcTemplate jdbc = mock(JdbcTemplate.class);
-    private final KycGuard guard = new KycGuard(jdbc);
+    private final IdCardCipher cipher = mock(IdCardCipher.class);
+    private final KycGuard guard = new KycGuard(jdbc, cipher);
 
     @Test
     void passedWhenCountPositive() {

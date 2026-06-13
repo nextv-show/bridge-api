@@ -15,8 +15,8 @@ import java.math.BigDecimal;
  * scene_type / expected_price_tier 用 String 接收，在 UseCase 做严格枚举校验以返回 422+code。
  */
 public record CreateRequestBody(
-        @JsonProperty("contact_name") @NotBlank @Size(max = 64) String contactName,
-        @JsonProperty("contact_phone") @NotBlank String contactPhone,
+        @JsonProperty("contact_name") @Size(max = 64) String contactName,
+        @JsonProperty("contact_phone") String contactPhone,
         @JsonProperty("address") @NotBlank @Size(max = 255) String address,
         @JsonProperty("lat") @NotNull @DecimalMin("-90.0") @DecimalMax("90.0") BigDecimal lat,
         @JsonProperty("lng") @NotNull @DecimalMin("-180.0") @DecimalMax("180.0") BigDecimal lng,

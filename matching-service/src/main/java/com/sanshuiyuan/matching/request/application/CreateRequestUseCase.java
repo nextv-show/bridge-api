@@ -3,6 +3,7 @@ package com.sanshuiyuan.matching.request.application;
 import com.sanshuiyuan.matching.crypto.IdCardCipher;
 import com.sanshuiyuan.matching.crypto.PhoneMasking;
 import com.sanshuiyuan.matching.identity.KycGuard;
+import com.sanshuiyuan.matching.identity.KycGuard.KycContactInfo;
 import com.sanshuiyuan.matching.identity.MatchingUserResolver;
 import com.sanshuiyuan.matching.request.api.ApiException;
 import com.sanshuiyuan.matching.request.api.dto.CreateRequestBody;
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 /** FR-1：发布撮合需求。校验→限频→身份解析→加密落库。 */
 @Service
@@ -56,10 +58,32 @@ public class CreateRequestUseCase {
             throw ApiException.forbidden("KYC_REQUIRED", "请先完成实名认证后再发布需求");
         }
 
+        // 联系人信息自动补全：未手填的 contact_name / contact_phone 用实名(KYC PASS)记录回填。
+        String contactName = body.contactName();
+        String contactPhone = body.contactPhone();
+
+        boolean nameBlank = (contactName == null || contactName.isBlank());
+        boolean phoneBlank = (contactPhone == null || contactPhone.isBlank());
+
+        if (nameBlank || phoneBlank) {
+            Optional<KycContactInfo> kycContact = kycGuard.findContactInfo(subject);
+            if (kycContact.isPresent()) {
+                if (nameBlank) contactName = kycContact.get().realName();
+                if (phoneBlank) contactPhone = kycContact.get().phone();
+            }
+        }
+
+        if (contactName == null || contactName.isBlank()) {
+            throw ApiException.unprocessable("CONTACT_NAME_REQUIRED", "请填写联系人姓名或先完成实名认证");
+        }
+        if (contactPhone == null || contactPhone.isBlank()) {
+            throw ApiException.unprocessable("CONTACT_PHONE_REQUIRED", "请填写联系手机号或先完成实名认证");
+        }
+
         SceneType sceneType = parseScene(body.sceneType());
         PriceTier tier = parseTier(body.expectedPriceTier());
 
-        String normalizedPhone = PhoneMasking.normalize(body.contactPhone());
+        String normalizedPhone = PhoneMasking.normalize(contactPhone);
         if (normalizedPhone.length() != 11) {
             throw ApiException.unprocessable("INVALID_PHONE", "手机号格式不正确");
         }
@@ -82,7 +106,7 @@ public class CreateRequestUseCase {
 
         MatchingRequest r = new MatchingRequest();
         r.setUserId(userId);
-        r.setContactName(body.contactName());
+        r.setContactName(contactName);
         r.setContactPhoneEnc(cipher.encrypt(normalizedPhone));
         r.setContactPhoneHash(phoneHash);
         r.setAddress(body.address());
