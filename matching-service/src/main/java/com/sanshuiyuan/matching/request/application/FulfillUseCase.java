@@ -107,6 +107,16 @@ public class FulfillUseCase {
      */
     @Transactional
     public void fulfillSelfUse(long deviceAssetId, long logisticsOrderId) {
+        // 正向校验：设备确实处于 SELF_USE 阶段，防止普通撮合单丢 requestId 后误入此路径。
+        // 与下方 CAS 语义双重保证：普通撮合单设备处于 LOCKED 而非 SELF_USE，此处即被拒绝。
+        // 例外：设备已 PENDING_ACTIVATE 时放行，交由下方 CAS 失败分支做幂等处理。
+        String currentStage = deviceAssetGateway.findStage(deviceAssetId);
+        if (!DeviceStage.SELF_USE.name().equals(currentStage)
+                && !DeviceStage.PENDING_ACTIVATE.name().equals(currentStage)) {
+            throw ApiException.conflict("DEVICE_STAGE_INVALID",
+                    "非 SELF_USE 设备不允许走 self-use fulfill（当前: " + currentStage + "）");
+        }
+
         // device_assets.stage = PENDING_ACTIVATE（CAS：仅 SELF_USE → PENDING_ACTIVATE）
         int updated = deviceAssetGateway.advanceStageByDevice(
                 deviceAssetId, DeviceStage.SELF_USE, DeviceStage.PENDING_ACTIVATE);

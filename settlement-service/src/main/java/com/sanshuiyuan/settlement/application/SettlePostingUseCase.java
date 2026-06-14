@@ -80,8 +80,9 @@ public class SettlePostingUseCase {
         DeviceStage stage = asset.getStage();
         long amountCents = bill.getAmountCents();
 
-        if (stage == DeviceStage.PENDING_MATCH || stage == DeviceStage.PENDING_ACTIVATE) {
-            // FR-1.3: 未激活设备全额归平台，不改所有权人钱包
+        if (stage == DeviceStage.PENDING_MATCH || stage == DeviceStage.SELF_USE
+                || stage == DeviceStage.LOCKED || stage == DeviceStage.PENDING_ACTIVATE) {
+            // FR-1.3: pre-install 阶段（含 SELF_USE/LOCKED）全额归平台，不改所有权人钱包
             createPlatformOnlyEntry(bill, "BLOCKED_PRE_INSTALL", stage.name());
             return;
         }
