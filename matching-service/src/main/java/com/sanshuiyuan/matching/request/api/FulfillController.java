@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -25,12 +26,14 @@ public class FulfillController {
 
     @PostMapping("/fulfill")
     public ResponseEntity<Map<String, Object>> fulfill(@RequestBody FulfillBody body) {
+        // requestId == null → SELF_USE 设备（无匹配需求），fulfill() 内部路由到 fulfillSelfUse
         fulfillUseCase.fulfill(body.requestId, body.deviceAssetId, body.logisticsOrderId);
-        return ResponseEntity.ok(Map.of(
-                "status", "FULFILLED",
-                "request_id", body.requestId
-        ));
+        // LinkedHashMap：request_id 对 SELF_USE 为 null，Map.of 不允许 null value
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("status", "FULFILLED");
+        resp.put("request_id", body.requestId);
+        return ResponseEntity.ok(resp);
     }
 
-    public record FulfillBody(long requestId, long deviceAssetId, long logisticsOrderId) {}
+    public record FulfillBody(Long requestId, long deviceAssetId, long logisticsOrderId) {}
 }

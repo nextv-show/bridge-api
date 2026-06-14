@@ -52,9 +52,16 @@ public class FulfillUseCase {
 
     /**
      * 执行 fulfillment。幂等：已 FULFILLED 的需求直接返回。
+     *
+     * <p>{@code requestId == null} 表示 SELF_USE 设备（无匹配需求），转调 {@link #fulfillSelfUse}。
      */
     @Transactional
-    public void fulfill(long requestId, long deviceAssetId, long logisticsOrderId) {
+    public void fulfill(Long requestId, long deviceAssetId, long logisticsOrderId) {
+        if (requestId == null) {
+            fulfillSelfUse(deviceAssetId, logisticsOrderId);
+            return;
+        }
+
         MatchingRequest request = requestRepository.findById(requestId)
                 .orElseThrow(() -> ApiException.notFound("REQUEST_NOT_FOUND", "需求不存在"));
 
@@ -94,10 +101,53 @@ public class FulfillUseCase {
         metrics.fulfilled();   // P1-5 最终激活前置埋点（仅真正履约计数，幂等跳过不计）
     }
 
+    /**
+     * SELF_USE 设备履约：无匹配需求，仅推进设备 SELF_USE → PENDING_ACTIVATE 并写 stage event。
+     * 幂等：设备已处于 PENDING_ACTIVATE（重试）直接返回，不重复计数。
+     */
+    @Transactional
+    public void fulfillSelfUse(long deviceAssetId, long logisticsOrderId) {
+        // device_assets.stage = PENDING_ACTIVATE（CAS：仅 SELF_USE → PENDING_ACTIVATE）
+        int updated = deviceAssetGateway.advanceStageByDevice(
+                deviceAssetId, DeviceStage.SELF_USE, DeviceStage.PENDING_ACTIVATE);
+        if (updated != 1) {
+            String current = deviceAssetGateway.findStage(deviceAssetId);
+            if (DeviceStage.PENDING_ACTIVATE.name().equals(current)) {
+                log.info("FulfillSelfUse: device_asset_id={} 已 PENDING_ACTIVATE，幂等跳过", deviceAssetId);
+                return;
+            }
+            throw ApiException.conflict("DEVICE_STAGE_INVALID",
+                    "设备状态不允许推进到 PENDING_ACTIVATE（当前非 SELF_USE）");
+        }
+        log.info("FulfillSelfUse: device_asset_id={} SELF_USE → PENDING_ACTIVATE", deviceAssetId);
+
+        // 写 device_assets_stage_events（payload 标记 source=SELF_USE，无 request_id）
+        DeviceAssetStageEvent event = new DeviceAssetStageEvent();
+        event.setDeviceAssetId(deviceAssetId);
+        event.setEventType("PENDING_ACTIVATE_READY");
+        event.setPayloadJson(buildSelfUsePayload(logisticsOrderId));
+        stageEventRepository.saveAndFlush(event);
+        log.info("FulfillSelfUse: 写 device_assets_stage_events device={} type=PENDING_ACTIVATE_READY source=SELF_USE",
+                deviceAssetId);
+
+        metrics.fulfilled();   // P1-5 最终激活前置埋点（仅真正履约计数，幂等跳过不计）
+    }
+
     private String buildPayload(long requestId, long logisticsOrderId) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("request_id", requestId);
         payload.put("logistics_order_id", logisticsOrderId);
+        return serialize(payload);
+    }
+
+    private String buildSelfUsePayload(long logisticsOrderId) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("source", "SELF_USE");
+        payload.put("logistics_order_id", logisticsOrderId);
+        return serialize(payload);
+    }
+
+    private String serialize(Map<String, Object> payload) {
         try {
             return objectMapper.writeValueAsString(payload);
         } catch (Exception e) {
