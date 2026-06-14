@@ -30,8 +30,9 @@ public class NearbyController {
             @RequestParam(value = "scene_type", required = false) String sceneType,
             @RequestParam(value = "sort", required = false) String sort,
             @RequestParam(value = "page", required = false, defaultValue = "0") int page,
-            @RequestParam(value = "size", required = false, defaultValue = "20") int size) {
+            @RequestParam(value = "size", required = false, defaultValue = "20") int size,
+            @RequestParam(value = "include_self", required = false, defaultValue = "false") boolean includeSelf) {
         return nearbyQueryService.nearby(CurrentUser.subject(), lat, lng, radiusKm,
-                minPriceTier, sceneType, sort, page, size);
+                minPriceTier, sceneType, sort, page, size, includeSelf);
     }
 }

@@ -71,13 +71,16 @@ public class NearbyQueryService {
     public List<RequestItem> nearby(String subject, double lat, double lng,
                                     Double radiusKmParam, String minPriceTierParam,
                                     String sceneTypeParam, String sortParam,
-                                    int page, int size) {
+                                    int page, int size, boolean includeSelf) {
         // 只读解析，不创建 users 行。无 users 行者必然无 device_assets → 非 owner。
         long userId = userResolver.findUserId(subject)
                 .orElseThrow(() -> ApiException.forbidden("NOT_OWNER", "仅持机用户可查看附近需求"));
         if (!userResolver.isOwner(userId)) {
             throw ApiException.forbidden("NOT_OWNER", "仅持机用户可查看附近需求");
         }
+
+        // includeSelf=true 时传 null（不排除自己的需求），false 时传实际 userId
+        Long excludeUserId = includeSelf ? null : userId;
 
         Set<PriceTier> tiers = allowedTiers(parseTier(minPriceTierParam));
         SceneType sceneType = parseScene(sceneTypeParam);
@@ -93,7 +96,7 @@ public class NearbyQueryService {
         if (unlimited) {
             radius = Double.MAX_VALUE;
             candidates = repo.findAllOpenCandidates(
-                    userId, sceneType, tiers,
+                    excludeUserId, sceneType, tiers,
                     BigDecimal.valueOf(lat), BigDecimal.valueOf(lng),
                     PageRequest.of(0, candidateLimit));
             if (candidates.size() >= candidateLimit) {
@@ -119,7 +122,7 @@ public class NearbyQueryService {
             BigDecimal lngMax = BigDecimal.valueOf(lng + dLng);
 
             candidates = repo.findOpenCandidates(
-                    latMin, latMax, lngMin, lngMax, userId, sceneType, tiers,
+                    latMin, latMax, lngMin, lngMax, excludeUserId, sceneType, tiers,
                     BigDecimal.valueOf(lat), BigDecimal.valueOf(lng),
                     PageRequest.of(0, candidateLimit));
             if (candidates.size() >= candidateLimit) {
@@ -160,7 +163,7 @@ public class NearbyQueryService {
 
         // 未接单 owner 看脱敏手机号；recommend_reasons 仅 nearby 带值。
         return scored.subList(from, to).stream()
-                .map(s -> mapper.toItem(s.req(), false, s.dist(), null, s.reasons()))
+                .map(s -> mapper.toItem(s.req(), false, s.dist(), userId, s.reasons()))
                 .toList();
     }
 
