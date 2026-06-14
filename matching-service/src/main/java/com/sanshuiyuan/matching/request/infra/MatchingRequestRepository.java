@@ -54,7 +54,7 @@ public interface MatchingRequestRepository extends JpaRepository<MatchingRequest
      */
     @Query("SELECT r FROM MatchingRequest r WHERE r.status = com.sanshuiyuan.matching.request.domain.RequestStatus.OPEN " +
             "AND r.lat BETWEEN :latMin AND :latMax AND r.lng BETWEEN :lngMin AND :lngMax " +
-            "AND r.userId <> :excludeUserId " +
+            "AND (:excludeUserId IS NULL OR r.userId <> :excludeUserId) " +
             "AND (:sceneType IS NULL OR r.sceneType = :sceneType) " +
             "AND r.expectedPriceTier IN :tiers " +
             "ORDER BY (r.lat - :centerLat) * (r.lat - :centerLat) " +
@@ -77,7 +77,7 @@ public interface MatchingRequestRepository extends JpaRepository<MatchingRequest
      * 候选用 {@link Pageable} 截断到 nearby.candidate.limit；最终距离仍走应用层 Haversine 精算（仅排序/展示，不裁圆）。
      */
     @Query("SELECT r FROM MatchingRequest r WHERE r.status = com.sanshuiyuan.matching.request.domain.RequestStatus.OPEN " +
-            "AND r.userId <> :excludeUserId " +
+            "AND (:excludeUserId IS NULL OR r.userId <> :excludeUserId) " +
             "AND (:sceneType IS NULL OR r.sceneType = :sceneType) " +
             "AND r.expectedPriceTier IN :tiers " +
             "ORDER BY (r.lat - :centerLat) * (r.lat - :centerLat) " +
