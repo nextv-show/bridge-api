@@ -51,12 +51,15 @@ public class LogisticsOutboxConsumer {
             delay = 2000, multiplier = 2.0, maxDelay = 30000))
     public void processOne(Map<String, Object> row) {
         long outboxId = ((Number) row.get("id")).longValue();
-        long requestId = ((Number) row.get("request_id")).longValue();
+        Object reqIdObj = row.get("request_id");
+        Long requestId = reqIdObj != null ? ((Number) reqIdObj).longValue() : null;
         long deviceAssetId = ((Number) row.get("device_asset_id")).longValue();
         String payloadJson = (String) row.get("payload_json");
+        String source = (String) row.get("source");
 
-        // 幂等：同一 request_id 已存在工单则跳过（可能已标记 consumed 但之前重试）。
-        if (orderRepository.existsByRequestId(requestId)) {
+        // MATCHING 场景：幂等检查（同一 request_id 已存在工单则跳过）。
+        // SELF_USE 场景 request_id 为 null，无幂等键，跳过此检查（用工单 device_asset_id 锚定）。
+        if (requestId != null && orderRepository.existsByRequestId(requestId)) {
             log.info("OutboxConsumer: request_id={} 已有工单，标记 consumed 并跳过", requestId);
             outboxReader.markConsumed(outboxId);
             return;
@@ -64,7 +67,7 @@ public class LogisticsOutboxConsumer {
 
         try {
             LogisticsOrder order = new LogisticsOrder();
-            order.setRequestId(requestId);
+            order.setRequestId(requestId);   // SELF_USE 场景为 null
             order.setDeviceAssetId(deviceAssetId);
             order.setShipToAddressSnapshot(payloadJson);
             order.setStatus(LogisticsStatus.PENDING_SHIP);
@@ -72,11 +75,11 @@ public class LogisticsOutboxConsumer {
 
             // 事务成功后标记 outbox consumed
             outboxReader.markConsumed(outboxId);
-            log.info("OutboxConsumer: 创建物流工单 orderId={} requestId={} deviceId={}",
-                    order.getId(), requestId, deviceAssetId);
+            log.info("OutboxConsumer: 创建物流工单 orderId={} requestId={} deviceId={} source={}",
+                    order.getId(), requestId, deviceAssetId, source);
         } catch (DataIntegrityViolationException e) {
             // uk_request 冲突（并发/重试），标记 consumed 并忽略
-            log.warn("OutboxConsumer: 工单唯一键冲突 requestId={}, 标记 consumed", requestId);
+            log.warn("OutboxConsumer: 工单冲突 requestId={} deviceId={}, 标记 consumed", requestId, deviceAssetId);
             outboxReader.markConsumed(outboxId);
         }
     }

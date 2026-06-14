@@ -22,7 +22,7 @@ public class LogisticsOrder {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "request_id", nullable = false)
+    @Column(name = "request_id")
     private Long requestId;
 
     @Column(name = "device_asset_id", nullable = false)
