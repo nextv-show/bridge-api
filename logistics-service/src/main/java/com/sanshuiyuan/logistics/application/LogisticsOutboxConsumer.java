@@ -58,9 +58,15 @@ public class LogisticsOutboxConsumer {
         String source = (String) row.get("source");
 
         // MATCHING 场景：幂等检查（同一 request_id 已存在工单则跳过）。
-        // SELF_USE 场景 request_id 为 null，无幂等键，跳过此检查（用工单 device_asset_id 锚定）。
         if (requestId != null && orderRepository.existsByRequestId(requestId)) {
             log.info("OutboxConsumer: request_id={} 已有工单，标记 consumed 并跳过", requestId);
+            outboxReader.markConsumed(outboxId);
+            return;
+        }
+
+        // SELF_USE 场景 request_id 为 null，以 outbox_id 作为幂等键（uk_outbox）。
+        if (requestId == null && orderRepository.existsByOutboxId(outboxId)) {
+            log.info("OutboxConsumer: outbox_id={} 已有工单，标记 consumed 并跳过", outboxId);
             outboxReader.markConsumed(outboxId);
             return;
         }
@@ -68,6 +74,7 @@ public class LogisticsOutboxConsumer {
         try {
             LogisticsOrder order = new LogisticsOrder();
             order.setRequestId(requestId);   // SELF_USE 场景为 null
+            order.setOutboxId(outboxId);     // SELF_USE 幂等键
             order.setDeviceAssetId(deviceAssetId);
             order.setShipToAddressSnapshot(payloadJson);
             order.setStatus(LogisticsStatus.PENDING_SHIP);

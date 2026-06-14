@@ -10,4 +10,6 @@ public interface LogisticsOrderRepository extends JpaRepository<LogisticsOrder, 
     Optional<LogisticsOrder> findByRequestId(Long requestId);
 
     boolean existsByRequestId(Long requestId);
+
+    boolean existsByOutboxId(Long outboxId);
 }

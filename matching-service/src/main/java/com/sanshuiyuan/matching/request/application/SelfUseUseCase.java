@@ -48,9 +48,9 @@ public class SelfUseUseCase {
         // 写物流 outbox（source=SELF_USE, request_id=null）
         try {
             Map<String, Object> payload = new LinkedHashMap<>();
-            payload.put("ship_to_name", req.getShip_to_name());
-            payload.put("ship_to_phone", req.getShip_to_phone());
-            payload.put("ship_to_address", req.getShip_to_address());
+            payload.put("ship_to_name", req.getShipToName());
+            payload.put("ship_to_phone", req.getShipToPhone());
+            payload.put("ship_to_address", req.getShipToAddress());
             payload.put("lat", req.getLat());
             payload.put("lng", req.getLng());
             payload.put("source", "SELF_USE");
