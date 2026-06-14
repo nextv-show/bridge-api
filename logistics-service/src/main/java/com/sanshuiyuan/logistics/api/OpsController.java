@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -30,11 +31,12 @@ public class OpsController {
             @PathVariable long id,
             @RequestBody AdvanceBody body) {
         var order = advanceStateUseCase.advance(id, body.toStatus, body.note, null);
-        return ResponseEntity.ok(Map.of(
-                "id", order.getId(),
-                "status", order.getStatus().name(),
-                "request_id", order.getRequestId()
-        ));
+        // LinkedHashMap 允许 null value：SELF_USE 场景下 request_id 可能为 null（Map.of 不支持）
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("id", order.getId());
+        response.put("status", order.getStatus().name());
+        response.put("request_id", order.getRequestId());
+        return ResponseEntity.ok(response);
     }
 
     public record AdvanceBody(LogisticsStatus toStatus, String note) {}
