@@ -20,11 +20,14 @@ public class LogisticsOutboxEntry {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "request_id", nullable = false)
+    @Column(name = "request_id")   // SELF_USE 场景下为 null（设备自用，无撮合需求）
     private Long requestId;
 
     @Column(name = "device_asset_id", nullable = false)
     private Long deviceAssetId;
+
+    @Column(name = "source", nullable = false)
+    private String source = "MATCHING";
 
     @Column(name = "payload_json", nullable = false, columnDefinition = "json")
     private String payloadJson;
@@ -44,6 +47,9 @@ public class LogisticsOutboxEntry {
 
     public Long getDeviceAssetId() { return deviceAssetId; }
     public void setDeviceAssetId(Long deviceAssetId) { this.deviceAssetId = deviceAssetId; }
+
+    public String getSource() { return source; }
+    public void setSource(String source) { this.source = source; }
 
     public String getPayloadJson() { return payloadJson; }
     public void setPayloadJson(String payloadJson) { this.payloadJson = payloadJson; }

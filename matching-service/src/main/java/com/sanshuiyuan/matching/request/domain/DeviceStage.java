@@ -13,6 +13,7 @@ package com.sanshuiyuan.matching.request.domain;
  */
 public enum DeviceStage {
     PENDING_MATCH,
+    SELF_USE,
     LOCKED,
     PENDING_ACTIVATE,
     STAGE_1,

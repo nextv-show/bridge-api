@@ -14,7 +14,7 @@ import java.util.Map;
 public class OutboxReader {
 
     private static final String PENDING_SQL =
-            "SELECT id, request_id, device_asset_id, payload_json FROM logistics_outbox " +
+            "SELECT id, request_id, device_asset_id, payload_json, source FROM logistics_outbox " +
             "WHERE consumed_at IS NULL ORDER BY created_at ASC LIMIT 50";
 
     private static final String MARK_CONSUMED_SQL =

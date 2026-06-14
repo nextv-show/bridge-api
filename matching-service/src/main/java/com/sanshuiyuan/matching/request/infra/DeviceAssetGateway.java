@@ -19,6 +19,13 @@ public class DeviceAssetGateway {
     public static final String UPDATE_STAGE_SQL =
             "UPDATE device_assets SET stage = ? WHERE id = ? AND user_id = ? AND stage = ?";
 
+    /**
+     * SELF_USE 履约推进语句：无匹配需求（无 user 上下文，logistics S2S 调用仅携带设备/物流 ID），
+     * 故仅以前置态(stage)做 CAS，归属在 SELF_USE 注册阶段已固定且不可逆。
+     */
+    public static final String UPDATE_STAGE_BY_DEVICE_SQL =
+            "UPDATE device_assets SET stage = ? WHERE id = ? AND stage = ?";
+
     private final JdbcTemplate jdbcTemplate;
 
     public DeviceAssetGateway(JdbcTemplate jdbcTemplate) {
@@ -57,6 +64,29 @@ public class DeviceAssetGateway {
                 ownerUserId,
                 expected.name()
         );
+    }
+
+    /**
+     * SELF_USE 履约 CAS 推进：仅当设备当前为 {@code expected} 时改为 {@code next}，不校验归属。
+     * 返回受影响行数（1=成功；0=前置态不符，调用方据当前 stage 判幂等跳过或 409）。
+     */
+    public int advanceStageByDevice(long deviceAssetId, DeviceStage expected, DeviceStage next) {
+        return jdbcTemplate.update(
+                UPDATE_STAGE_BY_DEVICE_SQL,
+                next.name(),
+                deviceAssetId,
+                expected.name()
+        );
+    }
+
+    /** 读取设备当前 stage，设备不存在返回 {@code null}。用于 SELF_USE 履约幂等判定。 */
+    public String findStage(long deviceAssetId) {
+        List<String> stages = jdbcTemplate.queryForList(
+                "SELECT stage FROM device_assets WHERE id = ?",
+                String.class,
+                deviceAssetId
+        );
+        return stages.isEmpty() ? null : stages.get(0);
     }
 
     public List<Long> findLockedAssetIdsByOwner(long ownerUserId) {

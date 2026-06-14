@@ -22,8 +22,11 @@ public class LogisticsOrder {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "request_id", nullable = false)
+    @Column(name = "request_id")
     private Long requestId;
+
+    @Column(name = "outbox_id")
+    private Long outboxId;
 
     @Column(name = "device_asset_id", nullable = false)
     private Long deviceAssetId;
@@ -48,6 +51,9 @@ public class LogisticsOrder {
 
     public Long getRequestId() { return requestId; }
     public void setRequestId(Long requestId) { this.requestId = requestId; }
+
+    public Long getOutboxId() { return outboxId; }
+    public void setOutboxId(Long outboxId) { this.outboxId = outboxId; }
 
     public Long getDeviceAssetId() { return deviceAssetId; }
     public void setDeviceAssetId(Long deviceAssetId) { this.deviceAssetId = deviceAssetId; }
