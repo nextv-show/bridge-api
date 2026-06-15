@@ -27,6 +27,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - uses: ./.github/actions/feishu-notify
+        if: always()
+        with:
+          stage: start
+          project-name: 三水元后端 API
+          webhook-url: ${{ secrets.FEISHU_WEBHOOK_URL }}
+
       - name: Set up JDK 21
         uses: actions/setup-java@v5
         with:
@@ -1411,3 +1418,17 @@ jobs:
             done || true
 
             echo "[deploy] success: $SERVICE running and UP"
+
+      - uses: ./.github/actions/feishu-notify
+        if: success()
+        with:
+          stage: success
+          project-name: 三水元后端 API
+          webhook-url: ${{ secrets.FEISHU_WEBHOOK_URL }}
+
+      - uses: ./.github/actions/feishu-notify
+        if: failure()
+        with:
+          stage: failure
+          project-name: 三水元后端 API
+          webhook-url: ${{ secrets.FEISHU_WEBHOOK_URL }}

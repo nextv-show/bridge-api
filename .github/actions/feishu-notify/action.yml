@@ -1,0 +1,63 @@
+name: '飞书部署通知'
+description: '向飞书群发送部署状态卡片通知（开始/成功/失败）'
+inputs:
+  stage:
+    description: '通知阶段: start | success | failure'
+    required: true
+  project-name:
+    description: '项目/服务显示名称（如「三水元后端」）'
+    required: true
+  webhook-url:
+    description: '飞书自定义机器人 Webhook URL'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 通知飞书群
+      shell: bash
+      env:
+        STAGE: ${{ inputs.stage }}
+        PROJECT_NAME: ${{ inputs.project-name }}
+        WEBHOOK_URL: ${{ inputs.webhook-url }}
+      run: |
+        set +e
+        BRANCH="${GITHUB_REF_NAME}"
+        RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+        COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null | head -1)
+        AUTHOR=$(git log -1 --pretty=%an 2>/dev/null)
+
+        case "$STAGE" in
+          start)
+            TITLE="🚀 部署开始 - $PROJECT_NAME"
+            COLOR="blue"
+            BODY="**提交**: $COMMIT_MSG\n**作者**: $AUTHOR\n**分支**: $BRANCH"
+            ;;
+          success)
+            TITLE="✅ 部署成功 - $PROJECT_NAME"
+            COLOR="green"
+            BODY="**分支**: $BRANCH\n**运行 ID**: ${GITHUB_RUN_ID}\n\n部署已完成，可进行测试验证。"
+            ;;
+          failure)
+            TITLE="❌ 部署失败 - $PROJECT_NAME"
+            COLOR="red"
+            BODY="**提交**: $COMMIT_MSG\n**分支**: $BRANCH\n**运行 ID**: ${GITHUB_RUN_ID}\n\n请检查 Actions 日志排查失败原因。"
+            ;;
+        esac
+
+        curl -s -X POST "$WEBHOOK_URL" \
+          -H "Content-Type: application/json" \
+          -d "{
+            \"msg_type\": \"interactive\",
+            \"card\": {
+              \"header\": {
+                \"title\": {\"tag\": \"plain_text\", \"content\": \"$TITLE\"},
+                \"template\": \"$COLOR\"
+              },
+              \"elements\": [
+                {\"tag\": \"div\", \"text\": {\"tag\": \"lark_md\", \"content\": \"$BODY\"}},
+                {\"tag\": \"action\", \"actions\": [{\"tag\": \"button\", \"text\": {\"tag\": \"plain_text\", \"content\": \"查看运行\"}, \"url\": \"$RUN_URL\", \"type\": \"primary\"}]}
+              ]
+            }
+          }"
+        echo ""
