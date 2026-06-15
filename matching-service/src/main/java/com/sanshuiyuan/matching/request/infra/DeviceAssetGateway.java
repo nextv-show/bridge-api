@@ -26,6 +26,13 @@ public class DeviceAssetGateway {
     public static final String UPDATE_STAGE_BY_DEVICE_SQL =
             "UPDATE device_assets SET stage = ? WHERE id = ? AND stage = ?";
 
+    /**
+     * 029 设备激活推进语句：iot-gateway 首个心跳触发，仅以 SN + 前置态做 CAS（无 user 上下文，
+     * MQTT 只携带 SN）。命中 0 行＝无此 SN 或前置态非 PENDING_ACTIVATE，调用方据此幂等 no-op。
+     */
+    public static final String ACTIVATE_BY_SN_SQL =
+            "UPDATE device_assets SET stage = ? WHERE sn = ? AND stage = ?";
+
     private final JdbcTemplate jdbcTemplate;
 
     public DeviceAssetGateway(JdbcTemplate jdbcTemplate) {
@@ -77,6 +84,29 @@ public class DeviceAssetGateway {
                 deviceAssetId,
                 expected.name()
         );
+    }
+
+    /**
+     * 029 激活 CAS：仅当设备 SN={@code sn} 且当前为 {@code expected} 时改为 {@code next}（不校验归属，
+     * MQTT 仅携带 SN）。返回受影响行数（1=成功；0=无此 SN 或前置态不符，调用方据此幂等 no-op）。
+     */
+    public int activateBySn(String sn, DeviceStage expected, DeviceStage next) {
+        return jdbcTemplate.update(
+                ACTIVATE_BY_SN_SQL,
+                next.name(),
+                sn,
+                expected.name()
+        );
+    }
+
+    /** 按 SN 反查 device_asset_id（供写 stage event），无此 SN 返回 {@code null}。 */
+    public Long findIdBySn(String sn) {
+        List<Long> ids = jdbcTemplate.queryForList(
+                "SELECT id FROM device_assets WHERE sn = ?",
+                Long.class,
+                sn
+        );
+        return ids.isEmpty() ? null : ids.get(0);
     }
 
     /** 读取设备当前 stage，设备不存在返回 {@code null}。用于 SELF_USE 履约幂等判定。 */

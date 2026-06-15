@@ -27,6 +27,9 @@ h5:
   jwt-secret: ${H5_JWT_SECRET:dev-h5-jwt-secret-please-override-in-prod-0001}
 s2s:
   token: ${S2S_TOKEN:dev-s2s-shared-token}
+# 029 设备激活：iot-gateway 首个心跳上线时调 matching 推进 PENDING_ACTIVATE → STAGE_1。
+matching:
+  internal-url: ${MATCHING_INTERNAL_URL:http://localhost:8086}
 # MQTT Broker 配置（EMQX）
 mqtt:
   broker-url: ${MQTT_BROKER_URL:tcp://localhost:1883}

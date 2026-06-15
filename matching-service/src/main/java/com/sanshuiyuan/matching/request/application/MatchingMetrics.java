@@ -14,6 +14,7 @@ public class MatchingMetrics {
     private static final String CLAIM = "matching.claim";
     private static final String CONFIRM = "matching.confirm";
     private static final String FULFILL = "matching.fulfill";
+    private static final String ACTIVATE = "matching.activate";
 
     private final MeterRegistry registry;
 
@@ -44,5 +45,15 @@ public class MatchingMetrics {
     /** 撮合履约：需求 → FULFILLED、设备 → PENDING_ACTIVATE（最终激活前置）。 */
     public void fulfilled() {
         registry.counter(FULFILL, "result", "success").increment();
+    }
+
+    /** 029 设备激活：首个心跳推进 PENDING_ACTIVATE → STAGE_1 成功。 */
+    public void activated() {
+        registry.counter(ACTIVATE, "result", "success").increment();
+    }
+
+    /** 029 激活幂等 no-op：无此 SN / 非 PENDING_ACTIVATE（重复心跳、未履约设备上线）。 */
+    public void activateNoop() {
+        registry.counter(ACTIVATE, "result", "noop").increment();
     }
 }
