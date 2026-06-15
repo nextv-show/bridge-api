@@ -31,33 +31,28 @@ runs:
           start)
             TITLE="🚀 部署开始 - $PROJECT_NAME"
             COLOR="blue"
-            BODY="**提交**: $COMMIT_MSG\n**作者**: $AUTHOR\n**分支**: $BRANCH"
+            BODY=$(printf '**提交**: %s\n**作者**: %s\n**分支**: %s' "$COMMIT_MSG" "$AUTHOR" "$BRANCH")
             ;;
           success)
             TITLE="✅ 部署成功 - $PROJECT_NAME"
             COLOR="green"
-            BODY="**分支**: $BRANCH\n**运行 ID**: ${GITHUB_RUN_ID}\n\n部署已完成，可进行测试验证。"
+            BODY=$(printf '**分支**: %s\n**运行 ID**: %s\n\n部署已完成，可进行测试验证。' "$BRANCH" "${GITHUB_RUN_ID}")
             ;;
           failure)
             TITLE="❌ 部署失败 - $PROJECT_NAME"
             COLOR="red"
-            BODY="**提交**: $COMMIT_MSG\n**分支**: $BRANCH\n**运行 ID**: ${GITHUB_RUN_ID}\n\n请检查 Actions 日志排查失败原因。"
+            BODY=$(printf '**提交**: %s\n**分支**: %s\n**运行 ID**: %s\n\n请检查 Actions 日志排查失败原因。' "$COMMIT_MSG" "$BRANCH" "${GITHUB_RUN_ID}")
             ;;
         esac
 
-        curl -s -X POST "$WEBHOOK_URL" \
-          -H "Content-Type: application/json" \
-          -d "{
-            \"msg_type\": \"interactive\",
-            \"card\": {
-              \"header\": {
-                \"title\": {\"tag\": \"plain_text\", \"content\": \"$TITLE\"},
-                \"template\": \"$COLOR\"
-              },
-              \"elements\": [
-                {\"tag\": \"div\", \"text\": {\"tag\": \"lark_md\", \"content\": \"$BODY\"}},
-                {\"tag\": \"action\", \"actions\": [{\"tag\": \"button\", \"text\": {\"tag\": \"plain_text\", \"content\": \"查看运行\"}, \"url\": \"$RUN_URL\", \"type\": \"primary\"}]}
-              ]
-            }
-          }"
+        # 用 jq 构造 payload：title/body/url 经 --arg 安全转义，commit message 含 " \ 换行等不再破坏 JSON。
+        # BODY 用 printf 含真实换行，jq 编码为 JSON \n，保留卡片换行（原直插 \n 已是 JSON 转义，行为一致）。
+        PAYLOAD=$(jq -nc \
+          --arg title "$TITLE" \
+          --arg color "$COLOR" \
+          --arg body "$BODY" \
+          --arg url "$RUN_URL" \
+          '{msg_type:"interactive",card:{header:{title:{tag:"plain_text",content:$title},template:$color},elements:[{tag:"div",text:{tag:"lark_md",content:$body}},{tag:"action",actions:[{tag:"button",text:{tag:"plain_text",content:"查看运行"},url:$url,type:"primary"}]}]}}')
+
+        curl -s -X POST "$WEBHOOK_URL" -H "Content-Type: application/json" -d "$PAYLOAD"
         echo ""
