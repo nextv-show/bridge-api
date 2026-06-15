@@ -1,5 +1,6 @@
 package com.sanshuiyuan.matching.request.api;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.sanshuiyuan.matching.request.application.FulfillUseCase;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -35,5 +36,10 @@ public class FulfillController {
         return ResponseEntity.ok(resp);
     }
 
-    public record FulfillBody(Long requestId, long deviceAssetId, long logisticsOrderId) {}
+    // S2S 线格式为 snake_case（logistics InstalledEventPublisher 发送），matching 无全局 SNAKE_CASE 策略，
+    // 故须显式 @JsonProperty 映射，否则 requestId=null/deviceAssetId=0 会被误判为 SELF_USE 路径。
+    public record FulfillBody(
+            @JsonProperty("request_id") Long requestId,
+            @JsonProperty("device_asset_id") long deviceAssetId,
+            @JsonProperty("logistics_order_id") long logisticsOrderId) {}
 }
