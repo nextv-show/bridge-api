@@ -12,13 +12,17 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 029：DeviceStatusConsumer 仅在「上线边沿」（offline/未知 → online）触发激活，避免每条心跳都打 matching。
+ * 029：DeviceStatusConsumer 激活触发。门控 = 「在线 且 尚未成功送达 matching」（非上线边沿），
+ * 以保证首个心跳调用失败后能在后续心跳重试，不会因设备保持在线而卡死（codex P1）。
  */
 @ExtendWith(MockitoExtension.class)
 class DeviceStatusActivationTests {
@@ -26,8 +30,12 @@ class DeviceStatusActivationTests {
     @Mock DeviceStatusRepository repo;
     @Mock MatchingActivationClient activationClient;
 
-    private DeviceStatusConsumer consumer() {
-        return new DeviceStatusConsumer(repo, new ObjectMapper(), activationClient);
+    private DeviceStatusConsumer consumer;
+
+    @BeforeEach
+    void setUp() {
+        lenient().when(repo.findBySn(any())).thenReturn(Optional.empty());
+        consumer = new DeviceStatusConsumer(repo, new ObjectMapper(), activationClient);
     }
 
     private static byte[] status(boolean online) {
@@ -35,36 +43,40 @@ class DeviceStatusActivationTests {
     }
 
     @Test
-    void firstSeenOnline_triggersActivate() {
-        when(repo.findBySn("SN-A")).thenReturn(Optional.empty());   // 未知 → online
-        consumer().onStatus("SN-A", status(true));
-        verify(activationClient).activate(eq("SN-A"));
+    void online_triggersActivate_once_afterSuccessfulDelivery() {
+        when(activationClient.activate("SN-A")).thenReturn(true);   // matching 成功处理
+
+        consumer.onStatus("SN-A", status(true));
+        consumer.onStatus("SN-A", status(true));   // 已送达 → 不再调
+
+        verify(activationClient, times(1)).activate(eq("SN-A"));
     }
 
     @Test
-    void offlineToOnline_edge_triggersActivate() {
-        DeviceStatus prev = new DeviceStatus("SN-B");
-        prev.setOnline(false);
-        when(repo.findBySn("SN-B")).thenReturn(Optional.of(prev));
-        consumer().onStatus("SN-B", status(true));
-        verify(activationClient).activate(eq("SN-B"));
+    void failedDelivery_retriesOnNextOnlineHeartbeat() {
+        when(activationClient.activate("SN-B")).thenReturn(false).thenReturn(true);
+
+        consumer.onStatus("SN-B", status(true));   // 失败
+        consumer.onStatus("SN-B", status(true));   // 重试 → 成功
+        consumer.onStatus("SN-B", status(true));   // 已送达 → 不再调
+
+        verify(activationClient, times(2)).activate(eq("SN-B"));
     }
 
     @Test
-    void alreadyOnline_noEdge_doesNotTrigger() {
-        DeviceStatus prev = new DeviceStatus("SN-C");
-        prev.setOnline(true);
-        when(repo.findBySn("SN-C")).thenReturn(Optional.of(prev));
-        consumer().onStatus("SN-C", status(true));
-        verify(activationClient, never()).activate(eq("SN-C"));
+    void offline_doesNotTrigger_andResetsDeliveryForReactivation() {
+        when(activationClient.activate("SN-C")).thenReturn(true);
+
+        consumer.onStatus("SN-C", status(true));    // 调一次（成功送达）
+        consumer.onStatus("SN-C", status(false));   // 离线：不调 + 清除送达标记
+        consumer.onStatus("SN-C", status(true));    // 再次上线 → 重新调（设备可能重装/重新入网）
+
+        verify(activationClient, times(2)).activate(eq("SN-C"));
     }
 
     @Test
-    void goingOffline_doesNotTrigger() {
-        DeviceStatus prev = new DeviceStatus("SN-D");
-        prev.setOnline(true);
-        when(repo.findBySn("SN-D")).thenReturn(Optional.of(prev));
-        consumer().onStatus("SN-D", status(false));
-        verify(activationClient, never()).activate(eq("SN-D"));
+    void offlineStatus_neverTriggers() {
+        consumer.onStatus("SN-D", status(false));
+        verify(activationClient, never()).activate(any());
     }
 }

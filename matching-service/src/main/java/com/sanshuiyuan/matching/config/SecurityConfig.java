@@ -36,6 +36,9 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers("/actuator/**", "/api-docs/**", "/swagger-ui/**").permitAll()
+                // /internal/** 仅限 S2S（fulfill/activate 等设备状态推进）：H5JwtFilter 会先认证任意 C 端
+                // H5 JWT，若仅 anyRequest().authenticated()，普通用户即可猜 SN 越权激活设备 → 必须按角色门控。
+                .requestMatchers("/internal/**").hasRole("S2S")
                 .anyRequest().authenticated())
             .addFilterBefore(new H5JwtFilter(jwtService), UsernamePasswordAuthenticationFilter.class)
             .addFilterAfter(new S2sTokenFilter(s2sToken), H5JwtFilter.class);

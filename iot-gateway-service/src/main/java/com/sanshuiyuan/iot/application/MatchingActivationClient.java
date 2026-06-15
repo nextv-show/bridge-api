@@ -34,8 +34,13 @@ public class MatchingActivationClient {
         this.restTemplate = builder.rootUri(matchingUrl).build();
     }
 
-    /** 触发设备激活。sn 由 MQTT topic 提取，对应 device_assets.sn。 */
-    public void activate(String sn) {
+    /**
+     * 触发设备激活。sn 由 MQTT topic 提取，对应 device_assets.sn。
+     *
+     * @return {@code true} 表示 matching 已成功处理（HTTP 2xx，无论 activated 真假——已激活/已 STAGE_1 均算处理完成，
+     *         调用方据此停止重试）；{@code false} 表示调用失败（网络/5xx），调用方应在后续心跳重试。
+     */
+    public boolean activate(String sn) {
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -44,8 +49,10 @@ public class MatchingActivationClient {
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(Map.of("sn", sn), headers);
             restTemplate.postForEntity("/internal/matching/activate", entity, Map.class);
             log.info("[S2S] activate sent sn={}", sn);
+            return true;
         } catch (Exception e) {
-            log.warn("[S2S] activate failed sn={}: {}（上线边沿会复触发；matching 幂等兜底）", sn, e.getMessage());
+            log.warn("[S2S] activate failed sn={}: {}（将在后续在线心跳重试）", sn, e.getMessage());
+            return false;
         }
     }
 }
