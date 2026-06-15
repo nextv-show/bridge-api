@@ -20,10 +20,13 @@ public class DeviceStatusConsumer {
 
     private final DeviceStatusRepository repo;
     private final ObjectMapper objectMapper;
+    private final MatchingActivationClient activationClient;
 
-    public DeviceStatusConsumer(DeviceStatusRepository repo, ObjectMapper objectMapper) {
+    public DeviceStatusConsumer(DeviceStatusRepository repo, ObjectMapper objectMapper,
+                                MatchingActivationClient activationClient) {
         this.repo = repo;
         this.objectMapper = objectMapper;
+        this.activationClient = activationClient;
     }
 
     public void onStatus(String sn, byte[] payload) {
@@ -31,7 +34,10 @@ public class DeviceStatusConsumer {
             JsonNode json = objectMapper.readTree(payload);
             boolean online = json.get("online").asBoolean();
 
-            var status = repo.findBySn(sn).orElseGet(() -> new DeviceStatus(sn));
+            var existing = repo.findBySn(sn);
+            boolean wasOnline = existing.map(DeviceStatus::isOnline).orElse(false);
+
+            var status = existing.orElseGet(() -> new DeviceStatus(sn));
             status.setOnline(online);
             status.setLastSeenAt(LocalDateTime.now());
             if (!online) {
@@ -40,6 +46,12 @@ public class DeviceStatusConsumer {
             repo.save(status);
 
             log.debug("[MQTT] Device status: sn={}, online={}", sn, online);
+
+            // 029 设备激活：上线边沿（offline/未知 → online）触发，推进 PENDING_ACTIVATE → STAGE_1。
+            // 边沿门控天然限频；matching 侧 CAS 幂等（非 PENDING_ACTIVATE 即 no-op），无需本地去重。
+            if (online && !wasOnline) {
+                activationClient.activate(sn);
+            }
         } catch (Exception e) {
             log.error("[MQTT] Failed to process status from sn={}: {}", sn, e.getMessage());
         }
