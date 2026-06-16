@@ -30,6 +30,10 @@ public class WithdrawalSplit {
     @Column(name = "external_id")
     private String externalId;
 
+    /** 商户转账单号（out_bill_no）。受理时落库，作为查单/对账权威键，免疫单号格式漂移。 */
+    @Column(name = "out_bill_no")
+    private String outBillNo;
+
     /** 微信转账单号（transfer-bills 受理后回填）。 */
     @Column(name = "transfer_bill_no")
     private String transferBillNo;
@@ -77,6 +81,8 @@ public class WithdrawalSplit {
     public void setChannel(PaymentChannel channel) { this.channel = channel; }
     public String getExternalId() { return externalId; }
     public void setExternalId(String externalId) { this.externalId = externalId; }
+    public String getOutBillNo() { return outBillNo; }
+    public void setOutBillNo(String outBillNo) { this.outBillNo = outBillNo; }
     public String getTransferBillNo() { return transferBillNo; }
     public void setTransferBillNo(String transferBillNo) { this.transferBillNo = transferBillNo; }
     public String getPackageInfo() { return packageInfo; }

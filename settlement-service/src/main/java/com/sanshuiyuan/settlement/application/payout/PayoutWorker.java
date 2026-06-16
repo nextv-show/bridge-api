@@ -54,7 +54,10 @@ public class PayoutWorker {
     }
 
     private void poll(WithdrawalSplit split) {
-        String outBillNo = PayoutBillNo.of(split.getOrderId(), split.getId());
+        // 优先用受理时落库的权威单号，免疫 PayoutBillNo 格式漂移；为空（受理前/历史行）再回退重算。
+        String outBillNo = split.getOutBillNo() != null
+                ? split.getOutBillNo()
+                : PayoutBillNo.of(split.getOrderId(), split.getId());
         WxTransferBillsClient.QueryResult q = transferClient.queryByOutBillNo(outBillNo);
 
         if (!q.found()) {

@@ -75,7 +75,7 @@ public class PayoutInitiationService {
 
         WxTransferBillsClient.InitiateResult r = transferClient.initiate(cmd); // 外部 HTTP，事务外
         if (r.accepted()) {
-            moneyOps.recordAccepted(split.getId(), r.transferBillNo(), r.packageInfo());
+            moneyOps.recordAccepted(split.getId(), outBillNo, r.transferBillNo(), r.packageInfo());
             return new InitiationResult(true, r.packageInfo(), r.transferBillNo(), null);
         } else {
             moneyOps.refundOnFailure(orderId, "INITIATE_FAILED:" + r.errorCode());
