@@ -1,116 +1,88 @@
 package com.sanshuiyuan.settlement.application.payout;
 
-import com.sanshuiyuan.settlement.domain.*;
-import com.sanshuiyuan.settlement.infra.repository.*;
-import com.sanshuiyuan.settlement.infra.wxpay.WxMchPayoutClient;
+import com.sanshuiyuan.settlement.domain.SplitStatus;
+import com.sanshuiyuan.settlement.domain.WithdrawalSplit;
+import com.sanshuiyuan.settlement.infra.repository.WithdrawalSplitRepository;
+import com.sanshuiyuan.settlement.infra.wxpay.transfer.WxTransferBillsClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
-/** 代付轮询器：扫描 QUEUED 拆分 → 调微信商家转账 → PAYING / 失败回滚。 */
+/**
+ * 转账对账兜底：对在途（PAYING / 残留 QUEUED）的提现拆分，用「已鉴权的查单」确定真状态并落地，
+ * 不依赖（不可信的）回调内容。商家转账「用户确认」期间状态会停在 WAIT_USER_CONFIRM/PROCESSING，
+ * 用户确认后转 SUCCESS、超时未确认由微信转 CANCELLED → 这里据此释放冻结或退款。
+ */
 @Component
 public class PayoutWorker {
     private static final Logger log = LoggerFactory.getLogger(PayoutWorker.class);
-    private static final List<String> WECHAT_LIMIT_ERRORS = List.of("AMOUNT_LIMIT", "TRANSFER_QUOTA_EXCEED");
+    /** 查单连续 not-found 超过该次数 → 判失败退款（发起从未落地 / 单据丢失）。 */
+    private static final int MAX_NOT_FOUND_RETRIES = 15;
+    private static final long MAX_BACKOFF_SECONDS = 300;
 
     private final WithdrawalSplitRepository splitRepository;
-    private final WithdrawalOrderRepository orderRepository;
-    private final OwnerWalletRepository walletRepository;
-    private final WalletLedgerRepository ledgerRepository;
-    private final WxMchPayoutClient payoutClient;
+    private final WxTransferBillsClient transferClient;
+    private final PayoutMoneyOps moneyOps;
 
     public PayoutWorker(WithdrawalSplitRepository splitRepository,
-                        WithdrawalOrderRepository orderRepository,
-                        OwnerWalletRepository walletRepository,
-                        WalletLedgerRepository ledgerRepository,
-                        WxMchPayoutClient payoutClient) {
+                        WxTransferBillsClient transferClient,
+                        PayoutMoneyOps moneyOps) {
         this.splitRepository = splitRepository;
-        this.orderRepository = orderRepository;
-        this.walletRepository = walletRepository;
-        this.ledgerRepository = ledgerRepository;
-        this.payoutClient = payoutClient;
+        this.transferClient = transferClient;
+        this.moneyOps = moneyOps;
     }
 
-    @Scheduled(fixedDelay = 2000)
-    @Transactional
-    public void process() {
-        List<WithdrawalSplit> queued = splitRepository
-                .findByStatusAndNextRunAtBefore(SplitStatus.QUEUED, LocalDateTime.now());
-
-        for (WithdrawalSplit split : queued) {
+    @Scheduled(fixedDelay = 3000)
+    public void reconcile() {
+        LocalDateTime now = LocalDateTime.now();
+        List<WithdrawalSplit> due = new ArrayList<>();
+        due.addAll(splitRepository.findByStatusAndNextRunAtBefore(SplitStatus.PAYING, now));
+        due.addAll(splitRepository.findByStatusAndNextRunAtBefore(SplitStatus.QUEUED, now));
+        for (WithdrawalSplit split : due) {
             try {
-                WxMchPayoutClient.PayoutResult result = payoutClient.transfer(split);
-                if (result.accepted()) {
-                    // 微信已受理 → PAYING
-                    split.setStatus(SplitStatus.PAYING);
-                    split.setExternalId(result.detailId());
-                    splitRepository.save(split);
-                    log.info("[payout] transfer accepted orderId={} splitId={} detailId={}",
-                            split.getOrderId(), split.getId(), result.detailId());
-                } else {
-                    // 微信拒绝 → 失败回滚
-                    handlePayoutFailure(split, mapErrorCode(result.errorCode()));
-                }
+                poll(split);
             } catch (Exception e) {
-                // 网络/系统异常 → 重试
-                handleRetry(split, e);
+                log.error("[payout] reconcile splitId={} 异常: {}", split.getId(), e.toString());
+                moneyOps.scheduleRetry(split.getId(), backoff(split.getRetried() + 1));
             }
         }
     }
 
-    private void handlePayoutFailure(WithdrawalSplit split, String failureReason) {
-        // 1. 标记 split 失败
-        split.setStatus(SplitStatus.FAILED);
-        split.setFailureReason(failureReason);
-        splitRepository.save(split);
+    private void poll(WithdrawalSplit split) {
+        String outBillNo = PayoutBillNo.of(split.getOrderId(), split.getId());
+        WxTransferBillsClient.QueryResult q = transferClient.queryByOutBillNo(outBillNo);
 
-        // 2. 全额回退余额（gross 全部退回）
-        WithdrawalOrder order = orderRepository.findById(split.getOrderId()).orElseThrow();
-        OwnerWallet wallet = walletRepository.findById(order.getUserId()).orElseThrow();
+        if (!q.found()) {
+            if (split.getRetried() + 1 >= MAX_NOT_FOUND_RETRIES) {
+                log.warn("[payout] 查单连续未找到 outBillNo={}，判失败退款", outBillNo);
+                moneyOps.refundOnFailure(split.getOrderId(), "WX_NOT_FOUND");
+            } else {
+                moneyOps.scheduleRetry(split.getId(), backoff(split.getRetried() + 1));
+            }
+            return;
+        }
 
-        wallet.setBalanceCents(wallet.getBalanceCents() + order.getGrossCents());
-        wallet.setFrozenCents(wallet.getFrozenCents() - order.getGrossCents());
-        walletRepository.save(wallet);
-
-        // 3. 写退款 ledger
-        WalletLedger refundLedger = new WalletLedger(order.getUserId(), LedgerDirection.IN,
-                LedgerSourceType.WITHDRAWAL_REFUND, order.getId(),
-                order.getGrossCents(), wallet.getBalanceCents());
-        ledgerRepository.save(refundLedger);
-
-        // 4. 标记订单 FAILED
-        order.setStatus(WithdrawalStatus.FAILED);
-        order.setFailureReason(failureReason);
-        order.setCompletedAt(LocalDateTime.now());
-        orderRepository.save(order);
-
-        log.warn("[payout] order {} FAILED: {} (refunded {} cents)", order.getId(), failureReason, order.getGrossCents());
-    }
-
-    private void handleRetry(WithdrawalSplit split, Exception e) {
-        int retries = split.getRetried() + 1;
-        split.setRetried(retries);
-        if (retries >= 10) {
-            // 超过 10 次 → FAILED + 回退
-            handlePayoutFailure(split, "RETRIES_EXCEEDED");
-            log.error("[payout] split {} failed after {} retries", split.getId(), retries, e);
-        } else {
-            long backoffSeconds = Math.min(1L << retries, 512);
-            split.setNextRunAt(LocalDateTime.now().plusSeconds(backoffSeconds));
-            splitRepository.save(split);
-            log.warn("[payout] split {} retry {} in {}s", split.getId(), retries, backoffSeconds);
+        String state = q.state() == null ? "" : q.state();
+        switch (state) {
+            case "SUCCESS" -> moneyOps.releaseOnSuccess(split.getOrderId());
+            case "FAIL", "CANCELLED" -> moneyOps.refundOnFailure(split.getOrderId(),
+                    "WX_" + state + (q.failReason() != null ? ":" + q.failReason() : ""));
+            default -> {
+                // ACCEPTED / PROCESSING / WAIT_USER_CONFIRM / TRANSFERING / CANCELING：继续等待
+                if (split.getStatus() == SplitStatus.QUEUED) {
+                    moneyOps.promoteToPaying(split.getId(), q.transferBillNo());
+                }
+                moneyOps.scheduleRetry(split.getId(), backoff(split.getRetried() + 1));
+            }
         }
     }
 
-    private String mapErrorCode(String wxErrorCode) {
-        if (WECHAT_LIMIT_ERRORS.contains(wxErrorCode)) {
-            return "WITHDRAWAL_FAILED_LIMIT";
-        }
-        return "WITHDRAWAL_FAILED_OTHER";
+    private long backoff(int retries) {
+        return Math.min(1L << Math.min(retries, 9), MAX_BACKOFF_SECONDS);
     }
 }

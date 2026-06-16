@@ -1,6 +1,8 @@
 package com.sanshuiyuan.settlement.api;
 
 import com.sanshuiyuan.settlement.application.CreateWithdrawalUseCase;
+import com.sanshuiyuan.settlement.application.payout.PayoutInitiationService;
+import com.sanshuiyuan.settlement.auth.SettlementSubjectResolver;
 import com.sanshuiyuan.settlement.application.guard.DailyLimitExceededException;
 import com.sanshuiyuan.settlement.application.guard.KycNotVerifiedException;
 import com.sanshuiyuan.settlement.application.guard.SingleLimitExceededException;
@@ -29,20 +31,35 @@ public class WithdrawalController {
     private final WithdrawalOrderRepository orderRepository;
     private final WithdrawalSplitRepository splitRepository;
     private final CreateWithdrawalUseCase createWithdrawalUseCase;
+    private final PayoutInitiationService payoutInitiationService;
+    private final SettlementSubjectResolver subjectResolver;
+    private final String mchId;
+    private final String mpAppId;
 
     public WithdrawalController(OwnerWalletRepository walletRepository,
                                 WithdrawalOrderRepository orderRepository,
                                 WithdrawalSplitRepository splitRepository,
-                                CreateWithdrawalUseCase createWithdrawalUseCase) {
+                                CreateWithdrawalUseCase createWithdrawalUseCase,
+                                PayoutInitiationService payoutInitiationService,
+                                SettlementSubjectResolver subjectResolver,
+                                @org.springframework.beans.factory.annotation.Value("${wxpay.mch-id:stub}") String mchId,
+                                @org.springframework.beans.factory.annotation.Value("${wxpay.mp-app-id:stub}") String mpAppId) {
         this.walletRepository = walletRepository;
         this.orderRepository = orderRepository;
         this.splitRepository = splitRepository;
         this.createWithdrawalUseCase = createWithdrawalUseCase;
+        this.payoutInitiationService = payoutInitiationService;
+        this.subjectResolver = subjectResolver;
+        this.mchId = mchId;
+        this.mpAppId = mpAppId;
     }
 
     @GetMapping("/owner/wallet")
     public ResponseEntity<Map<String, Object>> getWallet(Authentication auth) {
-        Long userId = Long.parseLong(auth.getName());
+        Long userId = subjectResolver.resolveUserId(auth.getName());
+        if (userId == null) {
+            return ResponseEntity.status(401).body(Map.of("code", 401, "message", "UNAUTHORIZED"));
+        }
         OwnerWallet wallet = walletRepository.findById(userId)
                 .orElseGet(() -> new OwnerWallet(userId, 0L, 0L));
         return ResponseEntity.ok(Map.of("code", 0, "data", Map.of(
@@ -55,7 +72,10 @@ public class WithdrawalController {
     @PostMapping("/withdrawals")
     public ResponseEntity<Map<String, Object>> createWithdrawal(@RequestBody Map<String, Object> body,
                                                                 Authentication auth) {
-        Long userId = Long.parseLong(auth.getName());
+        Long userId = subjectResolver.resolveUserId(auth.getName());
+        if (userId == null) {
+            return ResponseEntity.status(401).body(Map.of("code", 401, "message", "UNAUTHORIZED"));
+        }
         Long amountCents = Long.valueOf(body.get("amount_cents").toString());
         String clientRequestId = (String) body.getOrDefault("client_request_id", UUID.randomUUID().toString());
         boolean dryRun = Boolean.TRUE.equals(body.get("dry_run"));
@@ -72,8 +92,19 @@ public class WithdrawalController {
                         "cash_part", order.getCashCents()
                 ));
             } else {
+                // 发起商家转账（transfer-bills）→ 返回 package_info 供小程序 wx.requestMerchantTransfer 确认。
+                PayoutInitiationService.InitiationResult init = payoutInitiationService.initiate(order.getId());
+                if (!init.ok()) {
+                    // 已退款（订单 FAILED），返回业务失败。
+                    return ResponseEntity.status(502).body(Map.of(
+                            "code", 502, "message", "PAYOUT_INITIATE_FAILED:" + init.errorCode()));
+                }
                 result.put("withdrawal_id", order.getId());
-                result.put("status", order.getStatus().name());
+                result.put("status", "PROCESSING");
+                result.put("package_info", init.packageInfo());
+                result.put("transfer_bill_no", init.transferBillNo());
+                result.put("mch_id", mchId);
+                result.put("app_id", mpAppId);
             }
             return ResponseEntity.ok(Map.of("code", 0, "data", result));
         } catch (KycNotVerifiedException e) {
@@ -89,7 +120,10 @@ public class WithdrawalController {
 
     @GetMapping("/withdrawals/{id}")
     public ResponseEntity<Map<String, Object>> getWithdrawal(@PathVariable Long id, Authentication auth) {
-        Long userId = Long.parseLong(auth.getName());
+        Long userId = subjectResolver.resolveUserId(auth.getName());
+        if (userId == null) {
+            return ResponseEntity.status(401).body(Map.of("code", 401, "message", "UNAUTHORIZED"));
+        }
         WithdrawalOrder order = orderRepository.findById(id).orElse(null);
         if (order == null || !order.getUserId().equals(userId)) {
             return ResponseEntity.status(404).body(Map.of("code", 404, "message", "Not found"));
@@ -125,7 +159,10 @@ public class WithdrawalController {
     public ResponseEntity<Map<String, Object>> getMyWithdrawals(
             @RequestParam(defaultValue = "20") int limit,
             Authentication auth) {
-        Long userId = Long.parseLong(auth.getName());
+        Long userId = subjectResolver.resolveUserId(auth.getName());
+        if (userId == null) {
+            return ResponseEntity.status(401).body(Map.of("code", 401, "message", "UNAUTHORIZED"));
+        }
         List<WithdrawalOrder> orders = orderRepository
                 .findByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(0, limit));
 

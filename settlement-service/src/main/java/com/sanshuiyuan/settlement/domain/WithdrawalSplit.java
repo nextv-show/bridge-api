@@ -30,6 +30,14 @@ public class WithdrawalSplit {
     @Column(name = "external_id")
     private String externalId;
 
+    /** 微信转账单号（transfer-bills 受理后回填）。 */
+    @Column(name = "transfer_bill_no")
+    private String transferBillNo;
+
+    /** 用户确认收款 package（state=WAIT_USER_CONFIRM 时回传前端，瞬态展示用）。 */
+    @Column(name = "package_info")
+    private String packageInfo;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private SplitStatus status;
@@ -69,6 +77,10 @@ public class WithdrawalSplit {
     public void setChannel(PaymentChannel channel) { this.channel = channel; }
     public String getExternalId() { return externalId; }
     public void setExternalId(String externalId) { this.externalId = externalId; }
+    public String getTransferBillNo() { return transferBillNo; }
+    public void setTransferBillNo(String transferBillNo) { this.transferBillNo = transferBillNo; }
+    public String getPackageInfo() { return packageInfo; }
+    public void setPackageInfo(String packageInfo) { this.packageInfo = packageInfo; }
     public SplitStatus getStatus() { return status; }
     public void setStatus(SplitStatus status) { this.status = status; }
     public String getFailureReason() { return failureReason; }
