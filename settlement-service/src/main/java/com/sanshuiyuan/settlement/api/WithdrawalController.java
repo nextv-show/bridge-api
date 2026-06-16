@@ -157,6 +157,7 @@ public class WithdrawalController {
 
     @GetMapping("/withdrawals/mine")
     public ResponseEntity<Map<String, Object>> getMyWithdrawals(
+            @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int limit,
             Authentication auth) {
         Long userId = subjectResolver.resolveUserId(auth.getName());
@@ -164,12 +165,13 @@ public class WithdrawalController {
             return ResponseEntity.status(401).body(Map.of("code", 401, "message", "UNAUTHORIZED"));
         }
         List<WithdrawalOrder> orders = orderRepository
-                .findByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(0, limit));
+                .findByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(page, limit));
 
         List<Map<String, Object>> items = orders.stream().map(o -> {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("id", o.getId());
             m.put("gross_cents", o.getGrossCents());
+            m.put("fee_cents", o.getFeeCents());
             m.put("cash_cents", o.getCashCents());
             m.put("status", o.getStatus().name());
             m.put("created_at", o.getCreatedAt() != null ? o.getCreatedAt().toString() : null);
