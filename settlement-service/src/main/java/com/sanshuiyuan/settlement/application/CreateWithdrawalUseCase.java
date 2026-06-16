@@ -95,7 +95,9 @@ public class CreateWithdrawalUseCase {
         // 7. 写 withdrawal_split (CASH → QUEUED, 立即可代付)
         WithdrawalSplit split = new WithdrawalSplit(order.getId(), SplitKind.CASH, cashCents,
                 PaymentChannel.WX_MCH_PAYOUT, SplitStatus.QUEUED, 0);
-        split.setNextRunAt(LocalDateTime.now());
+        // 留 60s 给同请求内 PayoutInitiationService 发起转账并 promote 到 PAYING；
+        // 兜底 worker 60s 后才介入 QUEUED（避免与发起抢跑）。
+        split.setNextRunAt(LocalDateTime.now().plusSeconds(60));
         splitRepository.save(split);
 
         // 8. 写 wallet_ledger (OUT, WITHDRAWAL_FREEZE)

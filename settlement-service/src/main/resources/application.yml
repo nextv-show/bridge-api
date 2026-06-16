@@ -36,5 +36,14 @@ wxpay:
   merchant-serial-number: ${WXPAY_MERCHANT_SERIAL_NUMBER:}
   private-key-path: ${WXPAY_PRIVATE_KEY_PATH:}
   notify-url: ${WXPAY_NOTIFY_URL:}
+  # 公钥模式（商家转账复用 cend/water 同 MCH 凭证）
+  public-key-path: ${WXPAY_PUBLIC_KEY_PATH:}
+  public-key-id: ${WXPAY_PUBLIC_KEY_ID:}
+  # 商家转账（佣金报酬 场景 1005）
+  payout:
+    transfer-scene-id: ${WXPAY_TRANSFER_SCENE_ID:1005}
+    report-post-type: ${WXPAY_PAYOUT_POST_TYPE:水机运营服务商}
+    report-remark: ${WXPAY_PAYOUT_REMARK:水机运营服务分成}
+    notify-url: ${WXPAY_PAYOUT_NOTIFY_URL:}
 settlement:
   outbox-entries-posted-enabled: ${SETTLEMENT_OUTBOX_ENTRIES_ENABLED:false}

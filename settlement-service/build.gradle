@@ -4,5 +4,6 @@ dependencies {
     implementation 'org.flywaydb:flyway-mysql'
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0'
     implementation 'com.github.wechatpay-apiv3:wechatpay-java:0.2.14'    // 微信代付
+    implementation 'com.google.code.gson:gson:2.10.1'                    // 商家转账请求/响应序列化（与 SDK 同版，显式声明上编译类路径）
     implementation 'com.bucket4j:bucket4j_jdk17-core:8.11.0'              // 提现限频（8.10.x 无 jdk17-core 产物，取最近可用版本）
 }
