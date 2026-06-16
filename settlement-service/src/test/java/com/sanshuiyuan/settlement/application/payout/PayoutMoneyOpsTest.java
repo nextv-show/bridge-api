@@ -68,6 +68,19 @@ class PayoutMoneyOpsTest {
     }
 
     @Test
+    void recordAccepted_persistsOutBillNo_asAuthoritativeLookupKey() {
+        WithdrawalSplit s = split(SplitStatus.QUEUED);
+        when(splitRepo.findById(5L)).thenReturn(Optional.of(s));
+
+        ops.recordAccepted(5L, "W0000000001S000001", "TB_9", "PKG_X");
+
+        // 受理时落库的 out_bill_no 是查单/对账权威键，免疫 PayoutBillNo 格式漂移。
+        assertThat(s.getOutBillNo()).isEqualTo("W0000000001S000001");
+        assertThat(s.getTransferBillNo()).isEqualTo("TB_9");
+        assertThat(s.getStatus()).isEqualTo(SplitStatus.PAYING);
+    }
+
+    @Test
     void releaseOnSuccess_releasesFrozenOnce_andIsIdempotent() {
         WithdrawalOrder o = order(WithdrawalStatus.PROCESSING);
         OwnerWallet wallet = new OwnerWallet(USER, 0L, GROSS);

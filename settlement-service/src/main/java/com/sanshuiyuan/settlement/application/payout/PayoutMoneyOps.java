@@ -43,14 +43,15 @@ public class PayoutMoneyOps {
         this.ledgerRepository = ledgerRepository;
     }
 
-    /** 转账受理：split QUEUED→PAYING，回填转账单号 + package。 */
+    /** 转账受理：split QUEUED→PAYING，回填商户单号 + 转账单号 + package。 */
     @Transactional
-    public void recordAccepted(Long splitId, String transferBillNo, String packageInfo) {
+    public void recordAccepted(Long splitId, String outBillNo, String transferBillNo, String packageInfo) {
         WithdrawalSplit split = splitRepository.findById(splitId).orElseThrow();
         if (split.getStatus() != SplitStatus.QUEUED) {
             return; // 幂等
         }
         split.setStatus(SplitStatus.PAYING);
+        split.setOutBillNo(outBillNo);
         split.setTransferBillNo(transferBillNo);
         split.setExternalId(transferBillNo);
         split.setPackageInfo(packageInfo);
