@@ -55,7 +55,9 @@ public class PayoutMoneyOps {
         split.setTransferBillNo(transferBillNo);
         split.setExternalId(transferBillNo);
         split.setPackageInfo(packageInfo);
-        split.setNextRunAt(LocalDateTime.now().plusSeconds(30));
+        // 用户确认收款通常在受理后几秒内完成，首次查单提早到 +5s（原 +30s），
+        // 让前端轮询窗口内即可拿到 SUCCESS、页面直接显示「已到账」；之后按退避递增。
+        split.setNextRunAt(LocalDateTime.now().plusSeconds(5));
         splitRepository.save(split);
         log.info("[payout] accepted splitId={} transferBillNo={}", splitId, transferBillNo);
     }
