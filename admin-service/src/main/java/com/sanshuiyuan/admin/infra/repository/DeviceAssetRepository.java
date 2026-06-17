@@ -34,4 +34,8 @@ public interface DeviceAssetRepository extends JpaRepository<DeviceAsset, Long> 
     List<Object[]> countByUserIds(@Param("ids") Collection<Long> ids);
 
     List<DeviceAsset> findByUserIdOrderByPurchasedAtDesc(Long userId);
+
+    /** FIFO 取 limit 台未绑定 + 指定 Stage 设备（按 id 升序）——批量自动分配 SN 用。 */
+    @Query("SELECT d FROM DeviceAsset d WHERE d.stage = :stage AND d.sn IS NULL ORDER BY d.id ASC LIMIT :limit")
+    List<DeviceAsset> findUnboundByStageOrderByIdAsc(@Param("stage") DeviceAsset.Stage stage, @Param("limit") int limit);
 }
