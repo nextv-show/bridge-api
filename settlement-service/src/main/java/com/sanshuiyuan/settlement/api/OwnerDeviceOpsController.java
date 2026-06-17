@@ -50,4 +50,20 @@ public class OwnerDeviceOpsController {
         Map<String, Object> data = iotOpsClient.fetchSummary(sn);
         return ResponseEntity.ok(Map.of("code", 0, "data", data));
     }
+
+    @GetMapping("/{sn}/cumulative-flow")
+    public ResponseEntity<Map<String, Object>> getCumulativeFlow(@PathVariable String sn, Authentication auth) {
+        Long userId = subjectResolver.resolveUserId(auth.getName());
+        if (userId == null) {
+            return ResponseEntity.status(401).body(Map.of("code", 401, "message", "UNAUTHORIZED"));
+        }
+
+        // 归属校验：设备必须属于当前用户
+        if (deviceAssetRepository.findBySnAndUserId(sn, userId).isEmpty()) {
+            return ResponseEntity.status(403).body(Map.of("code", 403, "message", "FORBIDDEN"));
+        }
+
+        Map<String, Object> data = iotOpsClient.fetchCumulativeFlow(sn);
+        return ResponseEntity.ok(Map.of("code", 0, "data", data));
+    }
 }

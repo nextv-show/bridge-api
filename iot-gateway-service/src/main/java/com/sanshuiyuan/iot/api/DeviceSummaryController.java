@@ -2,6 +2,7 @@ package com.sanshuiyuan.iot.api;
 
 import com.sanshuiyuan.iot.domain.DeviceStatus;
 import com.sanshuiyuan.iot.domain.TelemetrySampleFilter;
+import com.sanshuiyuan.iot.domain.TelemetrySampleFlow;
 import com.sanshuiyuan.iot.domain.TelemetrySampleTds;
 import com.sanshuiyuan.iot.infra.repository.DeviceAlarmRepository;
 import com.sanshuiyuan.iot.infra.repository.DeviceStatusRepository;
@@ -77,6 +78,16 @@ public class DeviceSummaryController {
         log.debug("[Summary] sn={} online={} tds={} flow24h={}L alarms={}",
                 sn, data.get("online"), data.get("last_tds"), totalFlowLiters, alarmsOpen24h);
 
+        return ResponseEntity.ok(Map.of("code", 0, "data", data));
+    }
+
+    @GetMapping("/{sn}/cumulative-flow")
+    public ResponseEntity<Map<String, Object>> getCumulativeFlow(@PathVariable String sn) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        TelemetrySampleFlow latest = flowRepo.findTopBySnOrderBySampledAtDesc(sn).orElse(null);
+        data.put("sn", sn);
+        data.put("cumulative_liters", latest != null ? latest.getLitersMilli() / 1000.0 : 0.0);
+        data.put("last_sampled_at", latest != null ? latest.getSampledAt() : null);
         return ResponseEntity.ok(Map.of("code", 0, "data", data));
     }
 }
