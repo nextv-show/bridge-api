@@ -10,5 +10,6 @@ import java.time.LocalDateTime;
 public record ConfirmResponse(
         @JsonProperty("request_id") long requestId,
         @JsonProperty("status") String status,
-        @JsonProperty("claim_confirmed_at") LocalDateTime claimConfirmedAt
+        @JsonProperty("claim_confirmed_at") LocalDateTime claimConfirmedAt,
+        @JsonProperty("pending_logistics") boolean pendingLogistics
 ) {}

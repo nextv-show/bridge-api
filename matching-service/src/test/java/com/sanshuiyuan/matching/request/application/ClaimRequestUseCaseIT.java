@@ -126,7 +126,7 @@ class ClaimRequestUseCaseIT {
     // ——————————————————————————————————————————————————————————————————————
 
     @Test
-    void claim_success_locksRequestAndDevice_writesAssignmentAndOutbox() {
+    void claim_success_locksRequestAndDevice_writesAssignmentOnly() {
         long owner = 10L, device = 2001L, request = 7001L, poster = 99L;
         insertUser(owner, "oCLAIM_ok");
         insertDevice(device, owner, "PENDING_MATCH");
@@ -135,7 +135,6 @@ class ClaimRequestUseCaseIT {
         ClaimRequestResponse resp = claimRequestUseCase.claim("oCLAIM_ok", request, device);
 
         assertThat(resp.status()).isEqualTo("LOCKED");
-        assertThat(resp.pendingLogistics()).isTrue();
         assertThat(statusOf(request)).isEqualTo("LOCKED");
         assertThat(stageOf(device)).isEqualTo("LOCKED");
 
@@ -144,13 +143,8 @@ class ClaimRequestUseCaseIT {
         assertThat(count("SELECT COUNT(*) FROM matching_requests WHERE id = ? AND locked_by_user_id = ?",
                 request, owner)).isEqualTo(1L);
 
-        Long outboxId = jdbc.queryForObject(
-                "SELECT id FROM logistics_outbox WHERE request_id = ? AND device_asset_id = ?",
-                Long.class, request, device);
-        assertThat(outboxId).isNotNull();
-        String payload = jdbc.queryForObject(
-                "SELECT payload_json FROM logistics_outbox WHERE id = ?", String.class, outboxId);
-        assertThat(payload).contains("ship_to_address").contains("广州市天河区xx路1号");
+        // 接单不再写 outbox（移至确认推进 ConfirmClaimUseCase）。
+        assertThat(count("SELECT COUNT(*) FROM logistics_outbox WHERE request_id = ?", request)).isZero();
     }
 
     @Test
@@ -197,11 +191,11 @@ class ClaimRequestUseCaseIT {
         assertThat(success.get()).isEqualTo(1);
         assertThat(conflict.get()).isEqualTo(1);
 
-        // 原子性：需求 LOCKED；仅一条活跃占用；仅一条 outbox；恰一台设备 LOCKED，另一台回滚为 PENDING_MATCH（无脏写）。
+        // 原子性：需求 LOCKED；仅一条活跃占用；恰一台设备 LOCKED，另一台回滚为 PENDING_MATCH（无脏写）。
+        // 接单不再写 outbox（移至确认推进），故此处不校验 outbox。
         assertThat(statusOf(request)).isEqualTo("LOCKED");
         assertThat(count("SELECT COUNT(*) FROM matching_assignments WHERE request_id = ? AND released_at IS NULL",
                 request)).isEqualTo(1L);
-        assertThat(count("SELECT COUNT(*) FROM logistics_outbox WHERE request_id = ?", request)).isEqualTo(1L);
         assertThat(count("SELECT COUNT(*) FROM device_assets WHERE id IN (?, ?) AND stage = 'LOCKED'",
                 deviceA, deviceB)).isEqualTo(1L);
         assertThat(count("SELECT COUNT(*) FROM device_assets WHERE id IN (?, ?) AND stage = 'PENDING_MATCH'",

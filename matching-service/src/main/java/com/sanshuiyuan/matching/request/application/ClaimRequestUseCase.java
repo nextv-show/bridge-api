@@ -1,11 +1,8 @@
 package com.sanshuiyuan.matching.request.application;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sanshuiyuan.matching.assignment.domain.MatchingAssignment;
 import com.sanshuiyuan.matching.assignment.infra.MatchingAssignmentRepository;
 import com.sanshuiyuan.matching.identity.MatchingUserResolver;
-import com.sanshuiyuan.matching.logistics.domain.LogisticsOutboxEntry;
-import com.sanshuiyuan.matching.logistics.infra.LogisticsOutboxRepository;
 import com.sanshuiyuan.matching.request.api.ApiException;
 import com.sanshuiyuan.matching.request.api.dto.ClaimRequestResponse;
 import com.sanshuiyuan.matching.request.domain.DeviceStage;
@@ -20,8 +17,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 /** FR-3：接单原子事务。 */
 @Service
@@ -29,44 +24,40 @@ public class ClaimRequestUseCase {
 
     private final MatchingRequestRepository requestRepository;
     private final MatchingAssignmentRepository assignmentRepository;
-    private final LogisticsOutboxRepository outboxRepository;
     private final MatchingUserResolver userResolver;
     private final DeviceAssetGateway deviceAssetGateway;
     private final MatchingConfigService configService;
     private final ClaimRateLimiter rateLimiter;
     private final MatchingMetrics metrics;
-    private final ObjectMapper objectMapper;
 
     public ClaimRequestUseCase(MatchingRequestRepository requestRepository,
                                MatchingAssignmentRepository assignmentRepository,
-                               LogisticsOutboxRepository outboxRepository,
                                MatchingUserResolver userResolver,
                                DeviceAssetGateway deviceAssetGateway,
                                MatchingConfigService configService,
                                ClaimRateLimiter rateLimiter,
-                               MatchingMetrics metrics,
-                               ObjectMapper objectMapper) {
+                               MatchingMetrics metrics) {
         this.requestRepository = requestRepository;
         this.assignmentRepository = assignmentRepository;
-        this.outboxRepository = outboxRepository;
         this.userResolver = userResolver;
         this.deviceAssetGateway = deviceAssetGateway;
         this.configService = configService;
         this.rateLimiter = rateLimiter;
         this.metrics = metrics;
-        this.objectMapper = objectMapper;
     }
 
     /**
-     * FR-3 接单原子事务：四步同事务落库，任一步失败整体回滚（无脏 outbox）。
+     * FR-3 接单原子事务：三步同事务落库，任一步失败整体回滚。
      * <ol>
      *   <li>device_assets.stage：PENDING_MATCH → LOCKED（受限网关 CAS，归属+前置态原子校验）；</li>
      *   <li>matching_requests.status：OPEN → LOCKED（@Version 乐观锁，并发竞争败者抛 409）；</li>
-     *   <li>matching_assignments：写活跃占用（uk_request_active / uk_device_active 兜底）；</li>
-     *   <li>logistics_outbox：写跨服务工单（含 ship_to_address 快照）。</li>
+     *   <li>matching_assignments：写活跃占用（uk_request_active / uk_device_active 兜底）。</li>
      * </ol>
      * 先做廉价前置校验（404/403/409）快速短路；并发安全最终由步骤 1 的设备 CAS、步骤 2 的乐观锁、
      * 步骤 3 的活跃唯一键三道闸共同保证——前置校验仅为快路径与友好错误码。
+     *
+     * <p>物流工单（logistics_outbox）不在接单时写入：接单仅锁定需求与设备，待购机者在 24h SLA
+     * 内确认推进（{@code ConfirmClaimUseCase}）后才写 outbox 触发发货，避免未确认即建/撤物流工单的空转。
      */
     @Transactional
     public ClaimRequestResponse claim(String subject, long requestId, long deviceAssetId) {
@@ -129,13 +120,6 @@ public class ClaimRequestUseCase {
             assignment.setDeviceAssetId(deviceAssetId);
             assignment.setOwnerUserId(ownerUserId);
             assignmentRepository.saveAndFlush(assignment);
-
-            // 4) 跨服务 outbox（与上述同事务，失败则随事务回滚，绝不留脏 outbox）。
-            LogisticsOutboxEntry outbox = new LogisticsOutboxEntry();
-            outbox.setRequestId(requestId);
-            outbox.setDeviceAssetId(deviceAssetId);
-            outbox.setPayloadJson(buildPayload(request, deviceAssetId, ownerUserId));
-            outboxRepository.saveAndFlush(outbox);
         } catch (OptimisticLockingFailureException | DataIntegrityViolationException e) {
             // 并发竞争败者：整笔事务回滚（含步骤 1 的设备 stage），对外统一 409。
             metrics.claimConflict();
@@ -143,19 +127,6 @@ public class ClaimRequestUseCase {
         }
         metrics.claimSuccess();
 
-        return new ClaimRequestResponse(requestId, RequestStatus.LOCKED.name(), true);
-    }
-
-    private String buildPayload(MatchingRequest request, long deviceAssetId, long ownerUserId) {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("request_id", request.getId());
-        payload.put("device_asset_id", deviceAssetId);
-        payload.put("owner_user_id", ownerUserId);
-        payload.put("ship_to_address", request.getAddress());
-        try {
-            return objectMapper.writeValueAsString(payload);
-        } catch (Exception e) {
-            throw new IllegalStateException("构造 outbox payload 失败", e);
-        }
+        return new ClaimRequestResponse(requestId, RequestStatus.LOCKED.name());
     }
 }
