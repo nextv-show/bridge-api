@@ -95,6 +95,8 @@ wx:
     pay-success: ${WX_TPL_PAY_SUCCESS:}       # 支付成功通知模板 ID，空则降级不推送
     refund-success: ${WX_TPL_REFUND_SUCCESS:} # 退款成功通知模板 ID，空则降级不推送
     claim-confirm-remind: ${WX_TPL_CLAIM_CONFIRM_REMIND:} # 接单确认提醒模板 ID（matching SLA 提醒用），空则降级不推送
+    mini:
+      claim-confirm-remind: ${WX_TPL_MINI_CLAIM_CONFIRM_REMIND:} # 小程序订阅消息模板 ID（WECHAT_MP 用户），空则降级不推送
   subscribe:
     cache-ttl-seconds: 3600                   # 用户关注状态 Redis 缓存时长（1h）
   # Spec 009: 微信 JS-SDK 分享卡片文案（后端下发，前端不硬编码）。合规铁律：严禁金融化话术。

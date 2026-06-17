@@ -10,6 +10,7 @@ public class WxMsgProperties {
     private String paySuccess = "";
     private String refundSuccess = "";
     private String claimConfirmRemind = "";
+    private String miniClaimConfirmRemind = "";
 
     public String getPaySuccess() { return paySuccess; }
     public void setPaySuccess(String paySuccess) { this.paySuccess = paySuccess; }
@@ -19,6 +20,9 @@ public class WxMsgProperties {
 
     public String getClaimConfirmRemind() { return claimConfirmRemind; }
     public void setClaimConfirmRemind(String claimConfirmRemind) { this.claimConfirmRemind = claimConfirmRemind; }
+
+    public String getMiniClaimConfirmRemind() { return miniClaimConfirmRemind; }
+    public void setMiniClaimConfirmRemind(String miniClaimConfirmRemind) { this.miniClaimConfirmRemind = miniClaimConfirmRemind; }
 
     public boolean isPaySuccessConfigured() {
         return paySuccess != null && !paySuccess.isBlank();
@@ -30,5 +34,9 @@ public class WxMsgProperties {
 
     public boolean isClaimConfirmRemindConfigured() {
         return claimConfirmRemind != null && !claimConfirmRemind.isBlank();
+    }
+
+    public boolean isMiniClaimConfirmRemindConfigured() {
+        return miniClaimConfirmRemind != null && !miniClaimConfirmRemind.isBlank();
     }
 }
