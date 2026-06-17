@@ -109,6 +109,16 @@ public class DeviceAssetGateway {
         return ids.isEmpty() ? null : ids.get(0);
     }
 
+    /** 按 device_asset_id 反查 sn，设备不存在或 sn 为空返回 {@code null}。用于 110 SN 回写。 */
+    public String findSnById(long deviceAssetId) {
+        List<String> sns = jdbcTemplate.queryForList(
+                "SELECT sn FROM device_assets WHERE id = ?",
+                String.class,
+                deviceAssetId
+        );
+        return sns.isEmpty() ? null : sns.get(0);
+    }
+
     /** 读取设备当前 stage，设备不存在返回 {@code null}。用于 SELF_USE 履约幂等判定。 */
     public String findStage(long deviceAssetId) {
         List<String> stages = jdbcTemplate.queryForList(
