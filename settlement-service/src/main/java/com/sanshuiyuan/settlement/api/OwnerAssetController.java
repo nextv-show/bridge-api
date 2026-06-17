@@ -55,6 +55,7 @@ public class OwnerAssetController {
                     m.put("model", a.getModel());
                     m.put("stage", a.getStage().name());
                     m.put("cumulativeIncomeCents", pendingMatch ? null : a.getCumulativeIncomeCents());
+                    m.put("purchasePriceCents", a.getPurchasePriceCents());
                     m.put("roiBp", pendingMatch ? null : roiBp);
                     m.put("pendingMatch", pendingMatch);
                     m.put("fused", fused);
