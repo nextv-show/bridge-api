@@ -3,8 +3,10 @@ package com.sanshuiyuan.cend.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sanshuiyuan.cend.auth.H5JwtFilter;
 import com.sanshuiyuan.cend.auth.H5JwtService;
+import com.sanshuiyuan.cend.auth.S2sTokenFilter;
 import com.sanshuiyuan.cend.common.ApiResponse;
 import com.sanshuiyuan.cend.common.ErrorCode;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -19,7 +21,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http, H5JwtService jwtService, ObjectMapper objectMapper) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http, H5JwtService jwtService, ObjectMapper objectMapper,
+                                           @Value("${s2s.token:dev-s2s-shared-token}") String s2sToken) throws Exception {
         http
             .csrf(csrf -> csrf.disable())
             .cors(cors -> {})
@@ -44,6 +47,9 @@ public class SecurityConfig {
                     "/swagger-ui/**",
                     "/actuator/**"
                 ).permitAll()
+                // /internal/** 仅限 S2S（matching 调用 /internal/wxmsg/** 推模板消息）：H5JwtFilter 会先认证
+                // 任意 C 端 H5 JWT，若仅 anyRequest().authenticated()，普通用户即可冒用内部端点 → 必须按角色门控。
+                .requestMatchers("/internal/**").hasRole("S2S")
                 // 其余（KYC / 下单 / pay/jsapi / 订单详情 / 退款申请 / 发票）需登录态
                 .anyRequest().authenticated()
             )
@@ -54,7 +60,8 @@ public class SecurityConfig {
                     res.setContentType("application/json;charset=UTF-8");
                     objectMapper.writeValue(res.getWriter(), ApiResponse.error(ErrorCode.UNAUTHORIZED));
                 }))
-            .addFilterBefore(new H5JwtFilter(jwtService), UsernamePasswordAuthenticationFilter.class);
+            .addFilterBefore(new H5JwtFilter(jwtService), UsernamePasswordAuthenticationFilter.class)
+            .addFilterAfter(new S2sTokenFilter(s2sToken), H5JwtFilter.class);
         return http.build();
     }
 }

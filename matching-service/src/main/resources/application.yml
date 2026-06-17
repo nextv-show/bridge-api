@@ -39,6 +39,12 @@ rate-limit:
     phone-per-minute: 1
     phone-per-day: 5
 
-# Phase D: S2S shared token（与 logistics-service 共享，用于 /internal/** 端点）。
+# Phase D: S2S shared token（与 logistics-service / cend-service 共享，用于 /internal/** 端点）。
 s2s:
   token: ${S2S_TOKEN:dev-s2s-shared-token}
+
+# 接单确认提醒通知：配置 cend-service 基址后激活 WxMsgClaimConfirmNotifier（微信公众号模板消息）；
+# 留空/未配置则降级到 NoOpClaimConfirmNotifier（仅日志）。
+matching:
+  notify:
+    cend-base-url: ${CEND_BASE_URL:}

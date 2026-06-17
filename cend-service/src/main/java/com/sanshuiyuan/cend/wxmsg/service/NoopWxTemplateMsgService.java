@@ -38,6 +38,13 @@ public class NoopWxTemplateMsgService implements WxTemplateMsgService {
         saveSkipped(openid, WxMsgType.REFUND_SUCCESS, orderId);
     }
 
+    @Override
+    public void sendClaimConfirmRemind(String openid, long requestId,
+                                       String stageLabel, String deadlineDisplay) {
+        log.debug("[wxmsg] CLAIM_CONFIRM_REMIND 推送跳过（模板 ID 未配置），requestId={}", requestId);
+        saveSkipped(openid, WxMsgType.CLAIM_CONFIRM_REMIND, requestId);
+    }
+
     private void saveSkipped(String openid, WxMsgType type, long orderId) {
         try {
             boolean alreadyLogged = logRepository.existsByMsgTypeAndOrderIdAndStatus(
