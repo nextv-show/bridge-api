@@ -37,17 +37,20 @@ public class FulfillUseCase {
     private final DeviceAssetStageEventRepository stageEventRepository;
     private final MatchingMetrics metrics;
     private final ObjectMapper objectMapper;
+    private final OrderSnBindbackNotifier snBindbackNotifier;
 
     public FulfillUseCase(MatchingRequestRepository requestRepository,
                           DeviceAssetGateway deviceAssetGateway,
                           DeviceAssetStageEventRepository stageEventRepository,
                           MatchingMetrics metrics,
-                          ObjectMapper objectMapper) {
+                          ObjectMapper objectMapper,
+                          OrderSnBindbackNotifier snBindbackNotifier) {
         this.requestRepository = requestRepository;
         this.deviceAssetGateway = deviceAssetGateway;
         this.stageEventRepository = stageEventRepository;
         this.metrics = metrics;
         this.objectMapper = objectMapper;
+        this.snBindbackNotifier = snBindbackNotifier;
     }
 
     /**
@@ -90,6 +93,9 @@ public class FulfillUseCase {
         }
         log.info("Fulfill: device_asset_id={} → PENDING_ACTIVATE", deviceAssetId);
 
+        // best-effort SN 回写（设备已安装，SN 可能已被 admin 绑定）
+        tryBindSn(deviceAssetId);
+
         // 3) 写 device_assets_stage_events
         DeviceAssetStageEvent event = new DeviceAssetStageEvent();
         event.setDeviceAssetId(deviceAssetId);
@@ -131,6 +137,9 @@ public class FulfillUseCase {
         }
         log.info("FulfillSelfUse: device_asset_id={} SELF_USE → PENDING_ACTIVATE", deviceAssetId);
 
+        // best-effort SN 回写（设备已安装，SN 可能已被 admin 绑定）
+        tryBindSn(deviceAssetId);
+
         // 写 device_assets_stage_events（payload 标记 source=SELF_USE，无 request_id）
         DeviceAssetStageEvent event = new DeviceAssetStageEvent();
         event.setDeviceAssetId(deviceAssetId);
@@ -141,6 +150,17 @@ public class FulfillUseCase {
                 deviceAssetId);
 
         metrics.fulfilled();   // P1-5 最终激活前置埋点（仅真正履约计数，幂等跳过不计）
+    }
+
+    /**
+     * 110 best-effort SN 回写：履约推进成功后，若 device_assets.sn 已是真实 SN（admin 已绑定），
+     * 通知 cend 回写到 h5_orders。notifier 内部全包裹异常，绝不影响本事务。
+     */
+    private void tryBindSn(long deviceAssetId) {
+        String sn = deviceAssetGateway.findSnById(deviceAssetId);
+        if (sn != null && !sn.isBlank() && !sn.startsWith("SN-PENDING")) {
+            snBindbackNotifier.notifyBindSn(deviceAssetId, sn);
+        }
     }
 
     private String buildPayload(long requestId, long logisticsOrderId) {

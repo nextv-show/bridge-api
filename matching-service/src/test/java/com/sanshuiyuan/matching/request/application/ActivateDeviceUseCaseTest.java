@@ -25,9 +25,10 @@ class ActivateDeviceUseCaseTest {
     @Mock DeviceAssetGateway gateway;
     @Mock DeviceAssetStageEventRepository stageEventRepository;
     @Mock MatchingMetrics metrics;
+    @Mock OrderSnBindbackNotifier snBindbackNotifier;
 
     private ActivateDeviceUseCase useCase() {
-        return new ActivateDeviceUseCase(gateway, stageEventRepository, metrics);
+        return new ActivateDeviceUseCase(gateway, stageEventRepository, metrics, snBindbackNotifier);
     }
 
     @Test
@@ -46,6 +47,8 @@ class ActivateDeviceUseCaseTest {
         assertThat(cap.getValue().getEventType()).isEqualTo("STAGE_1_ACTIVATED");
         verify(metrics).activated();
         verify(metrics, never()).activateNoop();
+        // 激活成功后兜底回写真实 SN（device_asset_id 已知）
+        verify(snBindbackNotifier).notifyBindSn(2001L, "SN-1");
     }
 
     @Test
