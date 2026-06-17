@@ -79,10 +79,18 @@ public class IotOpsClient {
             if (body != null && body.get("data") instanceof Map) {
                 return (Map<String, Object>) body.get("data");
             }
-            return Map.of("cumulative_liters", 0.0, "last_sampled_at", null);
+            return emptyFlow();
         } catch (Exception e) {
             log.warn("[iot-ops] fetchCumulativeFlow failed sn={} err={}", sn, e.getMessage());
-            return Map.of("cumulative_liters", 0.0, "last_sampled_at", null);
+            return emptyFlow();
         }
+    }
+
+    private static Map<String, Object> emptyFlow() {
+        // LinkedHashMap 而非 Map.of —— 后者不接受 null 值
+        Map<String, Object> m = new java.util.LinkedHashMap<>();
+        m.put("cumulative_liters", 0.0);
+        m.put("last_sampled_at", null);
+        return m;
     }
 }
