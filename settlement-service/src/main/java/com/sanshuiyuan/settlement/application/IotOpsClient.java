@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
@@ -27,7 +28,12 @@ public class IotOpsClient {
 
     public IotOpsClient(@Value("${iot.base-url:http://localhost:8089}") String iotBaseUrl,
                         @Value("${s2s.token:dev-s2s-shared-token}") String s2sToken) {
-        this.restTemplate = new RestTemplate();
+        // BFF 在请求路径上同步调用，必须设超时——否则 iot-gateway 挂起时小程序请求线程无限阻塞，
+        // catch 的兜底退路（online=false）永远走不到。
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(2_000);  // 2s 连接
+        factory.setReadTimeout(3_000);     // 3s 读取
+        this.restTemplate = new RestTemplate(factory);
         this.iotBaseUrl = iotBaseUrl;
         this.s2sToken = s2sToken;
     }
