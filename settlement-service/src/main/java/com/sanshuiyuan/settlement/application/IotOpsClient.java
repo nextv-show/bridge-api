@@ -61,4 +61,28 @@ public class IotOpsClient {
             return Map.of("online", false);
         }
     }
+
+    /**
+     * 拉取设备累计出水量的 data 字段。失败/无数据时返回 {@code {"cumulative_liters": 0.0, "last_sampled_at": null}} 兜底。
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> fetchCumulativeFlow(String sn) {
+        String url = iotBaseUrl + "/internal/iot/devices/" + sn + "/cumulative-flow";
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(s2sToken);
+        HttpEntity<Void> request = new HttpEntity<>(headers);
+
+        try {
+            ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, request, Map.class);
+            Map<String, Object> body = response.getBody();
+            if (body != null && body.get("data") instanceof Map) {
+                return (Map<String, Object>) body.get("data");
+            }
+            return Map.of("cumulative_liters", 0.0, "last_sampled_at", null);
+        } catch (Exception e) {
+            log.warn("[iot-ops] fetchCumulativeFlow failed sn={} err={}", sn, e.getMessage());
+            return Map.of("cumulative_liters", 0.0, "last_sampled_at", null);
+        }
+    }
 }
