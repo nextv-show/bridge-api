@@ -122,6 +122,31 @@ public class RealWxTemplateMsgService implements WxTemplateMsgService {
         doSend(openid, templateId, url, data, WxMsgType.REFUND_SUCCESS, orderId);
     }
 
+    @Override
+    public void sendClaimConfirmRemind(String openid, long requestId,
+                                       String stageLabel, String deadlineDisplay) {
+        String templateId = props.getClaimConfirmRemind();
+        if (!props.isClaimConfirmRemindConfigured()) {
+            saveSkipped(openid, WxMsgType.CLAIM_CONFIRM_REMIND, requestId, "", WxMsgStatus.SKIPPED_NO_TEMPLATE_ID);
+            return;
+        }
+        if (!subscribeChecker.isSubscribed(openid)) {
+            saveSkipped(openid, WxMsgType.CLAIM_CONFIRM_REMIND, requestId, templateId, WxMsgStatus.SKIPPED_UNSUBSCRIBED);
+            return;
+        }
+        // 不做 SENT 幂等跳过：SOFT/FINAL 两阶段各需推送一次，重发频率由 matching SLA 窗口（~2min）兜底。
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("first",    item("您有一条接单需求待确认"));
+        data.put("keyword1", item("需求 #" + requestId));
+        data.put("keyword2", item(stageLabel));        // 温馨提醒（12小时）/ 最后提醒（即将自动释放）
+        data.put("keyword3", item(deadlineDisplay));   // 请在 12 小时内确认 / 请立即确认
+        data.put("remark",   item("点击立即确认，逾期将自动释放需求"));
+
+        String url = publicBaseUrl + "/pages/matching/confirm/index?id=" + requestId;
+        doSend(openid, templateId, url, data, WxMsgType.CLAIM_CONFIRM_REMIND, requestId);
+    }
+
     private void doSend(String openid, String templateId, String url,
                         Map<String, Object> data, WxMsgType msgType, long orderId) {
         try {

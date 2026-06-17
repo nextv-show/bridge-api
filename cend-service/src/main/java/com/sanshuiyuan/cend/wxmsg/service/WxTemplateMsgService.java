@@ -12,4 +12,10 @@ public interface WxTemplateMsgService {
 
     void sendRefundSuccess(String openid, long orderId, String orderNo,
                            long refundAmountCents);
+
+    /**
+     * 接单确认提醒（matching-service S2S 调用）。requestId 复用 order_id 列存放需求单 id。
+     * SOFT/FINAL 两阶段各发一次，不做幂等跳过（重发频率由 matching SLA 窗口控制）。
+     */
+    void sendClaimConfirmRemind(String openid, long requestId, String stageLabel, String deadlineDisplay);
 }
