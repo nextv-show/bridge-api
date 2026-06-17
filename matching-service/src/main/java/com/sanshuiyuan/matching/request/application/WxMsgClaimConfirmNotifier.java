@@ -55,11 +55,13 @@ public class WxMsgClaimConfirmNotifier implements ClaimConfirmNotifier {
             return;
         }
 
-        String openid = findOpenid(ownerUserId);
+        Map<String, Object> owner = findOwner(ownerUserId);
+        String openid = owner == null ? null : (String) owner.get("openid");
         if (openid == null || openid.isBlank()) {
             log.info("claim 确认提醒[{}] request_id={} owner={} 跳过：openid 为空", stage, requestId, ownerUserId);
             return;
         }
+        String channel = (String) owner.get("channel");
 
         String stageLabel;
         String deadlineDisplay;
@@ -82,6 +84,7 @@ public class WxMsgClaimConfirmNotifier implements ClaimConfirmNotifier {
             payload.put("stage", stage.name());
             payload.put("stage_label", stageLabel);
             payload.put("deadline_display", deadlineDisplay);
+            payload.put("channel", channel);
 
             String url = cendBaseUrl + "/internal/wxmsg/claim-reminder";
             ResponseEntity<String> resp = restTemplate.postForEntity(
@@ -98,9 +101,9 @@ public class WxMsgClaimConfirmNotifier implements ClaimConfirmNotifier {
         }
     }
 
-    private String findOpenid(long userId) {
-        List<String> rows = jdbcTemplate.queryForList(
-                "SELECT openid FROM users WHERE id = ?", String.class, userId);
+    private Map<String, Object> findOwner(long userId) {
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                "SELECT openid, channel FROM users WHERE id = ?", userId);
         return rows.isEmpty() ? null : rows.get(0);
     }
 }

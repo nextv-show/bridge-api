@@ -26,13 +26,14 @@ import static org.mockito.Mockito.when;
 
 /**
  * P1-2 {@link WxMsgClaimConfirmNotifier} 纯单测（Mockito，不依赖 DB / 网络）：
- * 反查 openid、文案组装、S2S 调用与失败降级（绝不抛出）。
+ * 反查 openid+channel、文案组装、通道路由（channel 透传）与失败降级（绝不抛出）。
  */
 @ExtendWith(MockitoExtension.class)
 class WxMsgClaimConfirmNotifierTest {
 
     private static final String BASE = "http://cend:8080";
     private static final String TOKEN = "test-s2s-token";
+    private static final String SQL = "SELECT openid, channel FROM users WHERE id = ?";
 
     @Mock
     JdbcTemplate jdbc;
@@ -59,8 +60,7 @@ class WxMsgClaimConfirmNotifierTest {
 
     @Test
     void openidEmpty_skips_noPost() {
-        when(jdbc.queryForList("SELECT openid FROM users WHERE id = ?", String.class, 7L))
-                .thenReturn(List.of());
+        when(jdbc.queryForList(SQL, 7L)).thenReturn(List.of());
 
         newNotifier(BASE).remind(42L, 7L, Stage.SOFT);
 
@@ -70,8 +70,8 @@ class WxMsgClaimConfirmNotifierTest {
     @SuppressWarnings("unchecked")
     @Test
     void softStage_postsExpectedPayload() {
-        when(jdbc.queryForList("SELECT openid FROM users WHERE id = ?", String.class, 7L))
-                .thenReturn(List.of("openid-abc"));
+        when(jdbc.queryForList(SQL, 7L))
+                .thenReturn(List.of(Map.of("openid", "openid-abc", "channel", "WECHAT_H5")));
         when(restTemplate.postForEntity(any(String.class), any(), eq(String.class)))
                 .thenReturn(ResponseEntity.ok("{\"status\":\"ok\"}"));
 
@@ -91,13 +91,14 @@ class WxMsgClaimConfirmNotifierTest {
         assertThat(body.get("stage")).isEqualTo("SOFT");
         assertThat(body.get("stage_label")).isEqualTo("温馨提醒（12小时）");
         assertThat(body.get("deadline_display")).isEqualTo("请在 12 小时内确认");
+        assertThat(body.get("channel")).isEqualTo("WECHAT_H5");
     }
 
     @SuppressWarnings("unchecked")
     @Test
     void finalStage_usesFinalCopy() {
-        when(jdbc.queryForList("SELECT openid FROM users WHERE id = ?", String.class, 7L))
-                .thenReturn(List.of("openid-abc"));
+        when(jdbc.queryForList(SQL, 7L))
+                .thenReturn(List.of(Map.of("openid", "openid-abc", "channel", "WECHAT_H5")));
         when(restTemplate.postForEntity(any(String.class), any(), eq(String.class)))
                 .thenReturn(ResponseEntity.ok("ok"));
 
@@ -111,10 +112,43 @@ class WxMsgClaimConfirmNotifierTest {
         assertThat(body.get("deadline_display")).isEqualTo("请立即确认");
     }
 
+    @SuppressWarnings("unchecked")
+    @Test
+    void miniappChannel_passesWechatMp() {
+        when(jdbc.queryForList(SQL, 7L))
+                .thenReturn(List.of(Map.of("openid", "openid-mp", "channel", "WECHAT_MP")));
+        when(restTemplate.postForEntity(any(String.class), any(), eq(String.class)))
+                .thenReturn(ResponseEntity.ok("ok"));
+
+        newNotifier(BASE).remind(42L, 7L, Stage.SOFT);
+
+        ArgumentCaptor<HttpEntity> entityCap = ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate).postForEntity(any(String.class), entityCap.capture(), eq(String.class));
+        Map<String, Object> body = (Map<String, Object>) entityCap.getValue().getBody();
+        assertThat(body.get("openid")).isEqualTo("openid-mp");
+        assertThat(body.get("channel")).isEqualTo("WECHAT_MP");
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void h5Channel_passesWechatH5() {
+        when(jdbc.queryForList(SQL, 7L))
+                .thenReturn(List.of(Map.of("openid", "openid-h5", "channel", "WECHAT_H5")));
+        when(restTemplate.postForEntity(any(String.class), any(), eq(String.class)))
+                .thenReturn(ResponseEntity.ok("ok"));
+
+        newNotifier(BASE).remind(42L, 7L, Stage.SOFT);
+
+        ArgumentCaptor<HttpEntity> entityCap = ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate).postForEntity(any(String.class), entityCap.capture(), eq(String.class));
+        Map<String, Object> body = (Map<String, Object>) entityCap.getValue().getBody();
+        assertThat(body.get("channel")).isEqualTo("WECHAT_H5");
+    }
+
     @Test
     void non2xx_doesNotThrow() {
-        when(jdbc.queryForList("SELECT openid FROM users WHERE id = ?", String.class, 7L))
-                .thenReturn(List.of("openid-abc"));
+        when(jdbc.queryForList(SQL, 7L))
+                .thenReturn(List.of(Map.of("openid", "openid-abc", "channel", "WECHAT_H5")));
         when(restTemplate.postForEntity(any(String.class), any(), eq(String.class)))
                 .thenReturn(ResponseEntity.status(500).body("boom"));
 
@@ -123,8 +157,8 @@ class WxMsgClaimConfirmNotifierTest {
 
     @Test
     void restException_doesNotThrow() {
-        when(jdbc.queryForList("SELECT openid FROM users WHERE id = ?", String.class, 7L))
-                .thenReturn(List.of("openid-abc"));
+        when(jdbc.queryForList(SQL, 7L))
+                .thenReturn(List.of(Map.of("openid", "openid-abc", "channel", "WECHAT_H5")));
         when(restTemplate.postForEntity(any(String.class), any(), eq(String.class)))
                 .thenThrow(new RestClientException("conn refused"));
 
