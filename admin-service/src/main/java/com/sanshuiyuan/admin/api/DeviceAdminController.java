@@ -1,6 +1,8 @@
 package com.sanshuiyuan.admin.api;
 
+import com.sanshuiyuan.admin.api.dto.BatchBindSnRequest;
 import com.sanshuiyuan.admin.api.dto.BindSnRequest;
+import com.sanshuiyuan.admin.application.BatchBindSnUseCase;
 import com.sanshuiyuan.admin.application.BindSnUseCase;
 import com.sanshuiyuan.admin.domain.DeviceAsset;
 import com.sanshuiyuan.admin.infra.repository.DeviceAssetRepository;
@@ -19,10 +21,14 @@ public class DeviceAdminController {
 
     private final DeviceAssetRepository deviceRepo;
     private final BindSnUseCase bindSnUseCase;
+    private final BatchBindSnUseCase batchBindSnUseCase;
 
-    public DeviceAdminController(DeviceAssetRepository deviceRepo, BindSnUseCase bindSnUseCase) {
+    public DeviceAdminController(DeviceAssetRepository deviceRepo,
+                                 BindSnUseCase bindSnUseCase,
+                                 BatchBindSnUseCase batchBindSnUseCase) {
         this.deviceRepo = deviceRepo;
         this.bindSnUseCase = bindSnUseCase;
+        this.batchBindSnUseCase = batchBindSnUseCase;
     }
 
     @GetMapping
@@ -63,6 +69,13 @@ public class DeviceAdminController {
         Long adminId = (Long) auth.getPrincipal();
         bindSnUseCase.bindSn(adminId, id, req.sn());
         return Map.of("result", "ok");
+    }
+
+    @PostMapping("/batch-bind-sn")
+    public BatchBindSnUseCase.BatchBindResult batchBindSn(@RequestBody BatchBindSnRequest req,
+                                                          Authentication auth) {
+        Long adminId = (Long) auth.getPrincipal();
+        return batchBindSnUseCase.batchBindSn(adminId, req.sns(), req.deviceAssetIds());
     }
 
     private Map<String, Object> toDto(DeviceAsset d) {
