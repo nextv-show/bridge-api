@@ -27,13 +27,16 @@ public class ActivateDeviceUseCase {
     private final DeviceAssetGateway deviceAssetGateway;
     private final DeviceAssetStageEventRepository stageEventRepository;
     private final MatchingMetrics metrics;
+    private final OrderSnBindbackNotifier snBindbackNotifier;
 
     public ActivateDeviceUseCase(DeviceAssetGateway deviceAssetGateway,
                                  DeviceAssetStageEventRepository stageEventRepository,
-                                 MatchingMetrics metrics) {
+                                 MatchingMetrics metrics,
+                                 OrderSnBindbackNotifier snBindbackNotifier) {
         this.deviceAssetGateway = deviceAssetGateway;
         this.stageEventRepository = stageEventRepository;
         this.metrics = metrics;
+        this.snBindbackNotifier = snBindbackNotifier;
     }
 
     @Transactional
@@ -61,6 +64,11 @@ public class ActivateDeviceUseCase {
 
         log.info("Activate: sn={} device_asset_id={} PENDING_ACTIVATE → STAGE_1", sn, deviceAssetId);
         metrics.activated();
+
+        // 兜底 SN 回写（设备激活 = SN 100% 已知）。notifier 内部全包裹异常，绝不影响本事务。
+        if (deviceAssetId != null) {
+            snBindbackNotifier.notifyBindSn(deviceAssetId, sn);
+        }
         return new ActivateResponse(sn, true);
     }
 }
