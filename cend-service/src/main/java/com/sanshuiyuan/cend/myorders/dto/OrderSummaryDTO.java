@@ -40,7 +40,7 @@ public class OrderSummaryDTO {
      * SN 脱敏：保留首 3 字符 + 末 4 字符，中间替换为 ****。
      * 占位 SN（SN-PENDING-xxx）返回「待分配」。
      */
-    static String maskSn(String sn) {
+    public static String maskSn(String sn) {
         if (sn == null || sn.isBlank()) return "待分配";
         if (sn.startsWith("SN-PENDING")) return "待分配";
         if (sn.length() <= 7) return sn;  // 太短则不脱敏
