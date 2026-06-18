@@ -2,6 +2,7 @@ package com.sanshuiyuan.cend.myorders;
 
 import com.sanshuiyuan.cend.auth.CurrentOpenid;
 import com.sanshuiyuan.cend.common.ApiResponse;
+import com.sanshuiyuan.cend.common.BizException;
 import com.sanshuiyuan.cend.common.ErrorCode;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -28,8 +29,7 @@ public class OrderProgressController {
     @Operation(summary = "订单安装进度（全链路聚合：支付→匹配→物流→激活，固定 9 步时间线）")
     public ApiResponse<OrderProgressResponse> progress(@PathVariable String orderNo) {
         String openid = CurrentOpenid.require();
-        return orderProgressService.getProgress(orderNo, openid)
-                .map(ApiResponse::ok)
-                .orElseGet(() -> ApiResponse.error(ErrorCode.ORDER_NOT_FOUND, "订单不存在或不属于当前用户"));
+        return ApiResponse.ok(orderProgressService.getProgress(orderNo, openid)
+                .orElseThrow(() -> new BizException(ErrorCode.ORDER_NOT_FOUND, "订单不存在或不属于当前用户")));
     }
 }

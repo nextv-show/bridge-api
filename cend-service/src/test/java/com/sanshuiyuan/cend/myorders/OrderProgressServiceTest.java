@@ -13,12 +13,16 @@ import java.sql.Timestamp;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import org.springframework.jdbc.core.JdbcTemplate;
+import com.sanshuiyuan.cend.identity.IdentityResolver;
+import org.junit.jupiter.api.BeforeEach;
 
 /**
  * 112 T3：OrderProgressService 单元测试（mock JdbcTemplate）。
@@ -32,11 +36,20 @@ class OrderProgressServiceTest {
     @Mock
     JdbcTemplate jdbc;
 
+    @Mock
+    IdentityResolver identityResolver;
+
     @InjectMocks
     OrderProgressService service;
 
     private static final String ORDER_NO = "H5ORD001";
     private static final String OPENID = "openid-1";
+
+    /** 归属解析降级为「只看本端」：单 openid，使 h5_orders 查询保持 IN (?) 单参数。 */
+    @BeforeEach
+    void stubIdentity() {
+        when(identityResolver.resolveOwnedOpenids(anyString())).thenReturn(Set.of(OPENID));
+    }
 
     private static Timestamp ts(String v) {
         return Timestamp.valueOf(v);

@@ -1,16 +1,20 @@
 package com.sanshuiyuan.cend.myorders;
 
+import com.sanshuiyuan.cend.identity.IdentityResolver;
 import com.sanshuiyuan.cend.myorders.OrderProgressResponse.TimelineStage;
+import com.sanshuiyuan.cend.myorders.dto.OrderSummaryDTO;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * 112：聚合查询订单全链路安装进度。
@@ -38,9 +42,11 @@ public class OrderProgressService {
     };
 
     private final JdbcTemplate jdbc;
+    private final IdentityResolver identityResolver;
 
-    public OrderProgressService(JdbcTemplate jdbc) {
+    public OrderProgressService(JdbcTemplate jdbc, IdentityResolver identityResolver) {
         this.jdbc = jdbc;
+        this.identityResolver = identityResolver;
     }
 
     /**
@@ -51,9 +57,23 @@ public class OrderProgressService {
      * @return 进度数据；订单不存在或不属于该 openid 时返回 {@link Optional#empty()}
      */
     public Optional<OrderProgressResponse> getProgress(String orderNo, String openid) {
-        // 1. 归属校验 + 取订单状态/支付时间
+        // 1. 归属校验 + 取订单状态/支付时间。
+        // 按自然人聚合：解析同一自然人名下全部 openid（含跨端），与"我的订单"列表口径一致，
+        // 避免同人在列表可见、点进进度却 404。
+        Set<String> ownedOpenids = identityResolver.resolveOwnedOpenids(openid);
+        if (ownedOpenids.isEmpty()) {
+            return Optional.empty();
+        }
+        String placeholders = String.join(",", Collections.nCopies(ownedOpenids.size(), "?"));
+        Object[] args = new Object[ownedOpenids.size() + 1];
+        args[0] = orderNo;
+        int ai = 1;
+        for (String oid : ownedOpenids) {
+            args[ai++] = oid;
+        }
         List<Map<String, Object>> orderRows = jdbc.queryForList(
-                "SELECT status, paid_at FROM h5_orders WHERE order_no = ? AND openid = ?", orderNo, openid);
+                "SELECT status, paid_at, openid FROM h5_orders WHERE order_no = ? AND openid IN (" + placeholders + ")",
+                args);
         if (orderRows.isEmpty()) {
             return Optional.empty();
         }
@@ -74,13 +94,17 @@ public class OrderProgressService {
         }
         Map<String, Object> device = deviceRows.get(0);
         Long deviceAssetId = lng(device.get("id"));
-        String deviceSn = str(device.get("sn"));
+        // SN 脱敏：与列表 API（OrderSummaryDTO）口径一致，详情 API 不返回明文。
+        String deviceSn = OrderSummaryDTO.maskSn(str(device.get("sn")));
         String deviceStage = str(device.get("stage"));
 
-        // 3. 匹配请求（取最新一条的确认时间）
+        // 3. 匹配请求（取最新一条「已确认」的确认时间）。
+        // 仅取 claim_confirmed_at 非空的最新行，过滤已取消/重试（confirmed 为 null）的行；
+        // 全部未确认时返回空 → matchConfirmedAt=null（LOCKED 步骤无时间，正确）。
         List<Map<String, Object>> matchRows = jdbc.queryForList(
                 "SELECT status, claim_confirmed_at FROM matching_requests " +
-                        "WHERE device_asset_id = ? ORDER BY id DESC LIMIT 1", deviceAssetId);
+                        "WHERE device_asset_id = ? AND claim_confirmed_at IS NOT NULL " +
+                        "ORDER BY id DESC LIMIT 1", deviceAssetId);
         String matchConfirmedAt = matchRows.isEmpty() ? null : iso(matchRows.get(0).get("claim_confirmed_at"));
 
         // 4. 物流工单（取最新一条）
@@ -156,12 +180,20 @@ public class OrderProgressService {
         Map<String, String> times = new HashMap<>();
         times.put("PAID", paidAt);
         times.put("LOCKED", matchConfirmedAt);
-        // 物流节点优先取事件时间；PENDING_SHIP 无事件时回退到工单 updated_at（仅当仍处于待发货）。
-        times.put("PENDING_SHIP", eventTimes.getOrDefault("PENDING_SHIP",
-                "PENDING_SHIP".equals(logisticsStatus) ? logisticsUpdatedAt : null));
-        times.put("SHIPPED", eventTimes.get("SHIPPED"));
-        times.put("DELIVERED", eventTimes.get("DELIVERED"));
-        times.put("INSTALLED", eventTimes.get("INSTALLED"));
+        // 物流节点优先取事件时间；已到达（按物流状态推断）但缺事件记录的节点，回退到工单 updated_at，
+        // 避免时间线中断（例如 status=DELIVERED 但缺 SHIPPED 事件时 SHIPPED 步骤为空形成"洞"）。
+        int logiIdx = logisticsStatus == null ? -1 : logisticsIndex(logisticsStatus);
+        String[] logiKeys = {"PENDING_SHIP", "SHIPPED", "DELIVERED", "INSTALLED"};
+        for (int j = 0; j < logiKeys.length; j++) {
+            String k = logiKeys[j];
+            String t = eventTimes.get(k);
+            // logiIdx 为 STAGE_DEFS 绝对索引（PENDING_SHIP=3..INSTALLED=6），j 为相对索引（0..3），
+            // 故 j + 3 <= logiIdx（即 j <= logiIdx - 3）表示该节点已到达。
+            if (t == null && j <= logiIdx - 3 && logisticsUpdatedAt != null) {
+                t = logisticsUpdatedAt;
+            }
+            times.put(k, t);
+        }
 
         List<TimelineStage> stages = new ArrayList<>(STAGE_DEFS.length);
         for (int i = 0; i < STAGE_DEFS.length; i++) {
