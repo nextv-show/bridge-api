@@ -97,6 +97,26 @@ class DemandKycEssSigningServiceTest {
     }
 
     @Test
+    void start_whenPendingInitExists_reusesContractAndSkipsEss() {
+        // 未 PASS，但已有未完成 INIT（同一 openid + ESS_KYC_AUTH，certifyId=ESS-KYC-77）。
+        when(kycRepo.findFirstByOpenidAndStatusOrderByVerifiedAtDesc(OPENID, KycStatus.PASS))
+                .thenReturn(Optional.empty());
+        KycRecord pending = KycRecord.createInit(OPENID, new byte[]{1}, new byte[]{1},
+                "张*", "110***34", "idhash", "ESS-KYC-77", "ESS_KYC_AUTH", new byte[]{1}, "138****8000");
+        when(kycRepo.findFirstByOpenidAndChannelAndStatusOrderByIdDesc(OPENID, "ESS_KYC_AUTH", KycStatus.INIT))
+                .thenReturn(Optional.of(pending));
+
+        var r = service().start(OPENID, "Bearer t", 1L, "张三", VALID_ID, VALID_PHONE);
+
+        // 复用原合同，不重新调用 ess、不重发短信、不落新 INIT。
+        assertThat(r.alreadyPassed()).isFalse();
+        assertThat(r.contractId()).isEqualTo(77L);
+        assertThat(r.phoneMask()).isEqualTo("138****8000");
+        verifyNoInteractions(essClient);
+        verify(kycRepo, never()).save(any());
+    }
+
+    @Test
     void start_withInvalidPhone_throwsValidation() {
         when(kycRepo.findFirstByOpenidAndStatusOrderByVerifiedAtDesc(OPENID, KycStatus.PASS))
                 .thenReturn(Optional.empty());

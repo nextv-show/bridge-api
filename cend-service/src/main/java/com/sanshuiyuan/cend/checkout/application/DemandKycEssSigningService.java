@@ -72,6 +72,19 @@ public class DemandKycEssSigningService {
             return new EssSignStartResult(true, null, null, null);
         }
 
+        // 幂等重入：未 PASS 但已存在未完成 INIT（同一 openid + ESS_KYC_AUTH，certifyId 形如 ESS-KYC-{contractId}）时，
+        // 复用原合同，不再调 ess 生成新合同 / 重发签署短信，避免重复点击产生多份有效待签承诺书。
+        Optional<KycRecord> pendingInit =
+                kycRepo.findFirstByOpenidAndChannelAndStatusOrderByIdDesc(openid, CHANNEL, KycStatus.INIT);
+        if (pendingInit.isPresent()) {
+            Long reusedContractId = parseContractId(pendingInit.get().getCertifyId());
+            if (reusedContractId != null) {
+                log.info("实名承诺签署幂等：复用未完成 INIT 合同，不重复发起 openid={} contractId={}",
+                        openid, reusedContractId);
+                return new EssSignStartResult(false, reusedContractId, null, pendingInit.get().getPhoneMask());
+            }
+        }
+
         String name = realName == null ? "" : realName.trim();
         String idNo = idCardNo == null ? "" : idCardNo.trim().toUpperCase();
         String phoneTrim = phone == null ? "" : phone.trim();
@@ -163,5 +176,17 @@ public class DemandKycEssSigningService {
 
     private static String certifyId(Long contractId) {
         return "ESS-KYC-" + contractId;
+    }
+
+    /** 从 certifyId（形如 {@code ESS-KYC-{contractId}}）解析合同 ID；非法格式返回 null。 */
+    private static Long parseContractId(String certifyId) {
+        if (certifyId == null || !certifyId.startsWith("ESS-KYC-")) {
+            return null;
+        }
+        try {
+            return Long.valueOf(certifyId.substring("ESS-KYC-".length()));
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }

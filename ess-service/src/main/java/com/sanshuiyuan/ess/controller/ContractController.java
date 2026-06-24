@@ -90,11 +90,13 @@ public class ContractController {
                 ContractGenerationService.ContractPurpose.parse(request.get("contractPurpose"));
         boolean isKycAuth = purpose == ContractGenerationService.ContractPurpose.KYC_AUTH;
 
-        String orderId = request.getOrDefault("orderId", "");
-        String deviceSn = request.get("deviceSn");
-        // 设备型号/价格仅设备认购合同必填；实名承诺书不涉及设备，置空即可。
-        String deviceModel = isKycAuth ? request.getOrDefault("deviceModel", "") : requireParam(request, "deviceModel");
-        String devicePrice = isKycAuth ? request.getOrDefault("devicePrice", "") : requireParam(request, "devicePrice");
+        // 服务边界强制隔离：KYC_AUTH 实名承诺书绝不接收设备/订单字段，即便请求注入也一律清空，
+        // 防止绕过 cend 直接构造 KYC_AUTH 合同预占任意 SN（承诺书合同与设备认购合同隔离）。
+        String orderId = isKycAuth ? "" : request.getOrDefault("orderId", "");
+        String deviceSn = isKycAuth ? null : request.get("deviceSn");
+        // 设备型号/价格仅设备认购合同必填；实名承诺书不涉及设备，强制置空。
+        String deviceModel = isKycAuth ? "" : requireParam(request, "deviceModel");
+        String devicePrice = isKycAuth ? "" : requireParam(request, "devicePrice");
         String userName = requireParam(request, "userName");
         String idCardNo = requireParam(request, "idCardNo");
         String phone = requireParam(request, "phone");

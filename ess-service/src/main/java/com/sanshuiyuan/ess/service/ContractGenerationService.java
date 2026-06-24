@@ -137,49 +137,56 @@ public class ContractGenerationService {
      */
     @Transactional
     public GenerateContractResult generateContract(GenerateContractRequest request) {
+        boolean isKycAuth = request.contractPurpose() == ContractPurpose.KYC_AUTH;
+        // 服务边界强制隔离：KYC_AUTH 实名承诺书与设备认购合同互不复用。即便调用方绕过 cend 直接
+        // 注入 deviceSn/deviceModel/devicePrice/orderId，也一律清空，杜绝借承诺书合同预占任意 SN。
+        GenerateContractRequest req = isKycAuth ? sanitizeForKycAuth(request) : request;
+
         // 1. 按用途选择模板：设备认购走 MAIN_CONTRACT；实名承诺走 KYC_AUTH_CONTRACT（彼此隔离）。
         ContractTemplate mainTemplate = templateService.getLatestVersion(
-                request.contractPurpose().templateCode());
+                req.contractPurpose().templateCode());
 
         // 2. 生成合同编号
         String contractNo = contractNoGenerator.generate();
 
         // 3. 创建合同草稿
         Contract contract = Contract.createDraft(
-                contractNo, mainTemplate.getId(), request.userId(),
-                request.orderId(), request.deviceSn());
+                contractNo, mainTemplate.getId(), req.userId(),
+                req.orderId(), req.deviceSn());
         contract = contractRepository.save(contract);
 
         // 4. 构建填充字段
-        Map<String, String> fields = buildFields(request, contractNo);
+        Map<String, String> fields = buildFields(req, contractNo);
         String fieldsJson = toJson(fields);
 
         // 5. 填充统一合同内容
         String mainContent = fillTemplate(mainTemplate.getContentBody(), fields);
 
         // 6. 构建签署方信息
-        Map<String, Object> signerInfo = buildSignerInfo(request);
+        Map<String, Object> signerInfo = buildSignerInfo(req);
         String signerInfoJson = toJson(signerInfo);
 
         // 7. 标记为已生成
         contract.markGenerated(fieldsJson, signerInfoJson);
         contractRepository.save(contract);
 
-        // 8. 建立 SN 预占位绑定
-        createSnBinding(contract.getId(), request.deviceSn());
+        // 8. 建立 SN 预占位绑定（防御性：KYC_AUTH 承诺书不涉及设备，绝不建 SN 绑定）
+        if (req.contractPurpose() != ContractPurpose.KYC_AUTH) {
+            createSnBinding(contract.getId(), req.deviceSn());
+        }
 
         // 9. 审计事件：合同创建 + 生成
         auditTrailService.recordUserEvent(contract.getId(),
-                ContractAuditTrail.Action.CREATE, request.userId(),
+                ContractAuditTrail.Action.CREATE, req.userId(),
                 String.format("{\"orderId\":\"%s\",\"deviceSn\":\"%s\"}",
-                        request.orderId(), request.deviceSn()), null);
+                        req.orderId(), req.deviceSn()), null);
         auditTrailService.recordSystemEvent(contract.getId(),
                 ContractAuditTrail.Action.GENERATE,
                 String.format("{\"templateId\":%d,\"contractNo\":\"%s\"}",
                         mainTemplate.getId(), contractNo));
 
         log.info("合同已生成 [contractNo={}, userId={}, deviceSn={}]",
-                contractNo, request.userId(), request.deviceSn());
+                contractNo, req.userId(), req.deviceSn());
 
         return new GenerateContractResult(
                 contract.getId(), contractNo, mainContent,
@@ -206,6 +213,17 @@ public class ContractGenerationService {
                 mainContent,
                 null, // attachmentContent 已弃用，始终返回 null
                 contract.getStatus());
+    }
+
+    /**
+     * KYC_AUTH 强隔离：剥离一切设备/订单字段，保留实名身份字段。
+     * 防止请求方注入 deviceSn/deviceModel/devicePrice/orderId 污染承诺书合同草稿与字段 JSON。
+     */
+    private static GenerateContractRequest sanitizeForKycAuth(GenerateContractRequest request) {
+        return new GenerateContractRequest(
+                request.userId(), "", null, "", "",
+                request.userName(), request.idCardNo(), request.phone(),
+                ContractPurpose.KYC_AUTH);
     }
 
     private Map<String, String> buildFields(GenerateContractRequest request, String contractNo) {
