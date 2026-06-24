@@ -10,6 +10,8 @@ import com.sanshuiyuan.cend.common.ErrorCode;
 import com.sanshuiyuan.cend.infra.client.EssServiceClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,10 +38,29 @@ public class DemandKycEssSigningService {
     private static final Logger log = LoggerFactory.getLogger(DemandKycEssSigningService.class);
     private static final String CHANNEL = "ESS_KYC_AUTH";
 
+    /**
+     * 同一 openid + 渠道发起签署的串行化锁（分段锁，单 JVM 内幂等兜底）。
+     *
+     * <p>固定段数避免按 key 无限增长；锁在事务外获取（见 {@link #start}），覆盖
+     * 「查 PASS → 查 INIT → 生成合同 → 发起签署 → 落 INIT 并提交」整个临界区，
+     * 杜绝同一 openid 并发首发各自生成合同 / 重发短信。
+     */
+    private static final int LOCK_STRIPES = 64;
+    private final Object[] startLocks = new Object[LOCK_STRIPES];
+
     private final KycRecordRepository kycRepo;
     private final IdCardCipher cipher;
     private final EssServiceClient essClient;
     private final SubscribeSigningService subscribeSigningService;
+
+    /**
+     * 自身代理引用：锁需在事务外获取，故 {@link #start} 不加 {@code @Transactional}，
+     * 在临界区内经代理调用 {@link #startInTransaction} 以触发真实事务边界（提交发生在锁内）。
+     * 单元测试经 {@code new} 直接构造时 {@code self} 为 null，回退为 {@code this}（无 Spring 事务，逻辑等价）。
+     */
+    @Autowired
+    @Lazy
+    private DemandKycEssSigningService self;
 
     public record EssSignStartResult(boolean alreadyPassed, Long contractId, String contractNo, String phoneMask) {}
 
@@ -50,6 +71,9 @@ public class DemandKycEssSigningService {
         this.cipher = cipher;
         this.essClient = essClient;
         this.subscribeSigningService = subscribeSigningService;
+        for (int i = 0; i < LOCK_STRIPES; i++) {
+            this.startLocks[i] = new Object();
+        }
     }
 
     /** 当前用户实名状态（复用认购侧同一事实源逻辑）。 */
@@ -59,13 +83,31 @@ public class DemandKycEssSigningService {
     }
 
     /**
-     * 发起实名承诺电子签。
+     * 发起实名承诺电子签（串行化入口）。
+     *
+     * <p>按 {@code openid + 渠道} 取分段锁，在锁内经代理调用 {@link #startInTransaction}，使
+     * 「查 PASS → 查 INIT → 生成合同 → 发起签署 → 落 INIT 提交」整段在临界区内串行完成。
+     * 由此覆盖同一 openid 的并发首发：先到者落 INIT 并提交后释放锁，后到者进入临界区即命中
+     * 「已 PASS」或「未完成 INIT 复用」分支，不再重复生成合同 / 重发签署短信。
+     *
+     * <p>锁在事务外（本方法不加 {@code @Transactional}），保证提交发生在持锁期间；
+     * 跨实例并发仍依赖既有「PASS / INIT 复用」幂等读 + ess 侧合同语义兜底。
+     */
+    public EssSignStartResult start(String openid, String bearer, Long userId,
+                                    String realName, String idCardNo, String phone) {
+        synchronized (lockFor(openid)) {
+            return self().startInTransaction(openid, bearer, userId, realName, idCardNo, phone);
+        }
+    }
+
+    /**
+     * 实名承诺电子签事务体（务必经代理在 {@link #start} 持锁后调用）。
      * <p>已 PASS：直接返回 {@code alreadyPassed=true}，不新建合同、不 supersede 旧 PASS。
      * 未 PASS：经 ess 生成实名承诺合同 + 发起短信短链签署，并落 INIT {@link KycRecord}。
      */
     @Transactional
-    public EssSignStartResult start(String openid, String bearer, Long userId,
-                                    String realName, String idCardNo, String phone) {
+    public EssSignStartResult startInTransaction(String openid, String bearer, Long userId,
+                                                 String realName, String idCardNo, String phone) {
         // 已实名直接返回，避免重复发起签署。
         if (kycRepo.findFirstByOpenidAndStatusOrderByVerifiedAtDesc(openid, KycStatus.PASS).isPresent()) {
             log.info("实名承诺签署：当前 openid 已 PASS，直接返回 openid={}", openid);
@@ -172,6 +214,17 @@ public class DemandKycEssSigningService {
         record.promoteToPass();
         kycRepo.save(record);
         log.info("实名承诺签署完成，KYC 提升为 PASS openid={} certifyId={}", openid, certifyId);
+    }
+
+    /** 取 {@code openid + 渠道} 对应的分段锁对象（固定段数，按 hash 落段）。 */
+    private Object lockFor(String openid) {
+        String key = (openid == null ? "" : openid) + '|' + CHANNEL;
+        return startLocks[Math.floorMod(key.hashCode(), LOCK_STRIPES)];
+    }
+
+    /** 自身代理；Spring 注入时返回事务代理，单元测试直接构造时回退 {@code this}。 */
+    private DemandKycEssSigningService self() {
+        return self != null ? self : this;
     }
 
     private static String certifyId(Long contractId) {
