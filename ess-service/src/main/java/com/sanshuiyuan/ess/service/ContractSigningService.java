@@ -2,7 +2,9 @@ package com.sanshuiyuan.ess.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sanshuiyuan.ess.config.ContractTemplateDataInitializer;
 import com.sanshuiyuan.ess.config.EssFileProperties;
+import com.sanshuiyuan.ess.domain.ContractTemplate;
 import com.sanshuiyuan.ess.domain.Contract;
 import com.sanshuiyuan.ess.domain.Contract.ContractStatus;
 import com.sanshuiyuan.ess.domain.ContractAuditTrail;
@@ -44,10 +46,17 @@ public class ContractSigningService {
     private EssFileProperties fileProperties;
     private ContractPdfRenderService pdfRenderService;
     private ContractGenerationService generationService;
+    /** 用于按合同模板用途生成签署流程名（设备认购 vs 实名承诺书）；未注入时回退设备认购文案。 */
+    private ContractTemplateService templateService;
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     public void setFileProperties(EssFileProperties fileProperties) {
         this.fileProperties = fileProperties;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setTemplateService(ContractTemplateService templateService) {
+        this.templateService = templateService;
     }
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -139,7 +148,7 @@ public class ContractSigningService {
 
         // 调用腾讯电子签创建签署流程
         String contractNoStr = contract.getContractNo();
-        String flowName = "三水元设备合同签署-" + contractNoStr;
+        String flowName = resolveFlowName(contract, contractNoStr);
 
         // 如果传入了真实身份信息，覆盖签署方 JSON 中的脱敏字段
         String signerJson = contract.getSignerInfoJson();
@@ -296,6 +305,27 @@ public class ContractSigningService {
                                         String essFlowId, ContractStatus status) {
             this(contractId, contractNo, essFlowId, status, null);
         }
+    }
+
+    /**
+     * 按合同模板用途生成签署流程名，使设备认购与实名承诺书签署文案隔离。
+     * <p>实名承诺书（模板编码 {@link ContractTemplateDataInitializer#KYC_AUTH_CONTRACT_CODE}）→
+     * 「三水元实名认证与用水需求发布承诺书签署-{contractNo}」；其余（含模板服务未注入的单测场景）
+     * 维持既有「三水元设备合同签署-{contractNo}」。</p>
+     */
+    private String resolveFlowName(Contract contract, String contractNoStr) {
+        if (templateService != null && contract.getTemplateId() != null) {
+            try {
+                ContractTemplate template = templateService.getById(contract.getTemplateId());
+                if (ContractTemplateDataInitializer.KYC_AUTH_CONTRACT_CODE.equals(template.getTemplateCode())) {
+                    return "三水元实名认证与用水需求发布承诺书签署-" + contractNoStr;
+                }
+            } catch (Exception e) {
+                log.warn("解析合同模板用途失败，回退设备合同签署文案 [contractNo={}]: {}",
+                        contractNoStr, e.getMessage());
+            }
+        }
+        return "三水元设备合同签署-" + contractNoStr;
     }
 
     /**

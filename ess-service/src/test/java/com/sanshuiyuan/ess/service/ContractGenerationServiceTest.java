@@ -193,6 +193,34 @@ class ContractGenerationServiceTest {
     }
 
     @Test
+    void generateContract_kycAuthPurpose_usesKycTemplateAndSkipsSnBinding() {
+        // Arrange: KYC_AUTH 用途选用实名承诺书模板，且无设备 SN。
+        ContractTemplate kycTpl = mockTemplate("KYC", "承诺书编号:{{contractNo}} 承诺人:{{userName}}");
+        when(templateService.getLatestVersion(ContractTemplateDataInitializer.KYC_AUTH_CONTRACT_CODE))
+                .thenReturn(kycTpl);
+        when(contractNoGenerator.generate()).thenReturn("CT-KYC-001");
+        when(contractRepository.save(any(Contract.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        GenerateContractRequest request = new GenerateContractRequest(
+                100L, "", null, null, null, "张三", "110101199001011234", "13800138000",
+                ContractGenerationService.ContractPurpose.KYC_AUTH);
+
+        // Act
+        GenerateContractResult result = service.generateContract(request);
+
+        // Assert: 选用 KYC 模板，未取设备主合同模板
+        verify(templateService).getLatestVersion(ContractTemplateDataInitializer.KYC_AUTH_CONTRACT_CODE);
+        verify(templateService, never())
+                .getLatestVersion(ContractTemplateDataInitializer.MAIN_CONTRACT_CODE);
+        // 无 deviceSn → 不建 SN 绑定
+        verify(snBindingRepository, never()).save(any());
+        // 实名承诺正文填充成功（设备占位符缺省为空串不致 NPE）
+        assertTrue(result.mainContractContent().contains("张三"));
+        assertTrue(result.mainContractContent().contains("CT-KYC-001"));
+        assertEquals(Contract.ContractStatus.GENERATED, result.status());
+    }
+
+    @Test
     void generateContract_shouldTransitionStatusDraftToGenerated() {
         // Arrange
         ContractTemplate mainTpl = mockTemplate("MAIN", "test");

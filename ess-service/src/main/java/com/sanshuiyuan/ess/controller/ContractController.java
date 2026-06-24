@@ -85,20 +85,26 @@ public class ContractController {
             throw new org.springframework.web.server.ResponseStatusException(
                     org.springframework.http.HttpStatus.FORBIDDEN, "无法解析当前用户身份");
         }
+        // 合同用途（spec 107）：默认设备认购主合同；KYC_AUTH 为实名承诺书，与设备合同模板隔离。
+        ContractGenerationService.ContractPurpose purpose =
+                ContractGenerationService.ContractPurpose.parse(request.get("contractPurpose"));
+        boolean isKycAuth = purpose == ContractGenerationService.ContractPurpose.KYC_AUTH;
+
         String orderId = request.getOrDefault("orderId", "");
         String deviceSn = request.get("deviceSn");
-        String deviceModel = requireParam(request, "deviceModel");
-        String devicePrice = requireParam(request, "devicePrice");
+        // 设备型号/价格仅设备认购合同必填；实名承诺书不涉及设备，置空即可。
+        String deviceModel = isKycAuth ? request.getOrDefault("deviceModel", "") : requireParam(request, "deviceModel");
+        String devicePrice = isKycAuth ? request.getOrDefault("devicePrice", "") : requireParam(request, "devicePrice");
         String userName = requireParam(request, "userName");
         String idCardNo = requireParam(request, "idCardNo");
         String phone = requireParam(request, "phone");
 
-        log.info("合同生成请求 [userId={}, deviceSn={}, deviceModel={}]",
-                userId, deviceSn, deviceModel);
+        log.info("合同生成请求 [userId={}, purpose={}, deviceSn={}, deviceModel={}]",
+                userId, purpose, deviceSn, isKycAuth ? "(无)" : deviceModel);
 
         GenerateContractRequest genRequest = new GenerateContractRequest(
                 userId, orderId, deviceSn, deviceModel, devicePrice,
-                userName, idCardNo, phone);
+                userName, idCardNo, phone, purpose);
 
         GenerateContractResult result = generationService.generateContract(genRequest);
 
