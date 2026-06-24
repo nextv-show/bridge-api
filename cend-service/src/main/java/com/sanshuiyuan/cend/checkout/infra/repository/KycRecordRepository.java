@@ -21,6 +21,13 @@ public interface KycRecordRepository extends JpaRepository<KycRecord, Long> {
 
     Optional<KycRecord> findFirstByCertifyIdAndOpenidAndStatus(String certifyId, String openid, KycStatus status);
 
+    /**
+     * 实名承诺签署幂等重入：取同一 openid + 渠道下最近一条指定状态（INIT）记录。
+     * 用于未 PASS 时复用未完成的 KYC_AUTH 合同，避免重复生成合同 / 重发签署短信。
+     */
+    Optional<KycRecord> findFirstByOpenidAndChannelAndStatusOrderByIdDesc(
+            String openid, String channel, KycStatus status);
+
     /** 一证一号：同一身份证哈希在「非该 openid」下是否已存在指定状态（PASS）记录。 */
     boolean existsByIdCardHashAndStatusAndOpenidNot(String idCardHash, KycStatus status, String openid);
 

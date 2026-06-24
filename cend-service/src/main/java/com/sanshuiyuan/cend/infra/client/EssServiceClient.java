@@ -54,6 +54,27 @@ public class EssServiceClient {
         return new GenerateResult(contractId, str(resp.get("contractNo"), null), str(resp.get("status"), null));
     }
 
+    /**
+     * 生成「实名认证 / 用水需求发布承诺书」合同 POST /api/c/contracts/generate（contractPurpose=KYC_AUTH）。
+     * <p>与设备认购合同隔离：不传 deviceModel/devicePrice，ess 侧选用 KYC_AUTH_CONTRACT 模板（spec 107）。</p>
+     */
+    public GenerateResult generateKycAuth(String bearer, Long userId,
+                                          String userName, String idCardNo, String phone) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        // userId 仅作参考：ess 以会话 openid 为准解析。为 null 时省略，勿发字符串 "null"。
+        if (userId != null) body.put("userId", String.valueOf(userId));
+        body.put("contractPurpose", "KYC_AUTH");
+        body.put("userName", userName);
+        body.put("idCardNo", idCardNo);
+        body.put("phone", phone);
+        Map<String, Object> resp = post(bearer, "/api/c/contracts/generate", body, "生成实名承诺合同");
+        Long contractId = asLong(resp.get("contractId"));
+        if (contractId == null) {
+            throw new BizException(ErrorCode.INTERNAL_ERROR, str(resp.get("message"), "生成实名承诺合同失败"));
+        }
+        return new GenerateResult(contractId, str(resp.get("contractNo"), null), str(resp.get("status"), null));
+    }
+
     /** 发起签署 POST /api/c/contracts/{id}/initiate-signing（clientType=MINI）。 */
     public String initiateSigning(String bearer, Long contractId, Long userId,
                                   String phone, String realName, String realIdCard) {

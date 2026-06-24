@@ -193,6 +193,75 @@ class ContractGenerationServiceTest {
     }
 
     @Test
+    void generateContract_kycAuthPurpose_usesKycTemplateAndSkipsSnBinding() {
+        // Arrange: KYC_AUTH 用途选用实名承诺书模板，且无设备 SN。
+        ContractTemplate kycTpl = mockTemplate("KYC", "承诺书编号:{{contractNo}} 承诺人:{{userName}}");
+        when(templateService.getLatestVersion(ContractTemplateDataInitializer.KYC_AUTH_CONTRACT_CODE))
+                .thenReturn(kycTpl);
+        when(contractNoGenerator.generate()).thenReturn("CT-KYC-001");
+        when(contractRepository.save(any(Contract.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        GenerateContractRequest request = new GenerateContractRequest(
+                100L, "", null, null, null, "张三", "110101199001011234", "13800138000",
+                ContractGenerationService.ContractPurpose.KYC_AUTH);
+
+        // Act
+        GenerateContractResult result = service.generateContract(request);
+
+        // Assert: 选用 KYC 模板，未取设备主合同模板
+        verify(templateService).getLatestVersion(ContractTemplateDataInitializer.KYC_AUTH_CONTRACT_CODE);
+        verify(templateService, never())
+                .getLatestVersion(ContractTemplateDataInitializer.MAIN_CONTRACT_CODE);
+        // 无 deviceSn → 不建 SN 绑定
+        verify(snBindingRepository, never()).save(any());
+        // 实名承诺正文填充成功（设备占位符缺省为空串不致 NPE）
+        assertTrue(result.mainContractContent().contains("张三"));
+        assertTrue(result.mainContractContent().contains("CT-KYC-001"));
+        assertEquals(Contract.ContractStatus.GENERATED, result.status());
+    }
+
+    @Test
+    void generateContract_kycAuth_ignoresInjectedDeviceFields() {
+        // Arrange: 攻击者绕过 cend，直接对 KYC_AUTH 注入设备/订单字段，企图预占任意 SN。
+        ContractTemplate kycTpl = mockTemplate("KYC",
+                "承诺人:{{userName}} 型号:{{deviceModel}} SN:{{deviceSn}} 价格:{{devicePrice}}");
+        when(templateService.getLatestVersion(ContractTemplateDataInitializer.KYC_AUTH_CONTRACT_CODE))
+                .thenReturn(kycTpl);
+        when(contractNoGenerator.generate()).thenReturn("CT-KYC-INJ");
+        when(contractRepository.save(any(Contract.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        GenerateContractRequest tainted = new GenerateContractRequest(
+                100L, "ORD-HACK", "HACK-SN-001", "HACK-MODEL", "99999",
+                "张三", "110101199001011234", "13800138000",
+                ContractGenerationService.ContractPurpose.KYC_AUTH);
+
+        // Act
+        GenerateContractResult result = service.generateContract(tainted);
+
+        // Assert: 绝不建立 SN 预占位绑定
+        verify(snBindingRepository, never()).save(any());
+
+        // Assert: 合同正文不含任何注入的设备/订单值
+        String content = result.mainContractContent();
+        assertFalse(content.contains("HACK-SN-001"), "deviceSn 注入值不应出现");
+        assertFalse(content.contains("HACK-MODEL"), "deviceModel 注入值不应出现");
+        assertFalse(content.contains("99999"), "devicePrice 注入值不应出现");
+        assertTrue(content.contains("张三"));
+
+        // Assert: 草稿合同的 deviceSn/orderId 被清空，contract_fields_json 不含假设备值
+        ArgumentCaptor<Contract> contractCaptor = ArgumentCaptor.forClass(Contract.class);
+        verify(contractRepository, atLeastOnce()).save(contractCaptor.capture());
+        Contract saved = contractCaptor.getAllValues().get(contractCaptor.getAllValues().size() - 1);
+        assertNull(saved.getDeviceSn(), "KYC_AUTH 草稿 deviceSn 应为 null");
+        assertEquals("", saved.getOrderId(), "KYC_AUTH 草稿 orderId 应被清空");
+        String fieldsJson = saved.getContractFieldsJson();
+        assertNotNull(fieldsJson);
+        assertFalse(fieldsJson.contains("HACK-SN-001"), "字段 JSON 不应含注入 deviceSn");
+        assertFalse(fieldsJson.contains("HACK-MODEL"), "字段 JSON 不应含注入 deviceModel");
+        assertFalse(fieldsJson.contains("99999"), "字段 JSON 不应含注入 devicePrice");
+    }
+
+    @Test
     void generateContract_shouldTransitionStatusDraftToGenerated() {
         // Arrange
         ContractTemplate mainTpl = mockTemplate("MAIN", "test");
