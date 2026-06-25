@@ -4,7 +4,11 @@ import com.sanshuiyuan.user.infra.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.jpa.repository.Query;
 
+import java.io.IOException;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 
@@ -28,6 +32,28 @@ class ReferralRepositoryL3GuardTest {
     private static final List<String> CONDITION_PREFIXES = List.of("findBy", "getBy", "queryBy",
             "readBy", "countBy", "existsBy", "deleteBy", "removeBy", "streamBy");
 
+    /** user-service Flyway 迁移目录的相对路径（相对模块根）。 */
+    private static final Path MIGRATION_RELATIVE =
+            Path.of("src", "main", "resources", "db", "migration");
+
+    /**
+     * 稳定定位 Flyway 迁移目录，<b>不依赖绝对路径</b>。
+     *
+     * <p>Gradle 默认以模块目录（{@code user-service/}）为测试工作目录，但从仓库根（{@code src/api/}）运行时
+     * 工作目录为根。两种情况都以相对路径命中：先试模块相对路径，再试 {@code user-service/} 前缀，最终回退。
+     */
+    private static Path migrationDir() {
+        Path moduleRelative = MIGRATION_RELATIVE;
+        if (Files.isDirectory(moduleRelative)) {
+            return moduleRelative;
+        }
+        Path repoRootRelative = Path.of("user-service").resolve(MIGRATION_RELATIVE);
+        if (Files.isDirectory(repoRootRelative)) {
+            return repoRootRelative;
+        }
+        return moduleRelative;
+    }
+
     @Test
     void userRepository_hasNoGrandInviterQueryMethod() {
         assertNoGrandInviterQueryCondition(UserRepository.class);
@@ -42,6 +68,39 @@ class ReferralRepositoryL3GuardTest {
                 .toList();
         assertThat(declared).containsExactlyInAnyOrder(
                 "findByUnionid", "findByOpenidWx", "findByOpenidApp", "findByInviterId");
+    }
+
+    /**
+     * 迁移层守卫：V004 历史迁移允许出现 {@code CREATE INDEX idx_grand_inviter}（历史迁移不可改），
+     * 但必须由后续迁移 {@code V005__drop_grand_inviter_index.sql} 删除该索引，
+     * 从 DB 层堵死「按 grand_inviter_id 形成 L3+ 查询能力」的隐患。
+     */
+    @Test
+    void migration_dropsGrandInviterIndexAfterV004() throws IOException {
+        Path migrationDir = migrationDir();
+        // V004 历史迁移：允许存在 idx_grand_inviter 创建语句（历史迁移不可修改，避免 Flyway checksum 漂移）。
+        Path v004 = migrationDir.resolve("V004__add_referral_chain.sql");
+        assertThat(Files.exists(v004))
+                .as("历史迁移 %s 必须存在", v004)
+                .isTrue();
+        String v004Sql = Files.readString(v004, StandardCharsets.UTF_8).toLowerCase();
+        assertThat(v004Sql)
+                .as("V004 作为历史迁移，仍保留其原始的 idx_grand_inviter 创建语句（不得回改历史迁移）")
+                .contains("create index idx_grand_inviter");
+
+        // V005 后续迁移：必须删除 idx_grand_inviter，且不得重新创建 grand_inviter 索引。
+        Path v005 = migrationDir.resolve("V005__drop_grand_inviter_index.sql");
+        assertThat(Files.exists(v005))
+                .as("必须存在后续迁移 %s 以删除旧推荐链 grand_inviter 索引", v005)
+                .isTrue();
+        String v005Sql = Files.readString(v005, StandardCharsets.UTF_8).toLowerCase();
+        assertThat(v005Sql)
+                .as("V005 必须删除 idx_grand_inviter 索引（DB 层堵死 L3+ 查询能力）")
+                .contains("drop index idx_grand_inviter on users");
+        assertThat(v005Sql)
+                .as("V005 不得重新创建 grand_inviter 索引")
+                .doesNotContain("create index idx_grand_inviter")
+                .doesNotContain("create index idx_grandinviter");
     }
 
     private void assertNoGrandInviterQueryCondition(Class<?> repository) {

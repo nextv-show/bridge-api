@@ -15,7 +15,11 @@ import java.util.Optional;
  * （如 {@code findByGrandInviterId}、批量上溯式 {@code findByInviterIdIn} 递归等）。
  * {@code grand_inviter_id} 仅作单条记录的一次性快照读取，绝不用于向上递归。
  *
- * <p>该约束由 {@code ReferralRepositoryL3GuardTest} 以反射断言守卫，新增查询方法前请先阅读该测试。
+ * <p><b>DB 层物理隔离</b>：V004 曾为旧推荐链创建 {@code idx_grand_inviter}，已由
+ * {@code V005__drop_grand_inviter_index.sql} 删除；{@code grand_inviter_id} 在 DB 层不再有索引，
+ * 仅作单条快照列，不作为查询入口，从存储层进一步堵死 L3+ 链路追溯能力。
+ *
+ * <p>该约束由 {@code ReferralRepositoryL3GuardTest} 以反射 + 迁移文件断言守卫，新增查询方法前请先阅读该测试。
  */
 public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByUnionid(String unionid);
