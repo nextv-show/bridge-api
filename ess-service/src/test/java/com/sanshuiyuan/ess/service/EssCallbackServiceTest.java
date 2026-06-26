@@ -83,6 +83,18 @@ class EssCallbackServiceTest {
     }
 
     @Test
+    void handleCallback_terminalRecord_skipsQuery() {
+        // 本地已是终态：无需再查单，幂等返回，避免完成后被反复回调刷查单。
+        EssFlowRecord record = EssFlowRecord.create("c-001", "[{}]");
+        record.assignFlowId("flow-001");
+        record.complete("{}"); // → COMPLETED（终态）
+        when(flowRecordRepository.findByEssFlowId("flow-001")).thenReturn(Optional.of(record));
+
+        assertTrue(service.handleCallback("{\"FlowId\":\"flow-001\"}", null, null).success());
+        verify(essContractService, never()).describeFlowStatus(any());
+    }
+
+    @Test
     void handleCallback_noFlowId_shouldIgnore() {
         var result = service.handleCallback("{\"EventType\":\"Test\"}", null, null);
         assertFalse(result.success());

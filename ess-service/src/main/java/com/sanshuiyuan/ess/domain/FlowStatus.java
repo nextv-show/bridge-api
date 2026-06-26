@@ -30,5 +30,11 @@ public enum FlowStatus {
     /** 已过期 */
     EXPIRED,
     /** 异常 */
-    ERROR
+    ERROR;
+
+    /** 是否为终态（不会再变化）：完成/取消/拒绝/过期/异常。 */
+    public boolean isTerminal() {
+        return this == COMPLETED || this == CANCELLED || this == REJECTED
+                || this == EXPIRED || this == ERROR;
+    }
 }

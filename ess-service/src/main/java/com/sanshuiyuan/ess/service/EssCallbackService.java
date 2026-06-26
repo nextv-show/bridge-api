@@ -60,7 +60,7 @@ public class EssCallbackService {
      * 对腾讯的 DescribeFlowInfo」刷配额/占线程。同一 FlowId 在窗口内只放行一次权威查单——同时天然
      * 合并腾讯自身对同一事件的重试。窗口外（状态可能又变）放行下一次。
      */
-    private static final long QUERY_THROTTLE_MS = 30_000L;
+    private static final long QUERY_THROTTLE_MS = 10_000L;
     private final java.util.concurrent.ConcurrentHashMap<String, Long> lastQueryAtMs =
             new java.util.concurrent.ConcurrentHashMap<>();
 
@@ -114,7 +114,14 @@ public class EssCallbackService {
                 return CallbackResult.ignored("流程不存在: " + flowId);
             }
 
-            // 节流：同一 FlowId 窗口内不重复触发对腾讯的权威查单（防滥用刷配额 + 合并腾讯重试）。
+            // 已终态：状态不会再变，所有后续回调（腾讯重试或滥用）无需再查单，幂等快速返回。
+            // 这覆盖了「完成后被反复回调」的绝大多数场景，且绝不会压掉一个真实的完成回调。
+            if (record.getFlowStatus() != null && record.getFlowStatus().isTerminal()) {
+                return CallbackResult.success(record.getContractId(), flowId, extractEventType(callbackData));
+            }
+
+            // 非终态：按 FlowId 短窗口节流，防滥用刷配额/占线程并合并腾讯对同一事件的秒级重试。
+            // 被节流跳过的回调由 ≤2min 主动对账查单兜底——最坏退化到「无回调」基线，不丢正确性。
             if (recentlyQueried(flowId)) {
                 log.info("回调查单节流命中，跳过本次 [flowId={}]", flowId);
                 return CallbackResult.success(record.getContractId(), flowId, extractEventType(callbackData));
