@@ -454,6 +454,10 @@ public class EssContractService {
                                                                        boolean smsNotify) {
         java.util.List<TreeMap<String, Object>> approvers = buildApprovers(signerInfoJson, smsNotify);
         for (TreeMap<String, Object> approver : approvers) {
+            // CreateFlowByFiles 不接受 approver 级 RecipientId（那是模板模式 CreateFlow 用来映射模板签署角色的字段）。
+            // 文件模式靠关键字定位、SignComponents 直接挂在 approver 上，无需 RecipientId；
+            // 残留它会触发 [UnknownParameter] The parameter `Approvers.N.RecipientId` is not recognized。
+            approver.remove("RecipientId");
             java.util.List<TreeMap<String, Object>> signComponents = new java.util.ArrayList<>();
             // 甲方签名（及可选签署日期）：用签名一组定位参数。
             signComponents.add(buildSignComponent("SIGN_SIGNATURE", fp.signatureKeyword(),
@@ -472,7 +476,7 @@ public class EssContractService {
             company.put("ApproverType", 0); // 0=企业
             company.put("OrganizationName", fp.companyName());
             company.put("ApproverName", fp.companyName());
-            company.put("RecipientId", properties.operatorId());
+            // 同上：文件模式企业签署方不带 RecipientId，否则 Approvers.1.RecipientId 报 UnknownParameter。
             company.put("NotifyType", "NONE");
             company.put("SignComponents", java.util.List.of(
                     buildSignComponent("SIGN_SEAL", fp.sealKeyword(),
