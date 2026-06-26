@@ -97,16 +97,20 @@ class CertificateServiceTest {
     }
 
     @Test
-    void step2_failed_clearsReportIdAndMarksFailed() {
+    void step2_failed_clearsReportIdAndMarksFailed_withoutRollback() {
+        when(contract.getId()).thenReturn(1L); // 失败分支写审计用 getId
         when(contract.getCertificateStatus()).thenReturn(CertificateStatus.APPLYING);
         when(contract.getEvidenceReportId()).thenReturn("report-123");
         ObjectNode resp = om.createObjectNode();
         resp.put("Status", "EvidenceStatusFailed");
         when(essApiClient.invoke(eq("DescribeFlowEvidenceReport"), any())).thenReturn(resp);
 
-        assertThrows(RuntimeException.class, () -> service.certifyContract(1L));
+        // 不抛异常（否则 @Transactional 回滚清理）：正常返回 FAILED 并落库。
+        var result = service.certifyContract(1L);
 
+        assertEquals("FAILED", result.status());
         verify(contract).setEvidenceReportId(null); // 清掉失败报告ID以便重提
         verify(contract).markCertificateFailed();
+        verify(contractRepository).save(contract);  // 清理已落库（事务可提交）
     }
 }

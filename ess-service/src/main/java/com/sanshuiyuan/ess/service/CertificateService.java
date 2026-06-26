@@ -143,11 +143,19 @@ public class CertificateService {
                         contract.getEvidenceReportId(), url);
             }
             case "EvidenceStatusFailed" -> {
-                // 清掉失败的报告ID，下一轮由 PENDING/FAILED 扫描重新提交一个全新任务。
-                // 抛出后由外层 catch 统一 markCertificateFailed + save（持久化清空的 reportId）+ 审计。
+                // 不抛异常：certifyContract 是 @Transactional，抛出会回滚整笔，导致清理不落库、
+                // 重试永远卡在同一个失败 reportId。这里落库清理后正常返回，下轮由 FAILED 扫描
+                // （reportId 已空）走步骤1重新提交一个全新出证任务。
                 String failedReportId = contract.getEvidenceReportId();
+                log.warn("出证报告生成失败，将重新提交 [contractNo={}, reportId={}]",
+                        contract.getContractNo(), failedReportId);
                 contract.setEvidenceReportId(null);
-                throw new IllegalStateException("出证报告生成失败 reportId=" + failedReportId);
+                contract.markCertificateFailed();
+                contractRepository.save(contract);
+                auditTrailService.recordSystemEvent(contract.getId(),
+                        ContractAuditTrail.Action.CERTIFY_FAIL,
+                        String.format("{\"failedReportId\":\"%s\"}", failedReportId));
+                return CertificateResult.failed(contract.getId(), contract.getContractNo());
             }
             default -> {
                 // EvidenceStatusExecuting（或未知）：仍在生成，保持 APPLYING，等下一轮重试查询。
@@ -221,6 +229,12 @@ public class CertificateService {
         public static CertificateResult applying(Long contractId, String contractNo) {
             return new CertificateResult(false, contractId, contractNo,
                     null, null, "APPLYING", null);
+        }
+
+        /** 出证报告生成失败（已清 reportId，下轮重提）。 */
+        public static CertificateResult failed(Long contractId, String contractNo) {
+            return new CertificateResult(false, contractId, contractNo,
+                    null, null, "FAILED", null);
         }
     }
 }
