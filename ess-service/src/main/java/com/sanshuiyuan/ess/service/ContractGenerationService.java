@@ -237,8 +237,10 @@ public class ContractGenerationService {
         fields.put("deviceModel", nullToEmpty(request.deviceModel()));
         fields.put("deviceSn", request.deviceSn() != null ? request.deviceSn() : "待分配");
         fields.put("devicePrice", nullToEmpty(request.devicePrice()));
-        fields.put("legalRepresentative", "");
-        fields.put("companyAddress", "");
+        // 乙方（平台运营方·天津源创智能科技有限公司）法定代表人与联系地址。
+        // 为稳定的工商登记事实，随合同正文一同固化进 contractFieldsJson；仅对此后新生成的合同生效。
+        fields.put("legalRepresentative", "秦振");
+        fields.put("companyAddress", "天津市滨海新区江西大厦 913 室");
         return fields;
     }
 

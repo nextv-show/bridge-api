@@ -19,15 +19,17 @@ ess:
     signature-keyword: ${ESS_FILE_SIGN_KEYWORD:电子签字}
     date-keyword: ${ESS_FILE_DATE_KEYWORD:}
     company-seal: ${ESS_FILE_COMPANY_SEAL:false}
-    seal-keyword: ${ESS_FILE_SEAL_KEYWORD:公章}
+    seal-keyword: ${ESS_FILE_SEAL_KEYWORD:盖章}
     company-name: ${ESS_FILE_COMPANY_NAME:天津源创智能科技有限公司}
     company-seal-id: ${ESS_FILE_COMPANY_SEAL_ID:}
     relative-location: ${ESS_FILE_RELATIVE_LOCATION:Right}
-    seal-relative-location: ${ESS_FILE_SEAL_RELATIVE_LOCATION:Below}
+    offset-x: ${ESS_FILE_OFFSET_X:-30}
+    offset-y: ${ESS_FILE_OFFSET_Y:0}
+    seal-relative-location: ${ESS_FILE_SEAL_RELATIVE_LOCATION:Middle}
     seal-width: ${ESS_FILE_SEAL_WIDTH:100}
     seal-height: ${ESS_FILE_SEAL_HEIGHT:100}
     seal-offset-x: ${ESS_FILE_SEAL_OFFSET_X:0}
-    seal-offset-y: ${ESS_FILE_SEAL_OFFSET_Y:5}
+    seal-offset-y: ${ESS_FILE_SEAL_OFFSET_Y:0}
 
 # 合同 PDF 渲染（文件模式）。生产服务器须装【单文件 TrueType(.ttf)】CJK 字体。
 # 渲染器无法加载 .ttc 字体集（如 fonts-noto-cjk），也无法嵌入 CFF/OTF（Noto .otf 会渲染抛 NPE）。

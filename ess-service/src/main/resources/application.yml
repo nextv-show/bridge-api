@@ -55,18 +55,20 @@ ess:
     signature-keyword: ${ESS_FILE_SIGN_KEYWORD:电子签字}
     date-keyword: ${ESS_FILE_DATE_KEYWORD:}
     company-seal: ${ESS_FILE_COMPANY_SEAL:false}
-    seal-keyword: ${ESS_FILE_SEAL_KEYWORD:公章}
+    seal-keyword: ${ESS_FILE_SEAL_KEYWORD:盖章}
     company-name: ${ESS_FILE_COMPANY_NAME:天津源创智能科技有限公司}
     # 乙方自动签印章 ID（ApproverType=3 时 SIGN_SEAL 的 ComponentValue，必须为已授权印章Id）
     company-seal-id: ${ESS_FILE_COMPANY_SEAL_ID:}
-    # 甲方签名控件定位（合同左栏较宽，Right 不溢出）
+    # 甲方签名控件定位（合同左栏较宽，Right 不溢出）；offset-x 负值使签名左移压回「电子签字：」区域
     relative-location: ${ESS_FILE_RELATIVE_LOCATION:Right}
-    # 乙方签章控件独立定位：公章靠右边，Right 会溢出页面，默认盖在「公章」标签下方
-    seal-relative-location: ${ESS_FILE_SEAL_RELATIVE_LOCATION:Below}
+    offset-x: ${ESS_FILE_OFFSET_X:-30}
+    offset-y: ${ESS_FILE_OFFSET_Y:0}
+    # 乙方签章控件独立定位：Middle 使印章中心压在「盖章」关键字上
+    seal-relative-location: ${ESS_FILE_SEAL_RELATIVE_LOCATION:Middle}
     seal-width: ${ESS_FILE_SEAL_WIDTH:100}
     seal-height: ${ESS_FILE_SEAL_HEIGHT:100}
     seal-offset-x: ${ESS_FILE_SEAL_OFFSET_X:0}
-    seal-offset-y: ${ESS_FILE_SEAL_OFFSET_Y:5}
+    seal-offset-y: ${ESS_FILE_SEAL_OFFSET_Y:0}
 
 # 合同 PDF 渲染（文件模式）。中文合同必须有 CJK 字体，否则正文显示为方块。
 contract:
