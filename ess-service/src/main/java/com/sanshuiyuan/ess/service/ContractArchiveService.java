@@ -41,6 +41,10 @@ public class ContractArchiveService {
     private final CertificateService certificateService;
     private final AuditTrailService auditTrailService;
 
+    /** 出证（存证报告）总开关，默认关闭。关闭时归档后不再标记待出证，不进入出证队列。 */
+    @org.springframework.beans.factory.annotation.Value("${ess.certificate.enabled:false}")
+    private boolean certificateEnabled;
+
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .followRedirects(HttpClient.Redirect.NORMAL)
@@ -130,14 +134,16 @@ public class ContractArchiveService {
                     com.sanshuiyuan.ess.domain.ContractAuditTrail.Action.ARCHIVE,
                     String.format("{\"sha256\":\"%s\",\"ossUrl\":\"%s\"}", sha256Hash, ossUrl));
 
-            // 7. 归档完成后自动触发待出证标记
-            try {
-                contract.markPendingCertificate();
-                contractRepository.save(contract);
-                log.info("合同已标记待出证 [contractNo={}]", contract.getContractNo());
-            } catch (Exception e) {
-                log.warn("标记待出证失败，不影响归档结果 [contractNo={}]: {}",
-                        contract.getContractNo(), e.getMessage());
+            // 7. 归档完成后标记待出证（仅在出证启用时）。出证为付费服务，默认关闭→不入队、不产生成本。
+            if (certificateEnabled) {
+                try {
+                    contract.markPendingCertificate();
+                    contractRepository.save(contract);
+                    log.info("合同已标记待出证 [contractNo={}]", contract.getContractNo());
+                } catch (Exception e) {
+                    log.warn("标记待出证失败，不影响归档结果 [contractNo={}]: {}",
+                            contract.getContractNo(), e.getMessage());
+                }
             }
 
             return ArchiveResult.success(contractId, contract.getContractNo(),

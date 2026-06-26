@@ -41,6 +41,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(ContractAdminController.class)
 @Import(SecurityConfig.class)
 @ExtendWith(MockitoExtension.class)
+@org.springframework.test.context.TestPropertySource(properties = "ess.certificate.enabled=true")
 class ContractAdminControllerTest {
 
     @org.springframework.beans.factory.annotation.Autowired

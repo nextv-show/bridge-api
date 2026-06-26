@@ -8,6 +8,9 @@ ess:
   connect-timeout-ms: 5000
   read-timeout-ms: 15000
   max-retries: 3
+  # 出证（存证报告）默认关闭：付费服务，确认弃用、不增加运营成本。
+  certificate:
+    enabled: ${ESS_CERTIFICATE_ENABLED:false}
   # 文件模式发起（CreateFlowByFiles）。默认仍关闭，确认腾讯电子签账号侧印章/静默签后再
   # 置 ESS_FILE_MODE_ENABLED=true 灰度开启。生产文件上传走正式域名 file.ess.tencent.cn。
   file:
