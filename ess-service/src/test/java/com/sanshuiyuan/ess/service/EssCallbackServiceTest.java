@@ -3,6 +3,7 @@ package com.sanshuiyuan.ess.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sanshuiyuan.ess.config.EssProperties;
 import com.sanshuiyuan.ess.domain.EssFlowRecord;
+import com.sanshuiyuan.ess.domain.FlowStatus;
 import com.sanshuiyuan.ess.infra.repository.EssFlowRecordRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -63,6 +64,22 @@ class EssCallbackServiceTest {
         assertTrue(service.handleCallback(body, null, null).success()); // 第二次命中节流
 
         verify(essContractService, times(1)).describeFlowStatus("c-001");
+    }
+
+    @Test
+    void handleCallback_queryFailure_notThrottled_allowsRetry() {
+        // 首次查单瞬时失败：不应记节流，腾讯重试应再次查单（不丢同步）。
+        EssFlowRecord record = EssFlowRecord.create("c-001", "[{}]");
+        record.assignFlowId("flow-001");
+        when(flowRecordRepository.findByEssFlowId("flow-001")).thenReturn(Optional.of(record));
+        doThrow(new RuntimeException("transient")).doReturn(FlowStatus.COMPLETED)
+                .when(essContractService).describeFlowStatus("c-001");
+        String body = "{\"FlowId\":\"flow-001\"}";
+
+        assertThrows(RuntimeException.class, () -> service.handleCallback(body, null, null));
+        assertTrue(service.handleCallback(body, null, null).success()); // 重试再次查单
+
+        verify(essContractService, times(2)).describeFlowStatus("c-001");
     }
 
     @Test

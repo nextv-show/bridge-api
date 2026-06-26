@@ -64,13 +64,17 @@ public class EssCallbackService {
     private final java.util.concurrent.ConcurrentHashMap<String, Long> lastQueryAtMs =
             new java.util.concurrent.ConcurrentHashMap<>();
 
-    private boolean queryThrottled(String flowId) {
-        long now = System.currentTimeMillis();
+    private boolean recentlyQueried(String flowId) {
+        Long prev = lastQueryAtMs.get(flowId);
+        return prev != null && (System.currentTimeMillis() - prev) < QUERY_THROTTLE_MS;
+    }
+
+    /** 仅在权威查单成功后记录，确保查单失败时腾讯重试不被节流（不丢同步）。 */
+    private void markQueried(String flowId) {
         if (lastQueryAtMs.size() > 10_000) {
             lastQueryAtMs.clear(); // 粗粒度防膨胀，回调量极低，清空无碍
         }
-        Long prev = lastQueryAtMs.put(flowId, now);
-        return prev != null && (now - prev) < QUERY_THROTTLE_MS;
+        lastQueryAtMs.put(flowId, System.currentTimeMillis());
     }
 
     /**
@@ -111,7 +115,7 @@ public class EssCallbackService {
             }
 
             // 节流：同一 FlowId 窗口内不重复触发对腾讯的权威查单（防滥用刷配额 + 合并腾讯重试）。
-            if (queryThrottled(flowId)) {
+            if (recentlyQueried(flowId)) {
                 log.info("回调查单节流命中，跳过本次 [flowId={}]", flowId);
                 return CallbackResult.success(record.getContractId(), flowId, extractEventType(callbackData));
             }
@@ -127,6 +131,8 @@ public class EssCallbackService {
                     completionBridge.bridgeToSigned(record.getContractId(), extractPdfHash(callbackData));
                 }
             }
+            // 只在查单成功（未抛异常）后记录节流时间戳，失败则不节流，允许腾讯重试再查。
+            markQueried(flowId);
 
             log.info("ESS 回调已触发权威查单 [contractId={}, flowId={}, event={}]",
                     record.getContractId(), flowId, eventType);
