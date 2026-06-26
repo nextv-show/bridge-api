@@ -56,6 +56,24 @@ public class EssCallbackService {
     }
 
     /**
+     * 按 FlowId 的查单节流：回调端点是公开 permitAll，去掉验签后需防止「拿已知 FlowId 反复触发
+     * 对腾讯的 DescribeFlowInfo」刷配额/占线程。同一 FlowId 在窗口内只放行一次权威查单——同时天然
+     * 合并腾讯自身对同一事件的重试。窗口外（状态可能又变）放行下一次。
+     */
+    private static final long QUERY_THROTTLE_MS = 30_000L;
+    private final java.util.concurrent.ConcurrentHashMap<String, Long> lastQueryAtMs =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    private boolean queryThrottled(String flowId) {
+        long now = System.currentTimeMillis();
+        if (lastQueryAtMs.size() > 10_000) {
+            lastQueryAtMs.clear(); // 粗粒度防膨胀，回调量极低，清空无碍
+        }
+        Long prev = lastQueryAtMs.put(flowId, now);
+        return prev != null && (now - prev) < QUERY_THROTTLE_MS;
+    }
+
+    /**
      * 处理 ESS Webhook 回调。
      *
      * @param requestBody   原始请求体
@@ -90,6 +108,12 @@ public class EssCallbackService {
             if (record == null) {
                 log.warn("未找到流程记录 [flowId={}]，忽略回调", flowId);
                 return CallbackResult.ignored("流程不存在: " + flowId);
+            }
+
+            // 节流：同一 FlowId 窗口内不重复触发对腾讯的权威查单（防滥用刷配额 + 合并腾讯重试）。
+            if (queryThrottled(flowId)) {
+                log.info("回调查单节流命中，跳过本次 [flowId={}]", flowId);
+                return CallbackResult.success(record.getContractId(), flowId, extractEventType(callbackData));
             }
 
             // 权威同步：以服务端查单为准（内部更新 EssFlowRecord + COMPLETED 时桥接 Contract→SIGNED）。

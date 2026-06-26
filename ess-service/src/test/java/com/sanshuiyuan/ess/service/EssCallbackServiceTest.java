@@ -52,6 +52,20 @@ class EssCallbackServiceTest {
     }
 
     @Test
+    void handleCallback_sameFlowIdWithinWindow_throttlesSecondQuery() {
+        // 同一 FlowId 连续两次回调（如腾讯重试）：只放行一次权威查单。
+        EssFlowRecord record = EssFlowRecord.create("c-001", "[{}]");
+        record.assignFlowId("flow-001");
+        when(flowRecordRepository.findByEssFlowId("flow-001")).thenReturn(Optional.of(record));
+        String body = "{\"FlowId\":\"flow-001\"}";
+
+        assertTrue(service.handleCallback(body, null, null).success());
+        assertTrue(service.handleCallback(body, null, null).success()); // 第二次命中节流
+
+        verify(essContractService, times(1)).describeFlowStatus("c-001");
+    }
+
+    @Test
     void handleCallback_noFlowId_shouldIgnore() {
         var result = service.handleCallback("{\"EventType\":\"Test\"}", null, null);
         assertFalse(result.success());
