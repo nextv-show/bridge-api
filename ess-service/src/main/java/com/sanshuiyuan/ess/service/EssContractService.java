@@ -164,6 +164,12 @@ public class EssContractService {
     public EssFlowRecord createFlowByFiles(String contractId, String flowName, String signersJson,
                                             byte[] pdfBytes, String fileName, boolean smsNotify) {
         EssFileProperties fp = requireFileProperties();
+        // Fail-fast：启用乙方企业自动盖章(ApproverType=3)却没配印章ID，腾讯会在 CreateFlowByFiles
+        // 阶段以「未指定印章」拒绝——提前在上传 PDF 前拦下，避免无效请求与误导性后置失败。
+        if (Boolean.TRUE.equals(fp.companySeal()) && (fp.companySealId() == null || fp.companySealId().isBlank())) {
+            throw new EssFlowException(contractId,
+                    "已启用乙方企业自动盖章(ess.file.company-seal=true)但未配置印章ID(ESS_FILE_COMPANY_SEAL_ID)，无法自动签");
+        }
         flowRecordRepository.findByContractId(contractId).ifPresent(existing -> {
             throw new EssFlowException(contractId, "合同已存在签署流程，flowId=" + existing.getEssFlowId());
         });

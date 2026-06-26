@@ -156,6 +156,20 @@ class EssContractServiceTest {
     }
 
     @Test
+    void createFlowByFiles_companySealEnabledButNoSealId_failsFastBeforeUpload() {
+        // companySeal=true 但印章ID缺失（companySealId=null）
+        service.setFileProperties(new EssFileProperties(
+                true, "file.test.ess.tencent.cn", "电子签字", "", true,
+                "公章", "天津源创智能科技有限公司", "Right", 120.0, 44.0, 5.0, 0.0,
+                "Below", 100.0, 100.0, 0.0, 5.0, null));
+
+        assertThrows(RuntimeException.class, () -> service.createFlowByFiles("c-noseal", "合同",
+                "[{\"userName\":\"张三\",\"phone\":\"13800138000\"}]", new byte[]{1}, "x.pdf", true));
+        // 上传前就拦下：UploadFiles 不应被调用
+        verify(apiClient, never()).invoke(eq("UploadFiles"), any(), anyString());
+    }
+
+    @Test
     void createFlowByFiles_withoutFilePropertiesConfigured_shouldThrow() {
         // 未注入 EssFileProperties → 文件模式不可用
         assertThrows(IllegalStateException.class, () ->
