@@ -3,10 +3,13 @@ package com.sanshuiyuan.ess.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sanshuiyuan.ess.config.EssProperties;
+import com.sanshuiyuan.ess.config.OssProperties;
 import com.sanshuiyuan.ess.domain.Contract;
 import com.sanshuiyuan.ess.domain.Contract.CertificateStatus;
 import com.sanshuiyuan.ess.domain.Contract.ContractStatus;
 import com.sanshuiyuan.ess.infra.client.EssApiClient;
+import com.sanshuiyuan.ess.infra.client.OssStorageClient;
+import com.sanshuiyuan.ess.infra.client.TencentCloudStorageClient;
 import com.sanshuiyuan.ess.infra.repository.ContractRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,6 +31,8 @@ class CertificateServiceTest {
     @Mock private ContractRepository contractRepository;
     @Mock private EssApiClient essApiClient;
     @Mock private AuditTrailService auditTrailService;
+    @Mock private OssStorageClient ossStorageClient;
+    @Mock private TencentCloudStorageClient tencentCloudStorageClient;
     @Mock private Contract contract;
     private final ObjectMapper om = new ObjectMapper();
     private CertificateService service;
@@ -36,7 +41,9 @@ class CertificateServiceTest {
     void setUp() {
         EssProperties props = new EssProperties("sid", "skey", "op-001", "corp-001",
                 null, null, "ap-guangzhou", "ess.tencentcloudapi.com", 5000, 15000, 3, true, "3");
-        service = new CertificateService(contractRepository, essApiClient, props, auditTrailService);
+        OssProperties oss = new OssProperties(null, null, null, null, "contracts/");
+        service = new CertificateService(contractRepository, essApiClient, props, auditTrailService,
+                ossStorageClient, tencentCloudStorageClient, oss);
         when(contractRepository.findById(1L)).thenReturn(Optional.of(contract));
         when(contract.getStatus()).thenReturn(ContractStatus.ARCHIVED);
         when(contract.getContractNo()).thenReturn("CT-x");
@@ -66,19 +73,26 @@ class CertificateServiceTest {
     }
 
     @Test
-    void step2_success_completesCertificate() {
-        when(contract.getId()).thenReturn(1L); // 成功路径写审计用 getId
+    void step2_success_archivesReportToDurableStorageThenCompletes() {
+        when(contract.getId()).thenReturn(1L);
         when(contract.getCertificateStatus()).thenReturn(CertificateStatus.APPLYING);
         when(contract.getEvidenceReportId()).thenReturn("report-123");
         ObjectNode resp = om.createObjectNode();
         resp.put("Status", "EvidenceStatusSuccess");
-        resp.put("ReportUrl", "https://ess/report.pdf");
+        resp.put("ReportUrl", "https://ess/short-lived.pdf"); // 短效链接
         when(essApiClient.invoke(eq("DescribeFlowEvidenceReport"), any())).thenReturn(resp);
 
-        var result = service.certifyContract(1L);
+        CertificateService spy = spy(service);
+        doReturn("PDFDATA".getBytes()).when(spy).downloadBytes("https://ess/short-lived.pdf");
+        String durable = "https://oss.sanshuiyuan.com/contracts/CT-x-evidence-report.pdf";
+        when(ossStorageClient.upload(anyString(), any(byte[].class), anyString())).thenReturn(durable);
 
-        verify(contract).completeCertificate("report-123", "https://ess/report.pdf");
+        var result = spy.certifyContract(1L);
+
         assertTrue(result.success());
+        verify(tencentCloudStorageClient).upload(anyString(), any(byte[].class), anyString());
+        // 短效 ReportUrl 不入库，存的是持久 OSS URL。
+        verify(contract).completeCertificate("report-123", durable);
     }
 
     @Test

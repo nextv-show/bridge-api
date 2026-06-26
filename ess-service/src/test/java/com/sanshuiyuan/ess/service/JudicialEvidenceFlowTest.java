@@ -120,7 +120,8 @@ class JudicialEvidenceFlowTest {
 
         // ===== 8. 查询出证结果 =====
         CertificateService certificateService = new CertificateService(
-                contractRepository, essApiClient, essProperties, auditTrailService);
+                contractRepository, essApiClient, essProperties, auditTrailService,
+                null, null, null); // 本用例不走出证归档路径
 
         // 模拟 repository 返回已出证合同
         when(contractRepository.findById(1L)).thenReturn(Optional.of(contract));
@@ -164,7 +165,8 @@ class JudicialEvidenceFlowTest {
     @Test
     void certifyNonArchivedContract_shouldFail() {
         CertificateService certificateService = new CertificateService(
-                contractRepository, essApiClient, essProperties, auditTrailService);
+                contractRepository, essApiClient, essProperties, auditTrailService,
+                null, null, null); // 本用例不走出证归档路径
 
         Contract signedContract = Contract.createDraft("CT-NOTARCH-001", 1L, 300L, "ORD-NA", "SN-NA");
         signedContract.markGenerated("{}", "{}");

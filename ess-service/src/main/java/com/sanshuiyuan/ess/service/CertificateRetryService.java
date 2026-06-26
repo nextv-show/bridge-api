@@ -64,12 +64,17 @@ public class CertificateRetryService {
 
         for (Contract contract : pendingContracts) {
             try {
-                certificateService.certifyContract(contract.getId());
-                log.info("出证重试成功 [contractNo={}]", contract.getContractNo());
+                CertificateService.CertificateResult r = certificateService.certifyContract(contract.getId());
+                // 两步异步：FAILED 由 certifyContract 内部落库且不抛异常，需在此显式识别并告警，
+                // 否则持续失败会被当作"成功"而静默重提，永不触达告警。
+                if ("FAILED".equals(r.status())) {
+                    log.warn("出证重试返回失败状态 [contractNo={}]", contract.getContractNo());
+                    checkAndAlert(contract);
+                } else {
+                    log.info("出证重试已推进 [contractNo={}, status={}]", contract.getContractNo(), r.status());
+                }
             } catch (Exception e) {
-                log.error("出证重试失败 [contractNo={}]: {}", contract.getContractNo(), e.getMessage());
-
-                // 检查是否需要告警
+                log.error("出证重试异常 [contractNo={}]: {}", contract.getContractNo(), e.getMessage());
                 checkAndAlert(contract);
             }
         }

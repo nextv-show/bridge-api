@@ -2,17 +2,27 @@ package com.sanshuiyuan.ess.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.sanshuiyuan.ess.config.EssProperties;
+import com.sanshuiyuan.ess.config.OssProperties;
 import com.sanshuiyuan.ess.domain.Contract;
 import com.sanshuiyuan.ess.domain.Contract.CertificateStatus;
 import com.sanshuiyuan.ess.domain.Contract.ContractStatus;
 import com.sanshuiyuan.ess.domain.ContractAuditTrail;
 import com.sanshuiyuan.ess.infra.client.EssApiClient;
+import com.sanshuiyuan.ess.infra.client.OssStorageClient;
+import com.sanshuiyuan.ess.infra.client.TencentCloudStorageClient;
 import com.sanshuiyuan.ess.infra.repository.ContractRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.TreeMap;
 
 /**
@@ -34,19 +44,32 @@ public class CertificateService {
 
     private static final Logger log = LoggerFactory.getLogger(CertificateService.class);
 
+    private static final String APPLICATION_PDF = "application/pdf";
+
     private final ContractRepository contractRepository;
     private final EssApiClient essApiClient;
     private final EssProperties properties;
     private final AuditTrailService auditTrailService;
+    private final OssStorageClient ossStorageClient;
+    private final TencentCloudStorageClient tencentCloudStorageClient;
+    private final OssProperties ossProperties;
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(10)).build();
 
     public CertificateService(ContractRepository contractRepository,
                                EssApiClient essApiClient,
                                EssProperties properties,
-                               AuditTrailService auditTrailService) {
+                               AuditTrailService auditTrailService,
+                               OssStorageClient ossStorageClient,
+                               TencentCloudStorageClient tencentCloudStorageClient,
+                               OssProperties ossProperties) {
         this.contractRepository = contractRepository;
         this.essApiClient = essApiClient;
         this.properties = properties;
         this.auditTrailService = auditTrailService;
+        this.ossStorageClient = ossStorageClient;
+        this.tencentCloudStorageClient = tencentCloudStorageClient;
+        this.ossProperties = ossProperties;
     }
 
     /**
@@ -131,16 +154,23 @@ public class CertificateService {
 
         switch (status) {
             case "EvidenceStatusSuccess" -> {
-                String url = response.has("ReportUrl") ? response.get("ReportUrl").asText() : null;
-                contract.completeCertificate(contract.getEvidenceReportId(), url); // CERTIFIED
+                String reportUrl = response.has("ReportUrl") ? response.get("ReportUrl").asText() : null;
+                if (reportUrl == null || reportUrl.isBlank()) {
+                    throw new IllegalStateException("DescribeFlowEvidenceReport 成功但未返回 ReportUrl");
+                }
+                // ReportUrl 是短效下载链接（腾讯侧约 5 分钟过期），必须下载报告 PDF 落持久存储，
+                // 存持久 URL；否则日后下载会失效。失败则抛出→重试（报告状态仍 Success，下轮会重新下载）。
+                String durableUrl = archiveEvidenceReport(contract, reportUrl);
+                contract.completeCertificate(contract.getEvidenceReportId(), durableUrl); // CERTIFIED
                 contractRepository.save(contract);
                 auditTrailService.recordSystemEvent(contract.getId(),
                         ContractAuditTrail.Action.CERTIFY_SUCCESS,
-                        String.format("{\"reportId\":\"%s\"}", contract.getEvidenceReportId()));
-                log.info("出证报告生成成功 [contractNo={}, reportId={}]",
-                        contract.getContractNo(), contract.getEvidenceReportId());
+                        String.format("{\"reportId\":\"%s\",\"reportUrl\":\"%s\"}",
+                                contract.getEvidenceReportId(), durableUrl));
+                log.info("出证报告生成成功并已归档 [contractNo={}, reportId={}, url={}]",
+                        contract.getContractNo(), contract.getEvidenceReportId(), durableUrl);
                 return CertificateResult.success(contract.getId(), contract.getContractNo(),
-                        contract.getEvidenceReportId(), url);
+                        contract.getEvidenceReportId(), durableUrl);
             }
             case "EvidenceStatusFailed" -> {
                 // 不抛异常：certifyContract 是 @Transactional，抛出会回滚整笔，导致清理不落库、
@@ -187,6 +217,40 @@ public class CertificateService {
                 contract.getCertificateStatus().name(),
                 contract.getCertifiedAt() != null ? contract.getCertifiedAt().toString() : null
         );
+    }
+
+    /**
+     * 下载短效 ReportUrl 的出证报告 PDF 并落持久存储（腾讯云 COS + 自有 OSS），返回持久 OSS URL。
+     */
+    private String archiveEvidenceReport(Contract contract, String reportUrl) {
+        byte[] pdf = downloadBytes(reportUrl);
+        String objectKey = ossProperties.contractPathPrefix() + contract.getContractNo() + "-evidence-report.pdf";
+        tencentCloudStorageClient.upload(objectKey, pdf, APPLICATION_PDF);
+        String ossUrl = ossStorageClient.upload(objectKey, pdf, APPLICATION_PDF);
+        log.info("出证报告已归档 [contractNo={}, size={}KB, ossUrl={}]",
+                contract.getContractNo(), pdf.length / 1024, ossUrl);
+        return ossUrl;
+    }
+
+    /** 下载 URL 字节内容（出证报告 PDF）。包级可见以便测试用 spy 桩替换，避开真实 HTTP。 */
+    byte[] downloadBytes(String url) {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url)).timeout(Duration.ofSeconds(30)).GET().build();
+            HttpResponse<InputStream> response = httpClient.send(request,
+                    HttpResponse.BodyHandlers.ofInputStream());
+            if (response.statusCode() != 200) {
+                throw new IllegalStateException("出证报告下载失败 HTTP " + response.statusCode());
+            }
+            try (InputStream is = response.body(); ByteArrayOutputStream bos = new ByteArrayOutputStream()) {
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = is.read(buf)) != -1) bos.write(buf, 0, n);
+                return bos.toByteArray();
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("出证报告下载异常: " + e.getMessage(), e);
+        }
     }
 
     /** SaaS 版 API 经办人入参（与 EssContractService 一致，用 Operator.UserId，非 essbasic 的 Agent）。 */
