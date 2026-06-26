@@ -49,7 +49,7 @@ public record EssFileProperties(
         /** 甲方签名控件纵向偏移（pt，正数向下） */
         Double offsetY,
 
-        /** 乙方签章控件相对方位：印章靠近页边，默认 Below（盖在「公章」标签下方，避免 Right 溢出页面） */
+        /** 乙方签章控件相对方位：默认 Middle（控件中心压在「盖章」关键字上）；可选 Below/Right 等 */
         String sealRelativeLocation,
 
         /** 乙方签章控件宽度（pt），公章一般近方形 */
@@ -78,17 +78,20 @@ public record EssFileProperties(
         if (signatureKeyword == null || signatureKeyword.isBlank()) signatureKeyword = "电子签字";
         if (dateKeyword == null) dateKeyword = "";
         if (companySeal == null) companySeal = Boolean.FALSE;
-        if (sealKeyword == null || sealKeyword.isBlank()) sealKeyword = "公章";
+        if (sealKeyword == null || sealKeyword.isBlank()) sealKeyword = "盖章";
         if (companyName == null || companyName.isBlank()) companyName = "天津源创智能科技有限公司";
         if (relativeLocation == null || relativeLocation.isBlank()) relativeLocation = "Right";
         if (signWidth == null) signWidth = 120.0;
         if (signHeight == null) signHeight = 44.0;
-        if (offsetX == null) offsetX = 5.0;
+        // 甲方电子签字左移约 3.5 个字符（签署表单元格字号 10pt，单汉字≈10pt 宽）：
+        // 关键字「电子签字」RelativeLocation=Right，原 +5pt 偏右，改为 -30pt 使签名压回「电子签字：」区域。
+        if (offsetX == null) offsetX = -30.0;
         if (offsetY == null) offsetY = 0.0;
-        if (sealRelativeLocation == null || sealRelativeLocation.isBlank()) sealRelativeLocation = "Below";
+        // 乙方签章中心落在「盖章」关键字上：Middle 即把控件中心压在关键字位置（原 Below 盖在其下方）。
+        if (sealRelativeLocation == null || sealRelativeLocation.isBlank()) sealRelativeLocation = "Middle";
         if (sealWidth == null) sealWidth = 100.0;
         if (sealHeight == null) sealHeight = 100.0;
         if (sealOffsetX == null) sealOffsetX = 0.0;
-        if (sealOffsetY == null) sealOffsetY = 5.0;
+        if (sealOffsetY == null) sealOffsetY = 0.0;
     }
 }
