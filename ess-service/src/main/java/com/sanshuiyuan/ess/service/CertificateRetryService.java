@@ -28,15 +28,20 @@ public class CertificateRetryService {
 
     private final ContractRepository contractRepository;
     private final CertificateService certificateService;
+    /** 出证（存证报告）总开关，默认关闭：付费服务，弃用以免运营成本。关闭时本任务直接跳过。 */
+    private final boolean certificateEnabled;
 
     // 简化实现：使用内存计数器跟踪重试次数
     // 生产环境应使用数据库字段或专门的重试记录表
     private final AtomicInteger retryCycleCount = new AtomicInteger(0);
 
     public CertificateRetryService(ContractRepository contractRepository,
-                                    CertificateService certificateService) {
+                                    CertificateService certificateService,
+                                    @org.springframework.beans.factory.annotation.Value(
+                                            "${ess.certificate.enabled:false}") boolean certificateEnabled) {
         this.contractRepository = contractRepository;
         this.certificateService = certificateService;
+        this.certificateEnabled = certificateEnabled;
     }
 
     /**
@@ -49,6 +54,9 @@ public class CertificateRetryService {
     @Scheduled(fixedDelay = 180_000, initialDelay = 120_000)
     @Transactional
     public void retryCertification() {
+        if (!certificateEnabled) {
+            return; // 出证已禁用：不扫描、不调用付费出证 API（避免 ProveNoQuota 噪音与成本）。
+        }
         List<Contract> pendingContracts = contractRepository
                 .findByStatusAndCertificateStatusIn(
                         ContractStatus.ARCHIVED,

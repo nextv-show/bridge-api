@@ -53,6 +53,9 @@ public class CertificateService {
     private final OssStorageClient ossStorageClient;
     private final TencentCloudStorageClient tencentCloudStorageClient;
     private final OssProperties ossProperties;
+    /** 出证（存证报告）总开关，默认关闭：付费服务，弃用以免运营成本。 */
+    @org.springframework.beans.factory.annotation.Value("${ess.certificate.enabled:false}")
+    private boolean certificateEnabled;
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10)).build();
 
@@ -97,6 +100,13 @@ public class CertificateService {
             log.info("合同已出证，跳过 [contractNo={}]", contract.getContractNo());
             return CertificateResult.alreadyCertified(contractId, contract.getContractNo(),
                     contract.getCertificateNo());
+        }
+
+        // 唯一付费调用点的总闸：出证为付费服务，默认关闭。任何调用方（内部/管理后台控制器、
+        // 定时重试、manualRetry）到这里都不会触达腾讯付费出证 API，确保零运营成本。
+        if (!certificateEnabled) {
+            log.debug("出证已禁用，跳过 [contractNo={}]", contract.getContractNo());
+            return CertificateResult.disabled(contractId, contract.getContractNo());
         }
 
         try {
@@ -299,6 +309,12 @@ public class CertificateService {
         public static CertificateResult failed(Long contractId, String contractNo) {
             return new CertificateResult(false, contractId, contractNo,
                     null, null, "FAILED", null);
+        }
+
+        /** 出证功能已禁用（付费服务，未启用）。 */
+        public static CertificateResult disabled(Long contractId, String contractNo) {
+            return new CertificateResult(false, contractId, contractNo,
+                    null, null, "DISABLED", null);
         }
     }
 }

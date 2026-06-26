@@ -55,6 +55,10 @@ public class ContractAdminController {
     private final com.sanshuiyuan.ess.service.EssContractService essContractService;
     private final com.sanshuiyuan.ess.infra.repository.ContractRepository contractRepository;
 
+    /** 出证（存证报告）总开关，默认关闭。关闭时手动出证不调用付费 API，直接返回已禁用。 */
+    @org.springframework.beans.factory.annotation.Value("${ess.certificate.enabled:false}")
+    private boolean certificateEnabled;
+
     public ContractAdminController(ContractQueryService queryService,
                                     ContractAccessLogService accessLogService,
                                     ContractArchiveService archiveService,
@@ -163,6 +167,14 @@ public class ContractAdminController {
         log.info("管理后台手动重试出证 [contractId={}]", id);
         Map<String, Object> resp = new HashMap<>();
         resp.put("contractId", id);
+        if (!certificateEnabled) {
+            // 出证为付费服务，已弃用、默认关闭：不调用付费 API。
+            resp.put("code", -1);
+            resp.put("success", false);
+            resp.put("status", "DISABLED");
+            resp.put("message", "出证（存证报告）功能已禁用");
+            return ResponseEntity.ok(resp);
+        }
         try {
             CertificateService.CertificateResult r = certificateService.certifyContract(id);
             // 出证为两步异步：APPLYING 表示报告已成功提交、正在生成中，属"已受理"而非失败

@@ -44,9 +44,22 @@ class CertificateServiceTest {
         OssProperties oss = new OssProperties(null, null, null, null, "contracts/");
         service = new CertificateService(contractRepository, essApiClient, props, auditTrailService,
                 ossStorageClient, tencentCloudStorageClient, oss);
+        // 本测试聚焦两步出证逻辑，显式启用出证开关（@Value 字段，单测默认 false）。
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "certificateEnabled", true);
         when(contractRepository.findById(1L)).thenReturn(Optional.of(contract));
         when(contract.getStatus()).thenReturn(ContractStatus.ARCHIVED);
         when(contract.getContractNo()).thenReturn("CT-x");
+    }
+
+    @Test
+    void disabled_returnsDisabledWithoutCallingPaidApi() {
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "certificateEnabled", false);
+        when(contract.getCertificateStatus()).thenReturn(CertificateStatus.PENDING);
+
+        var result = service.certifyContract(1L);
+
+        assertEquals("DISABLED", result.status());
+        verifyNoInteractions(essApiClient); // 不触达腾讯付费出证 API
     }
 
     @Test
