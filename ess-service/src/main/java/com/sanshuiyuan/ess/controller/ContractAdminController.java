@@ -165,11 +165,17 @@ public class ContractAdminController {
         resp.put("contractId", id);
         try {
             CertificateService.CertificateResult r = certificateService.certifyContract(id);
-            resp.put("code", r.success() ? 0 : -1);
+            // 出证为两步异步：APPLYING 表示报告已成功提交、正在生成中，属"已受理"而非失败
+            // （真正的失败会抛异常，由下方 catch 统一映射 code=-1）。
+            boolean accepted = r.success() || "APPLYING".equals(r.status());
+            resp.put("code", accepted ? 0 : -1);
             resp.put("contractNo", r.contractNo());
             resp.put("certificateNo", r.certificateNo());
             resp.put("status", r.status());
             resp.put("success", r.success());
+            if (accepted && !r.success()) {
+                resp.put("message", "出证报告已提交，正在生成中，请稍后查询");
+            }
         } catch (Exception e) {
             log.warn("重试出证失败 [contractId={}]: {}", id, e.getMessage());
             resp.put("code", -1);

@@ -42,7 +42,9 @@ public class CertificateRetryService {
     /**
      * 定时重试出证（每 3 分钟执行一次）。
      * <p>
-     * 扫描状态为 ARCHIVED 且 certificate_status 为 PENDING 或 FAILED 的合同。
+     * 扫描状态为 ARCHIVED 且 certificate_status 为 PENDING / APPLYING / FAILED 的合同。
+     * <p>APPLYING 表示出证报告已提交、正在腾讯侧异步生成，需继续轮询 DescribeFlowEvidenceReport
+     * 直到 Success/Failed；漏掉 APPLYING 会导致两步出证卡在第一步永不完成。
      */
     @Scheduled(fixedDelay = 180_000, initialDelay = 120_000)
     @Transactional
@@ -50,7 +52,8 @@ public class CertificateRetryService {
         List<Contract> pendingContracts = contractRepository
                 .findByStatusAndCertificateStatusIn(
                         ContractStatus.ARCHIVED,
-                        List.of(CertificateStatus.PENDING, CertificateStatus.FAILED));
+                        List.of(CertificateStatus.PENDING, CertificateStatus.APPLYING,
+                                CertificateStatus.FAILED));
 
         if (pendingContracts.isEmpty()) {
             return;
@@ -61,12 +64,17 @@ public class CertificateRetryService {
 
         for (Contract contract : pendingContracts) {
             try {
-                certificateService.certifyContract(contract.getId());
-                log.info("出证重试成功 [contractNo={}]", contract.getContractNo());
+                CertificateService.CertificateResult r = certificateService.certifyContract(contract.getId());
+                // 两步异步：FAILED 由 certifyContract 内部落库且不抛异常，需在此显式识别并告警，
+                // 否则持续失败会被当作"成功"而静默重提，永不触达告警。
+                if ("FAILED".equals(r.status())) {
+                    log.warn("出证重试返回失败状态 [contractNo={}]", contract.getContractNo());
+                    checkAndAlert(contract);
+                } else {
+                    log.info("出证重试已推进 [contractNo={}, status={}]", contract.getContractNo(), r.status());
+                }
             } catch (Exception e) {
-                log.error("出证重试失败 [contractNo={}]: {}", contract.getContractNo(), e.getMessage());
-
-                // 检查是否需要告警
+                log.error("出证重试异常 [contractNo={}]: {}", contract.getContractNo(), e.getMessage());
                 checkAndAlert(contract);
             }
         }
