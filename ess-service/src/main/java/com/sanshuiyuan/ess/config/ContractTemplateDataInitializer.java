@@ -65,15 +65,15 @@ public class ContractTemplateDataInitializer {
         return """
         # 三水元智能水机设备管理与服务协议
 
-        **协议编号**：{{contractNo}}
+        **协议编号**：{{contractNo}}\s\s
         **签订日期**：{{signDate}}
 
-        **甲方（设备所有权人/用户）**：{{userName}}
-        **身份证号/统一社会信用代码**：{{idCardNo}}
+        **甲方（设备所有权人/用户）**：{{userName}}\s\s
+        **身份证号/统一社会信用代码**：{{idCardNo}}\s\s
         **联系电话**：{{phone}}
 
-        **乙方（平台运营方）**：天津源创智能科技有限公司
-        **法定代表人**：{{legalRepresentative}}
+        **乙方（平台运营方）**：天津源创智能科技有限公司\s\s
+        **法定代表人**：{{legalRepresentative}}\s\s
         **联系地址**：{{companyAddress}}
 
         ---
@@ -221,11 +221,11 @@ public class ContractTemplateDataInitializer {
         return """
         # 三水元实名认证与用水需求发布承诺书
 
-        **承诺书编号**：{{contractNo}}
+        **承诺书编号**：{{contractNo}}\s\s
         **签署日期**：{{signDate}}
 
-        **承诺人（实名用户）**：{{userName}}
-        **身份证号**：{{idCardNo}}
+        **承诺人（实名用户）**：{{userName}}\s\s
+        **身份证号**：{{idCardNo}}\s\s
         **联系电话**：{{phone}}
 
         **接收主体（平台运营方）**：天津源创智能科技有限公司（"三水元"平台）
