@@ -16,10 +16,18 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.TreeMap;
 
 /**
- * 出证服务。
+ * 出证服务（腾讯电子签出证报告）。
  * <p>
- * 调用腾讯电子签 CreateCertificate 或类似出证 API，
- * 将出证结果绑定到合同记录。
+ * 出证是<b>两步异步</b>：
+ * <ol>
+ *   <li>{@code CreateFlowEvidenceReport}(Operator + FlowId + ReportType=0) → 返回 {@code ReportId}，
+ *       报告在腾讯侧异步生成（可能需较长时间）；持久化 ReportId，状态置 APPLYING。</li>
+ *   <li>{@code DescribeFlowEvidenceReport}(Operator + ReportId) → {@code Status} 为
+ *       {@code EvidenceStatusSuccess} 时取 {@code ReportUrl} 完成出证；{@code Executing} 保持 APPLYING
+ *       等下一轮；{@code Failed} 清掉 ReportId 置 FAILED 以便重试重提。</li>
+ * </ol>
+ * 由 {@code CertificateRetryService} 定时驱动两步推进（扫 PENDING/APPLYING/FAILED）。
+ * <p>历史 bug：旧实现调用的 {@code CreateCertificate} 在 ESS v2020-11-11 中不存在，恒 InvalidAction。
  */
 @Service
 public class CertificateService {
@@ -68,43 +76,24 @@ public class CertificateService {
                     contract.getCertificateNo());
         }
 
-        log.info("开始申请出证 [contractId={}, contractNo={}]", contractId, contract.getContractNo());
-
         try {
-            // 标记出证中
-            contract.markCertifying();
-            contractRepository.save(contract);
-
-            // 调用腾讯电子签出证 API
-            TreeMap<String, Object> params = buildCertifyParams(contract);
-            JsonNode response = essApiClient.invoke("CreateCertificate", params);
-
-            // 解析出证结果
-            String certificateNo = extractCertificateNo(response);
-            String certificatePdfUrl = extractCertificatePdfUrl(response);
-
-            // 更新合同出证信息
-            contract.completeCertificate(certificateNo, certificatePdfUrl);
-            contractRepository.save(contract);
-
-            log.info("出证成功 [contractNo={}, certificateNo={}]",
-                    contract.getContractNo(), certificateNo);
-
-            // 审计事件：出证成功
-            auditTrailService.recordSystemEvent(contractId,
-                    ContractAuditTrail.Action.CERTIFY_SUCCESS,
-                    String.format("{\"certificateNo\":\"%s\"}", certificateNo));
-
-            return CertificateResult.success(contractId, contract.getContractNo(),
-                    certificateNo, certificatePdfUrl);
+            if (contract.getEvidenceReportId() == null || contract.getEvidenceReportId().isBlank()) {
+                // 步骤1：提交出证报告任务，拿 ReportId（报告异步生成，下一轮再查结果）。
+                contract.markCertifying(); // APPLYING
+                String reportId = submitEvidenceReport(contract);
+                contract.setEvidenceReportId(reportId);
+                contractRepository.save(contract);
+                log.info("出证报告任务已提交 [contractNo={}, reportId={}]", contract.getContractNo(), reportId);
+                return CertificateResult.applying(contractId, contract.getContractNo());
+            }
+            // 步骤2：查询已提交报告的生成结果。
+            return queryEvidenceReport(contract);
 
         } catch (Exception e) {
             log.error("出证失败 [contractId={}, contractNo={}]: {}",
                     contractId, contract.getContractNo(), e.getMessage(), e);
             contract.markCertificateFailed();
             contractRepository.save(contract);
-
-            // 审计事件：出证失败
             try {
                 auditTrailService.recordSystemEvent(contractId,
                         ContractAuditTrail.Action.CERTIFY_FAIL,
@@ -112,8 +101,60 @@ public class CertificateService {
             } catch (Exception auditEx) {
                 log.warn("记录出证失败审计事件异常: {}", auditEx.getMessage());
             }
-
             throw new RuntimeException("出证失败: " + e.getMessage(), e);
+        }
+    }
+
+    /** 步骤1：CreateFlowEvidenceReport，返回出证报告任务 ReportId。 */
+    private String submitEvidenceReport(Contract contract) {
+        TreeMap<String, Object> params = new TreeMap<>();
+        params.put("Operator", buildOperator());
+        params.put("FlowId", contract.getEssFlowId());
+        params.put("ReportType", 0); // 0=合同签署报告（默认）
+        JsonNode response = essApiClient.invoke("CreateFlowEvidenceReport", params);
+        String reportId = response != null && response.has("ReportId")
+                ? response.get("ReportId").asText() : null;
+        if (reportId == null || reportId.isBlank()) {
+            throw new IllegalStateException("CreateFlowEvidenceReport 未返回 ReportId");
+        }
+        return reportId;
+    }
+
+    /** 步骤2：DescribeFlowEvidenceReport，按 Status 推进/保持/失败重提。 */
+    private CertificateResult queryEvidenceReport(Contract contract) {
+        TreeMap<String, Object> params = new TreeMap<>();
+        params.put("Operator", buildOperator());
+        params.put("ReportId", contract.getEvidenceReportId());
+        JsonNode response = essApiClient.invoke("DescribeFlowEvidenceReport", params);
+        String status = response != null && response.has("Status")
+                ? response.get("Status").asText() : "";
+
+        switch (status) {
+            case "EvidenceStatusSuccess" -> {
+                String url = response.has("ReportUrl") ? response.get("ReportUrl").asText() : null;
+                contract.completeCertificate(contract.getEvidenceReportId(), url); // CERTIFIED
+                contractRepository.save(contract);
+                auditTrailService.recordSystemEvent(contract.getId(),
+                        ContractAuditTrail.Action.CERTIFY_SUCCESS,
+                        String.format("{\"reportId\":\"%s\"}", contract.getEvidenceReportId()));
+                log.info("出证报告生成成功 [contractNo={}, reportId={}]",
+                        contract.getContractNo(), contract.getEvidenceReportId());
+                return CertificateResult.success(contract.getId(), contract.getContractNo(),
+                        contract.getEvidenceReportId(), url);
+            }
+            case "EvidenceStatusFailed" -> {
+                // 清掉失败的报告ID，下一轮由 PENDING/FAILED 扫描重新提交一个全新任务。
+                // 抛出后由外层 catch 统一 markCertificateFailed + save（持久化清空的 reportId）+ 审计。
+                String failedReportId = contract.getEvidenceReportId();
+                contract.setEvidenceReportId(null);
+                throw new IllegalStateException("出证报告生成失败 reportId=" + failedReportId);
+            }
+            default -> {
+                // EvidenceStatusExecuting（或未知）：仍在生成，保持 APPLYING，等下一轮重试查询。
+                log.info("出证报告生成中，待下轮查询 [contractNo={}, reportId={}, status={}]",
+                        contract.getContractNo(), contract.getEvidenceReportId(), status);
+                return CertificateResult.applying(contract.getId(), contract.getContractNo());
+            }
         }
     }
 
@@ -140,41 +181,11 @@ public class CertificateService {
         );
     }
 
-    /**
-     * 构建出证 API 请求参数。
-     */
-    private TreeMap<String, Object> buildCertifyParams(Contract contract) {
-        TreeMap<String, Object> params = new TreeMap<>();
-        params.put("Agent", buildAgent());
-        params.put("FlowId", contract.getEssFlowId());
-        return params;
-    }
-
-    private TreeMap<String, Object> buildAgent() {
-        TreeMap<String, Object> agent = new TreeMap<>();
-        agent.put("ProxyOrganizationOpenId", properties.corpId());
-        agent.put("ProxyOperatorId", properties.operatorId());
-        return agent;
-    }
-
-    private String extractCertificateNo(JsonNode response) {
-        if (response != null && response.has("CertificateId")) {
-            return response.get("CertificateId").asText();
-        }
-        if (response != null && response.has("CertificateNo")) {
-            return response.get("CertificateNo").asText();
-        }
-        return "CERT-" + System.currentTimeMillis();
-    }
-
-    private String extractCertificatePdfUrl(JsonNode response) {
-        if (response != null && response.has("CertificateUrl")) {
-            return response.get("CertificateUrl").asText();
-        }
-        if (response != null && response.has("PdfUrl")) {
-            return response.get("PdfUrl").asText();
-        }
-        return null;
+    /** SaaS 版 API 经办人入参（与 EssContractService 一致，用 Operator.UserId，非 essbasic 的 Agent）。 */
+    private TreeMap<String, Object> buildOperator() {
+        TreeMap<String, Object> operator = new TreeMap<>();
+        operator.put("UserId", properties.operatorId());
+        return operator;
     }
 
     /**
@@ -204,6 +215,12 @@ public class CertificateService {
         public static CertificateResult notApplied(Long contractId, String contractNo) {
             return new CertificateResult(false, contractId, contractNo,
                     null, null, "NOT_APPLIED", null);
+        }
+
+        /** 出证报告已提交但尚在生成中（异步）。 */
+        public static CertificateResult applying(Long contractId, String contractNo) {
+            return new CertificateResult(false, contractId, contractNo,
+                    null, null, "APPLYING", null);
         }
     }
 }

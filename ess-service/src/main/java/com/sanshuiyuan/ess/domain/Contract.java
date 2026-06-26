@@ -137,6 +137,10 @@ public class Contract {
     @Column(name = "certificate_pdf_url", length = 512)
     private String certificatePdfUrl;
 
+    /** 腾讯电子签出证报告任务ID（CreateFlowEvidenceReport 返回，供 DescribeFlowEvidenceReport 轮询）。 */
+    @Column(name = "evidence_report_id", length = 64)
+    private String evidenceReportId;
+
     @Column(name = "certified_at")
     private LocalDateTime certifiedAt;
 
@@ -319,6 +323,8 @@ public class Contract {
     public String getCertificateNo() { return certificateNo; }
     public CertificateStatus getCertificateStatus() { return certificateStatus; }
     public String getCertificatePdfUrl() { return certificatePdfUrl; }
+    public String getEvidenceReportId() { return evidenceReportId; }
+    public void setEvidenceReportId(String evidenceReportId) { this.evidenceReportId = evidenceReportId; }
     public LocalDateTime getCertifiedAt() { return certifiedAt; }
     public int getDownloadCount() { return downloadCount; }
     public LocalDateTime getArchivedAt() { return archivedAt; }

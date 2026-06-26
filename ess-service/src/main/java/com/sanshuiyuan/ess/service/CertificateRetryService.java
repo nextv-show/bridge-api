@@ -42,7 +42,9 @@ public class CertificateRetryService {
     /**
      * 定时重试出证（每 3 分钟执行一次）。
      * <p>
-     * 扫描状态为 ARCHIVED 且 certificate_status 为 PENDING 或 FAILED 的合同。
+     * 扫描状态为 ARCHIVED 且 certificate_status 为 PENDING / APPLYING / FAILED 的合同。
+     * <p>APPLYING 表示出证报告已提交、正在腾讯侧异步生成，需继续轮询 DescribeFlowEvidenceReport
+     * 直到 Success/Failed；漏掉 APPLYING 会导致两步出证卡在第一步永不完成。
      */
     @Scheduled(fixedDelay = 180_000, initialDelay = 120_000)
     @Transactional
@@ -50,7 +52,8 @@ public class CertificateRetryService {
         List<Contract> pendingContracts = contractRepository
                 .findByStatusAndCertificateStatusIn(
                         ContractStatus.ARCHIVED,
-                        List.of(CertificateStatus.PENDING, CertificateStatus.FAILED));
+                        List.of(CertificateStatus.PENDING, CertificateStatus.APPLYING,
+                                CertificateStatus.FAILED));
 
         if (pendingContracts.isEmpty()) {
             return;
