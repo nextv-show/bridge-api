@@ -62,7 +62,15 @@ public record EssFileProperties(
         Double sealOffsetX,
 
         /** 乙方签章控件纵向偏移（pt） */
-        Double sealOffsetY
+        Double sealOffsetY,
+
+        /**
+         * 乙方企业自动签（静默签）印章 ID（32 位）。
+         * <p>本企业自动盖章（ApproverType=3）时，SIGN_SEAL 控件必须经 {@code ComponentValue} 指定
+         * 当前经办人已授权的印章 Id（腾讯电子签控制台 → 印章 → 印章中心 → 印章ID）；缺省则不指定印章，
+         * 自动签会因「未指定印章」失败。仅在 {@link #companySeal()} 为 true 时需要。
+         */
+        String companySealId
 ) {
     public EssFileProperties {
         if (enabled == null) enabled = Boolean.FALSE;

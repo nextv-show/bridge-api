@@ -473,15 +473,19 @@ public class EssContractService {
         // 印章靠近页边，用独立一组定位参数（默认 Below），避免 Right 溢出页面。
         if (Boolean.TRUE.equals(fp.companySeal())) {
             TreeMap<String, Object> company = new TreeMap<>();
-            company.put("ApproverType", 0); // 0=企业
+            // ApproverType=3：本企业静默签署（自动盖章）。签署人默认为经办人、不可更改，
+            // 故无需 ApproverName/ApproverMobile/身份证（用 0=普通企业经办人会被要求 ApproverMobile）。
+            company.put("ApproverType", 3);
             company.put("OrganizationName", fp.companyName());
-            company.put("ApproverName", fp.companyName());
-            // 同上：文件模式企业签署方不带 RecipientId，否则 Approvers.1.RecipientId 报 UnknownParameter。
             company.put("NotifyType", "NONE");
-            company.put("SignComponents", java.util.List.of(
-                    buildSignComponent("SIGN_SEAL", fp.sealKeyword(),
-                            fp.sealWidth(), fp.sealHeight(), fp.sealRelativeLocation(),
-                            fp.sealOffsetX(), fp.sealOffsetY())));
+            TreeMap<String, Object> sealComponent = buildSignComponent("SIGN_SEAL", fp.sealKeyword(),
+                    fp.sealWidth(), fp.sealHeight(), fp.sealRelativeLocation(),
+                    fp.sealOffsetX(), fp.sealOffsetY());
+            // 自动签的印章控件必须指定已授权印章 Id（ComponentValue），否则腾讯电子签报「未指定印章」。
+            if (fp.companySealId() != null && !fp.companySealId().isBlank()) {
+                sealComponent.put("ComponentValue", fp.companySealId());
+            }
+            company.put("SignComponents", java.util.List.of(sealComponent));
             approvers.add(company);
         }
         return approvers;

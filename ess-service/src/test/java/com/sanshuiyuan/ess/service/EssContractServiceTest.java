@@ -72,7 +72,7 @@ class EssContractServiceTest {
         service.setFileProperties(new EssFileProperties(
                 true, "file.test.ess.tencent.cn", "电子签字", "", false,
                 "公章", "天津源创智能科技有限公司", "Right", 120.0, 44.0, 5.0, 0.0,
-                "Below", 100.0, 100.0, 0.0, 5.0));
+                "Below", 100.0, 100.0, 0.0, 5.0, null));
 
         when(flowRecordRepository.findByContractId("c-f1")).thenReturn(Optional.empty());
         when(flowRecordRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -118,12 +118,12 @@ class EssContractServiceTest {
 
     @Test
     @SuppressWarnings({"unchecked", "rawtypes"})
-    void createFlowByFiles_withCompanySeal_appendsSealApproverWithoutRecipientId() {
-        // 启用文件模式 + 乙方企业盖章（companySeal=true）
+    void createFlowByFiles_withCompanySeal_appendsAutoSignSealApprover() {
+        // 启用文件模式 + 乙方企业自动盖章（companySeal=true + 印章ID）
         service.setFileProperties(new EssFileProperties(
                 true, "file.test.ess.tencent.cn", "电子签字", "", true,
                 "公章", "天津源创智能科技有限公司", "Right", 120.0, 44.0, 5.0, 0.0,
-                "Below", 100.0, 100.0, 0.0, 5.0));
+                "Below", 100.0, 100.0, 0.0, 5.0, "seal-id-abc123"));
 
         when(flowRecordRepository.findByContractId("c-seal")).thenReturn(Optional.empty());
         when(flowRecordRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -143,13 +143,16 @@ class EssContractServiceTest {
         java.util.List<?> approvers = (java.util.List<?>) paramsCaptor.getValue().get("Approvers");
         assertEquals(2, approvers.size(), "companySeal=true 应追加乙方企业签署方");
         TreeMap<String, Object> company = (TreeMap<String, Object>) approvers.get(1);
-        assertEquals(0, company.get("ApproverType"), "乙方应为企业(0)");
+        assertEquals(3, company.get("ApproverType"), "本企业自动盖章应为静默签署(3)");
         assertFalse(company.containsKey("RecipientId"),
                 "乙方企业签署方不应带 RecipientId（CreateFlowByFiles 会报 UnknownParameter）");
+        assertFalse(company.containsKey("ApproverMobile"),
+                "ApproverType=3 签署人默认经办人，不应要求/携带 ApproverMobile");
         java.util.List<?> comps = (java.util.List<?>) company.get("SignComponents");
         TreeMap<String, Object> seal = (TreeMap<String, Object>) comps.get(0);
         assertEquals("SIGN_SEAL", seal.get("ComponentType"), "乙方应为签章控件");
         assertEquals("公章", seal.get("ComponentId"), "签章靠「公章」关键字定位");
+        assertEquals("seal-id-abc123", seal.get("ComponentValue"), "自动签必须指定已授权印章ID");
     }
 
     @Test
