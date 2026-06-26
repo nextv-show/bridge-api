@@ -106,12 +106,50 @@ class EssContractServiceTest {
         assertTrue(params.containsKey("Approvers"), "应带 Approvers");
         java.util.List<?> approvers = (java.util.List<?>) params.get("Approvers");
         TreeMap<String, Object> approver = (TreeMap<String, Object>) approvers.get(0);
+        assertFalse(approver.containsKey("RecipientId"),
+                "文件模式 approver 不应带 RecipientId（CreateFlowByFiles 会报 UnknownParameter）");
         assertTrue(approver.containsKey("SignComponents"), "签署方应挂签名控件");
         java.util.List<?> comps = (java.util.List<?>) approver.get("SignComponents");
         TreeMap<String, Object> sign = (TreeMap<String, Object>) comps.get(0);
         assertEquals("SIGN_SIGNATURE", sign.get("ComponentType"));
         assertEquals("KEYWORD", sign.get("GenerateMode"));
         assertEquals("电子签字", sign.get("ComponentId"), "关键字定位：关键字走 ComponentId");
+    }
+
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void createFlowByFiles_withCompanySeal_appendsSealApproverWithoutRecipientId() {
+        // 启用文件模式 + 乙方企业盖章（companySeal=true）
+        service.setFileProperties(new EssFileProperties(
+                true, "file.test.ess.tencent.cn", "电子签字", "", true,
+                "公章", "天津源创智能科技有限公司", "Right", 120.0, 44.0, 5.0, 0.0,
+                "Below", 100.0, 100.0, 0.0, 5.0));
+
+        when(flowRecordRepository.findByContractId("c-seal")).thenReturn(Optional.empty());
+        when(flowRecordRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        ObjectNode uploadResp = objectMapper.createObjectNode();
+        uploadResp.set("FileIds", objectMapper.createArrayNode().add("file-seal"));
+        when(apiClient.invoke(eq("UploadFiles"), any(), anyString())).thenReturn(uploadResp);
+        ObjectNode flowResp = objectMapper.createObjectNode();
+        flowResp.put("FlowId", "flow-seal-1");
+        when(apiClient.invoke(eq("CreateFlowByFiles"), any())).thenReturn(flowResp);
+
+        ArgumentCaptor<TreeMap> paramsCaptor = ArgumentCaptor.forClass(TreeMap.class);
+        service.createFlowByFiles("c-seal", "测试合同",
+                "[{\"userName\":\"张三\",\"phone\":\"13800138000\"}]",
+                new byte[]{1, 2, 3}, "c-seal.pdf");
+        verify(apiClient).invoke(eq("CreateFlowByFiles"), paramsCaptor.capture());
+
+        java.util.List<?> approvers = (java.util.List<?>) paramsCaptor.getValue().get("Approvers");
+        assertEquals(2, approvers.size(), "companySeal=true 应追加乙方企业签署方");
+        TreeMap<String, Object> company = (TreeMap<String, Object>) approvers.get(1);
+        assertEquals(0, company.get("ApproverType"), "乙方应为企业(0)");
+        assertFalse(company.containsKey("RecipientId"),
+                "乙方企业签署方不应带 RecipientId（CreateFlowByFiles 会报 UnknownParameter）");
+        java.util.List<?> comps = (java.util.List<?>) company.get("SignComponents");
+        TreeMap<String, Object> seal = (TreeMap<String, Object>) comps.get(0);
+        assertEquals("SIGN_SEAL", seal.get("ComponentType"), "乙方应为签章控件");
+        assertEquals("公章", seal.get("ComponentId"), "签章靠「公章」关键字定位");
     }
 
     @Test
