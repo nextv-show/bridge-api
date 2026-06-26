@@ -3,7 +3,7 @@ package com.sanshuiyuan.ess.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sanshuiyuan.ess.config.EssProperties;
 import com.sanshuiyuan.ess.domain.EssFlowRecord;
-import com.sanshuiyuan.ess.exception.EssCallbackVerificationException;
+import com.sanshuiyuan.ess.domain.FlowStatus;
 import com.sanshuiyuan.ess.infra.repository.EssFlowRecordRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -11,9 +11,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
-import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -24,6 +21,7 @@ import static org.mockito.Mockito.*;
 class EssCallbackServiceTest {
 
     @Mock private EssFlowRecordRepository flowRecordRepository;
+    @Mock private EssContractService essContractService;
     private EssProperties properties;
     private ObjectMapper objectMapper;
     private EssCallbackService service;
@@ -34,92 +32,81 @@ class EssCallbackServiceTest {
                 "tpl-001", "https://cb.example.com", null, null, 5000, 10000, 3, Boolean.FALSE, "3");
         objectMapper = new ObjectMapper();
         service = new EssCallbackService(properties, flowRecordRepository, objectMapper);
-    }
-
-    private String computeSignature(String body, String timestamp) throws Exception {
-        String data = timestamp + body;
-        Mac mac = Mac.getInstance("HmacSHA256");
-        SecretKeySpec keySpec = new SecretKeySpec(
-                properties.secretKey().getBytes(StandardCharsets.UTF_8), "HmacSHA256");
-        mac.init(keySpec);
-        byte[] hash = mac.doFinal(data.getBytes(StandardCharsets.UTF_8));
-        StringBuilder sb = new StringBuilder();
-        for (byte b : hash) {
-            sb.append(String.format("%02x", b));
-        }
-        return sb.toString();
+        service.setEssContractService(essContractService);
     }
 
     @Test
-    void verifySignature_valid_shouldPass() throws Exception {
-        String body = "{\"FlowId\":\"f-001\"}";
-        String timestamp = "1700000000";
-        String sig = computeSignature(body, timestamp);
-
-        // Should not throw
-        assertDoesNotThrow(() -> service.verifySignature(body, sig, timestamp));
-    }
-
-    @Test
-    void verifySignature_invalid_shouldThrow() {
-        String body = "{\"FlowId\":\"f-001\"}";
-        String timestamp = "1700000000";
-
-        assertThrows(EssCallbackVerificationException.class,
-                () -> service.verifySignature(body, "invalid-sig", timestamp));
-    }
-
-    @Test
-    void verifySignature_nullSignature_shouldThrow() {
-        assertThrows(EssCallbackVerificationException.class,
-                () -> service.verifySignature("{}", null, "1700000000"));
-    }
-
-    @Test
-    void verifySignature_nullTimestamp_shouldThrow() {
-        assertThrows(EssCallbackVerificationException.class,
-                () -> service.verifySignature("{}", "somesig", null));
-    }
-
-    @Test
-    void handleCallback_flowFinished_shouldComplete() throws Exception {
+    void handleCallback_triggersAuthoritativeQuery_notTrustingBody() {
+        // 回调不再信任 body 状态，仅以 FlowId 触发服务端权威查单。
         String body = "{\"FlowId\":\"flow-001\",\"EventType\":\"FlowFinished\"}";
-        String timestamp = "1700000000";
-        String sig = computeSignature(body, timestamp);
-
         EssFlowRecord record = EssFlowRecord.create("c-001", "[{}]");
         record.assignFlowId("flow-001");
-        when(flowRecordRepository.findByEssFlowId("flow-001"))
-                .thenReturn(Optional.of(record));
-        when(flowRecordRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(flowRecordRepository.findByEssFlowId("flow-001")).thenReturn(Optional.of(record));
 
-        var result = service.handleCallback(body, sig, timestamp);
+        var result = service.handleCallback(body, null, null); // 签名/时间戳参数已无意义
 
         assertTrue(result.success());
         assertEquals("c-001", result.contractId());
         assertEquals("FlowFinished", result.eventType());
+        // 关键：以 describeFlowStatus（TC3 签名）为权威，而非按回调体改状态。
+        verify(essContractService).describeFlowStatus("c-001");
     }
 
     @Test
-    void handleCallback_noFlowId_shouldIgnore() throws Exception {
-        String body = "{\"EventType\":\"Test\"}";
-        String timestamp = "1700000000";
-        String sig = computeSignature(body, timestamp);
+    void handleCallback_sameFlowIdWithinWindow_throttlesSecondQuery() {
+        // 同一 FlowId 连续两次回调（如腾讯重试）：只放行一次权威查单。
+        EssFlowRecord record = EssFlowRecord.create("c-001", "[{}]");
+        record.assignFlowId("flow-001");
+        when(flowRecordRepository.findByEssFlowId("flow-001")).thenReturn(Optional.of(record));
+        String body = "{\"FlowId\":\"flow-001\"}";
 
-        var result = service.handleCallback(body, sig, timestamp);
-        assertFalse(result.success());
+        assertTrue(service.handleCallback(body, null, null).success());
+        assertTrue(service.handleCallback(body, null, null).success()); // 第二次命中节流
+
+        verify(essContractService, times(1)).describeFlowStatus("c-001");
     }
 
     @Test
-    void handleCallback_unknownFlow_shouldIgnore() throws Exception {
-        String body = "{\"FlowId\":\"unknown-flow\",\"EventType\":\"Test\"}";
-        String timestamp = "1700000000";
-        String sig = computeSignature(body, timestamp);
+    void handleCallback_queryFailure_notThrottled_allowsRetry() {
+        // 首次查单瞬时失败：不应记节流，腾讯重试应再次查单（不丢同步）。
+        EssFlowRecord record = EssFlowRecord.create("c-001", "[{}]");
+        record.assignFlowId("flow-001");
+        when(flowRecordRepository.findByEssFlowId("flow-001")).thenReturn(Optional.of(record));
+        doThrow(new RuntimeException("transient")).doReturn(FlowStatus.COMPLETED)
+                .when(essContractService).describeFlowStatus("c-001");
+        String body = "{\"FlowId\":\"flow-001\"}";
 
-        when(flowRecordRepository.findByEssFlowId("unknown-flow"))
-                .thenReturn(Optional.empty());
+        assertThrows(RuntimeException.class, () -> service.handleCallback(body, null, null));
+        assertTrue(service.handleCallback(body, null, null).success()); // 重试再次查单
 
-        var result = service.handleCallback(body, sig, timestamp);
+        verify(essContractService, times(2)).describeFlowStatus("c-001");
+    }
+
+    @Test
+    void handleCallback_terminalRecord_skipsQuery() {
+        // 本地已是终态：无需再查单，幂等返回，避免完成后被反复回调刷查单。
+        EssFlowRecord record = EssFlowRecord.create("c-001", "[{}]");
+        record.assignFlowId("flow-001");
+        record.complete("{}"); // → COMPLETED（终态）
+        when(flowRecordRepository.findByEssFlowId("flow-001")).thenReturn(Optional.of(record));
+
+        assertTrue(service.handleCallback("{\"FlowId\":\"flow-001\"}", null, null).success());
+        verify(essContractService, never()).describeFlowStatus(any());
+    }
+
+    @Test
+    void handleCallback_noFlowId_shouldIgnore() {
+        var result = service.handleCallback("{\"EventType\":\"Test\"}", null, null);
         assertFalse(result.success());
+        verify(essContractService, never()).describeFlowStatus(any());
+    }
+
+    @Test
+    void handleCallback_unknownFlow_shouldIgnore() {
+        when(flowRecordRepository.findByEssFlowId("unknown-flow")).thenReturn(Optional.empty());
+
+        var result = service.handleCallback("{\"FlowId\":\"unknown-flow\"}", null, null);
+        assertFalse(result.success());
+        verify(essContractService, never()).describeFlowStatus(any());
     }
 }
