@@ -63,6 +63,9 @@ public class EssCallbackService {
     private static final long QUERY_THROTTLE_MS = 10_000L;
     private final java.util.concurrent.ConcurrentHashMap<String, Long> lastQueryAtMs =
             new java.util.concurrent.ConcurrentHashMap<>();
+    /** 在途查单的 FlowId 集合：原子占位，防同一 FlowId 的并发回调 fan-out 成多次查单。 */
+    private final java.util.Set<String> inFlightQuery =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     private boolean recentlyQueried(String flowId) {
         Long prev = lastQueryAtMs.get(flowId);
@@ -127,19 +130,28 @@ public class EssCallbackService {
                 return CallbackResult.success(record.getContractId(), flowId, extractEventType(callbackData));
             }
 
-            // 权威同步：以服务端查单为准（内部更新 EssFlowRecord + COMPLETED 时桥接 Contract→SIGNED）。
-            if (essContractService != null) {
-                essContractService.describeFlowStatus(record.getContractId());
-            } else {
-                // 理论不可达的兜底（生产已注入 EssContractService）：退回按回调体更新。
-                updateFlowStatus(record, eventType, callbackData);
-                flowRecordRepository.save(record);
-                if (record.getFlowStatus() == FlowStatus.COMPLETED && completionBridge != null) {
-                    completionBridge.bridgeToSigned(record.getContractId(), extractPdfHash(callbackData));
-                }
+            // 原子占位：同一 FlowId 的并发回调只放行一个，其余直接跳过，防并发 fan-out 成多次查单。
+            if (!inFlightQuery.add(flowId)) {
+                log.info("回调查单已在途，跳过并发重复 [flowId={}]", flowId);
+                return CallbackResult.success(record.getContractId(), flowId, extractEventType(callbackData));
             }
-            // 只在查单成功（未抛异常）后记录节流时间戳，失败则不节流，允许腾讯重试再查。
-            markQueried(flowId);
+            try {
+                // 权威同步：以服务端查单为准（内部更新 EssFlowRecord + COMPLETED 时桥接 Contract→SIGNED）。
+                if (essContractService != null) {
+                    essContractService.describeFlowStatus(record.getContractId());
+                } else {
+                    // 理论不可达的兜底（生产已注入 EssContractService）：退回按回调体更新。
+                    updateFlowStatus(record, eventType, callbackData);
+                    flowRecordRepository.save(record);
+                    if (record.getFlowStatus() == FlowStatus.COMPLETED && completionBridge != null) {
+                        completionBridge.bridgeToSigned(record.getContractId(), extractPdfHash(callbackData));
+                    }
+                }
+                // 只在查单成功（未抛异常）后记录节流时间戳，失败则不节流，允许腾讯重试再查。
+                markQueried(flowId);
+            } finally {
+                inFlightQuery.remove(flowId); // 无论成败都释放在途占位
+            }
 
             log.info("ESS 回调已触发权威查单 [contractId={}, flowId={}, event={}]",
                     record.getContractId(), flowId, eventType);
