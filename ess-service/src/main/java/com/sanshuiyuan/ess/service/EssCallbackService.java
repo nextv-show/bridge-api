@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sanshuiyuan.ess.config.EssProperties;
 import com.sanshuiyuan.ess.domain.EssFlowRecord;
 import com.sanshuiyuan.ess.domain.FlowStatus;
-import com.sanshuiyuan.ess.exception.EssCallbackVerificationException;
 import com.sanshuiyuan.ess.exception.EssFlowException;
 import com.sanshuiyuan.ess.infra.repository.EssFlowRecordRepository;
 import org.slf4j.Logger;
@@ -13,10 +12,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.util.List;
 
 /**
@@ -51,6 +46,16 @@ public class EssCallbackService {
     }
 
     /**
+     * 权威查单（setter 注入，避开构造期循环）。回调只作触发器，状态以服务端 describeFlowStatus 为准。
+     */
+    private EssContractService essContractService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setEssContractService(EssContractService essContractService) {
+        this.essContractService = essContractService;
+    }
+
+    /**
      * 处理 ESS Webhook 回调。
      *
      * @param requestBody   原始请求体
@@ -58,15 +63,20 @@ public class EssCallbackService {
      * @param timestamp     回调时间戳
      * @return 处理结果
      */
+    /**
+     * 处理 ESS Webhook 回调。
+     * <p>
+     * 腾讯电子签回调通知没有可靠的请求级签名机制（此前臆造的 {@code X-ESS-Signature}/{@code X-ESS-Timestamp}
+     * + HMAC 方案从未匹配过腾讯实际回调，恒验签失败）。因此本服务<b>不信任回调内容</b>，仅把回调当作
+     * 「去服务端权威查单」的触发器：取出 FlowId 后调用 TC3 签名的 {@link EssContractService#describeFlowStatus}
+     * 拉取真实状态（其内部会更新 EssFlowRecord 并在 COMPLETED 时桥接 Contract→SIGNED）。
+     * <p>
+     * 安全性：伪造回调至多触发一次无害的权威查单，无法把合同推进到非真实状态。{@code signature}/{@code timestamp}
+     * 参数保留仅为兼容控制器签名，不再使用。
+     */
     @Transactional
     public CallbackResult handleCallback(String requestBody, String signature, String timestamp) {
-        log.info("收到 ESS 回调, timestamp={}", timestamp);
-
-        // 1. 验证签名
-        verifySignature(requestBody, signature, timestamp);
-
         try {
-            // 2. 解析回调内容
             JsonNode callbackData = objectMapper.readTree(requestBody);
             String flowId = extractFlowId(callbackData);
             String eventType = extractEventType(callbackData);
@@ -76,70 +86,31 @@ public class EssCallbackService {
                 return CallbackResult.ignored("缺少 FlowId");
             }
 
-            // 3. 查找流程记录
-            EssFlowRecord record = flowRecordRepository.findByEssFlowId(flowId)
-                    .orElse(null);
-
+            EssFlowRecord record = flowRecordRepository.findByEssFlowId(flowId).orElse(null);
             if (record == null) {
                 log.warn("未找到流程记录 [flowId={}]，忽略回调", flowId);
                 return CallbackResult.ignored("流程不存在: " + flowId);
             }
 
-            // 4. 根据事件类型更新状态
-            updateFlowStatus(record, eventType, callbackData);
-            flowRecordRepository.save(record);
-
-            // 5. 关键桥接：FlowRecord 进入 COMPLETED 时，必须把 Contract 也推到 SIGNED。
-            //    历史 bug：webhook 只更新 EssFlowRecord 不更新 Contract，H5 永远轮询不到完成。
-            if (record.getFlowStatus() == FlowStatus.COMPLETED && completionBridge != null) {
-                String pdfHashHint = extractPdfHash(callbackData);
-                completionBridge.bridgeToSigned(record.getContractId(), pdfHashHint);
+            // 权威同步：以服务端查单为准（内部更新 EssFlowRecord + COMPLETED 时桥接 Contract→SIGNED）。
+            if (essContractService != null) {
+                essContractService.describeFlowStatus(record.getContractId());
+            } else {
+                // 理论不可达的兜底（生产已注入 EssContractService）：退回按回调体更新。
+                updateFlowStatus(record, eventType, callbackData);
+                flowRecordRepository.save(record);
+                if (record.getFlowStatus() == FlowStatus.COMPLETED && completionBridge != null) {
+                    completionBridge.bridgeToSigned(record.getContractId(), extractPdfHash(callbackData));
+                }
             }
 
-            log.info("ESS 回调处理成功 [contractId={}, flowId={}, event={}, flowStatus={}]",
-                    record.getContractId(), flowId, eventType, record.getFlowStatus());
-
+            log.info("ESS 回调已触发权威查单 [contractId={}, flowId={}, event={}]",
+                    record.getContractId(), flowId, eventType);
             return CallbackResult.success(record.getContractId(), flowId, eventType);
 
         } catch (Exception e) {
             log.error("处理 ESS 回调异常: {}", e.getMessage(), e);
             throw new EssFlowException("unknown", "处理回调失败: " + e.getMessage());
-        }
-    }
-
-    /**
-     * 验证回调签名。
-     * <p>
-     * 使用 HMAC-SHA256(secretKey, timestamp + requestBody) 校验。
-     */
-    void verifySignature(String requestBody, String signature, String timestamp) {
-        if (signature == null || signature.isEmpty()) {
-            throw new EssCallbackVerificationException("签名参数为空");
-        }
-        if (timestamp == null || timestamp.isEmpty()) {
-            throw new EssCallbackVerificationException("时间戳参数为空");
-        }
-
-        try {
-            String data = timestamp + requestBody;
-            Mac mac = Mac.getInstance("HmacSHA256");
-            SecretKeySpec keySpec = new SecretKeySpec(
-                    properties.secretKey().getBytes(StandardCharsets.UTF_8), "HmacSHA256");
-            mac.init(keySpec);
-            byte[] hash = mac.doFinal(data.getBytes(StandardCharsets.UTF_8));
-            String expected = hexEncode(hash);
-
-            if (!expected.equalsIgnoreCase(signature)) {
-                log.warn("回调签名验证失败 [expected={}, actual={}]", expected, signature);
-                throw new EssCallbackVerificationException(
-                        String.format("签名不匹配 (expected=%s...)", expected.substring(0, 8)));
-            }
-
-            log.debug("回调签名验证通过");
-        } catch (EssCallbackVerificationException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new EssCallbackVerificationException("签名验证失败", e);
         }
     }
 
@@ -200,14 +171,6 @@ public class EssCallbackService {
             case ERROR -> record.markError(data);
             default -> record.updateCallbackData(data);
         }
-    }
-
-    private static String hexEncode(byte[] bytes) {
-        StringBuilder sb = new StringBuilder();
-        for (byte b : bytes) {
-            sb.append(String.format("%02x", b));
-        }
-        return sb.toString();
     }
 
     /**
