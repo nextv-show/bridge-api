@@ -18,6 +18,7 @@ ess:
     company-seal: ${ESS_FILE_COMPANY_SEAL:false}
     seal-keyword: ${ESS_FILE_SEAL_KEYWORD:公章}
     company-name: ${ESS_FILE_COMPANY_NAME:天津源创智能科技有限公司}
+    company-seal-id: ${ESS_FILE_COMPANY_SEAL_ID:}
     relative-location: ${ESS_FILE_RELATIVE_LOCATION:Right}
     seal-relative-location: ${ESS_FILE_SEAL_RELATIVE_LOCATION:Below}
     seal-width: ${ESS_FILE_SEAL_WIDTH:100}

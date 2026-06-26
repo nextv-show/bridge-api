@@ -164,6 +164,12 @@ public class EssContractService {
     public EssFlowRecord createFlowByFiles(String contractId, String flowName, String signersJson,
                                             byte[] pdfBytes, String fileName, boolean smsNotify) {
         EssFileProperties fp = requireFileProperties();
+        // Fail-fast：启用乙方企业自动盖章(ApproverType=3)却没配印章ID，腾讯会在 CreateFlowByFiles
+        // 阶段以「未指定印章」拒绝——提前在上传 PDF 前拦下，避免无效请求与误导性后置失败。
+        if (Boolean.TRUE.equals(fp.companySeal()) && (fp.companySealId() == null || fp.companySealId().isBlank())) {
+            throw new EssFlowException(contractId,
+                    "已启用乙方企业自动盖章(ess.file.company-seal=true)但未配置印章ID(ESS_FILE_COMPANY_SEAL_ID)，无法自动签");
+        }
         flowRecordRepository.findByContractId(contractId).ifPresent(existing -> {
             throw new EssFlowException(contractId, "合同已存在签署流程，flowId=" + existing.getEssFlowId());
         });
@@ -473,15 +479,19 @@ public class EssContractService {
         // 印章靠近页边，用独立一组定位参数（默认 Below），避免 Right 溢出页面。
         if (Boolean.TRUE.equals(fp.companySeal())) {
             TreeMap<String, Object> company = new TreeMap<>();
-            company.put("ApproverType", 0); // 0=企业
+            // ApproverType=3：本企业静默签署（自动盖章）。签署人默认为经办人、不可更改，
+            // 故无需 ApproverName/ApproverMobile/身份证（用 0=普通企业经办人会被要求 ApproverMobile）。
+            company.put("ApproverType", 3);
             company.put("OrganizationName", fp.companyName());
-            company.put("ApproverName", fp.companyName());
-            // 同上：文件模式企业签署方不带 RecipientId，否则 Approvers.1.RecipientId 报 UnknownParameter。
             company.put("NotifyType", "NONE");
-            company.put("SignComponents", java.util.List.of(
-                    buildSignComponent("SIGN_SEAL", fp.sealKeyword(),
-                            fp.sealWidth(), fp.sealHeight(), fp.sealRelativeLocation(),
-                            fp.sealOffsetX(), fp.sealOffsetY())));
+            TreeMap<String, Object> sealComponent = buildSignComponent("SIGN_SEAL", fp.sealKeyword(),
+                    fp.sealWidth(), fp.sealHeight(), fp.sealRelativeLocation(),
+                    fp.sealOffsetX(), fp.sealOffsetY());
+            // 自动签的印章控件必须指定已授权印章 Id（ComponentValue），否则腾讯电子签报「未指定印章」。
+            if (fp.companySealId() != null && !fp.companySealId().isBlank()) {
+                sealComponent.put("ComponentValue", fp.companySealId());
+            }
+            company.put("SignComponents", java.util.List.of(sealComponent));
             approvers.add(company);
         }
         return approvers;
