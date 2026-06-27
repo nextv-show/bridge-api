@@ -3,14 +3,18 @@ package com.sanshuiyuan.settlement.api;
 import com.sanshuiyuan.settlement.application.CreateWithdrawalUseCase;
 import com.sanshuiyuan.settlement.application.payout.PayoutInitiationService;
 import com.sanshuiyuan.settlement.auth.SettlementSubjectResolver;
+import com.sanshuiyuan.settlement.application.guard.BelowMinimumException;
+import com.sanshuiyuan.settlement.application.guard.DailyCountExceededException;
 import com.sanshuiyuan.settlement.application.guard.DailyLimitExceededException;
 import com.sanshuiyuan.settlement.application.guard.KycNotVerifiedException;
 import com.sanshuiyuan.settlement.application.guard.SingleLimitExceededException;
 import com.sanshuiyuan.settlement.domain.OwnerWallet;
 import com.sanshuiyuan.settlement.domain.WithdrawalOrder;
+import com.sanshuiyuan.settlement.domain.WithdrawalPolicy;
 import com.sanshuiyuan.settlement.domain.WithdrawalSplit;
 import com.sanshuiyuan.settlement.infra.repository.OwnerWalletRepository;
 import com.sanshuiyuan.settlement.infra.repository.WithdrawalOrderRepository;
+import com.sanshuiyuan.settlement.infra.repository.WithdrawalPolicyRepository;
 import com.sanshuiyuan.settlement.infra.repository.WithdrawalSplitRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
@@ -30,6 +34,7 @@ public class WithdrawalController {
     private final OwnerWalletRepository walletRepository;
     private final WithdrawalOrderRepository orderRepository;
     private final WithdrawalSplitRepository splitRepository;
+    private final WithdrawalPolicyRepository policyRepository;
     private final CreateWithdrawalUseCase createWithdrawalUseCase;
     private final PayoutInitiationService payoutInitiationService;
     private final SettlementSubjectResolver subjectResolver;
@@ -39,6 +44,7 @@ public class WithdrawalController {
     public WithdrawalController(OwnerWalletRepository walletRepository,
                                 WithdrawalOrderRepository orderRepository,
                                 WithdrawalSplitRepository splitRepository,
+                                WithdrawalPolicyRepository policyRepository,
                                 CreateWithdrawalUseCase createWithdrawalUseCase,
                                 PayoutInitiationService payoutInitiationService,
                                 SettlementSubjectResolver subjectResolver,
@@ -47,6 +53,7 @@ public class WithdrawalController {
         this.walletRepository = walletRepository;
         this.orderRepository = orderRepository;
         this.splitRepository = splitRepository;
+        this.policyRepository = policyRepository;
         this.createWithdrawalUseCase = createWithdrawalUseCase;
         this.payoutInitiationService = payoutInitiationService;
         this.subjectResolver = subjectResolver;
@@ -113,9 +120,32 @@ public class WithdrawalController {
             return ResponseEntity.status(429).body(Map.of("code", 429, "message", "SINGLE_LIMIT_EXCEEDED"));
         } catch (DailyLimitExceededException e) {
             return ResponseEntity.status(429).body(Map.of("code", 429, "message", "DAILY_LIMIT_EXCEEDED"));
+        } catch (DailyCountExceededException e) {
+            return ResponseEntity.status(429).body(Map.of("code", 429, "message", "DAILY_COUNT_EXCEEDED"));
+        } catch (BelowMinimumException e) {
+            return ResponseEntity.status(422).body(Map.of("code", 422, "message", "BELOW_MINIMUM"));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(422).body(Map.of("code", 422, "message", e.getMessage()));
         }
+    }
+
+    @GetMapping("/withdrawals/policy")
+    public ResponseEntity<Map<String, Object>> getPolicy(Authentication auth) {
+        Long userId = subjectResolver.resolveUserId(auth.getName());
+        if (userId == null) {
+            return ResponseEntity.status(401).body(Map.of("code", 401, "message", "UNAUTHORIZED"));
+        }
+        WithdrawalPolicy policy = policyRepository.findTopByOrderByEffectiveFromDesc()
+                .orElseThrow(() -> new IllegalStateException("No withdrawal policy configured"));
+        return ResponseEntity.ok(Map.of("code", 0, "data", Map.of(
+                "fee_bp", policy.getFeeBp(),
+                "fee_rate_display", String.format("%d%%", policy.getFeeBp() / 100),
+                "single_max_cents", policy.getSingleMaxCents(),
+                "daily_max_cents", policy.getDailyMaxCents(),
+                "daily_max_count", policy.getDailyMaxCount(),
+                "min_cents", policy.getMinCents(),
+                "currency", "CNY"
+        )));
     }
 
     @GetMapping("/withdrawals/{id}")

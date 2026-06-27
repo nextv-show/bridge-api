@@ -23,9 +23,22 @@ public class WithdrawalLimitGuard {
         WithdrawalPolicy policy = policyRepository.findTopByOrderByEffectiveFromDesc()
                 .orElseThrow(() -> new IllegalStateException("No withdrawal policy configured"));
 
+        // 最低金额
+        if (grossCents < policy.getMinCents()) {
+            throw new BelowMinimumException(userId, grossCents, policy.getMinCents());
+        }
+
         // 单笔限额
         if (grossCents > policy.getSingleMaxCents()) {
             throw new SingleLimitExceededException(userId, grossCents, policy.getSingleMaxCents());
+        }
+
+        // 单日次数（用时间范围避免 DB 时区转换差异）
+        LocalDate today = LocalDate.now();
+        long todayCount = orderRepository.countByUserIdAndDate(userId,
+                today.atStartOfDay(), today.plusDays(1).atStartOfDay());
+        if (todayCount >= policy.getDailyMaxCount()) {
+            throw new DailyCountExceededException(userId, todayCount, policy.getDailyMaxCount());
         }
 
         // 单日累计
@@ -35,8 +48,10 @@ public class WithdrawalLimitGuard {
             throw new DailyLimitExceededException(userId, todayTotal, grossCents, policy.getDailyMaxCents());
         }
 
-        return new WithdrawalLimit(policy.getFeeBp(), policy.getSingleMaxCents(), policy.getDailyMaxCents());
+        return new WithdrawalLimit(policy.getFeeBp(), policy.getSingleMaxCents(), policy.getDailyMaxCents(),
+                policy.getDailyMaxCount(), policy.getMinCents());
     }
 
-    public record WithdrawalLimit(int feeBp, long singleMaxCents, long dailyMaxCents) {}
+    public record WithdrawalLimit(int feeBp, long singleMaxCents, long dailyMaxCents,
+                                  int dailyMaxCount, long minCents) {}
 }

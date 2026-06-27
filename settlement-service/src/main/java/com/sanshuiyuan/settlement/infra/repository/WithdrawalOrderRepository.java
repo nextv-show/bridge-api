@@ -2,6 +2,7 @@ package com.sanshuiyuan.settlement.infra.repository;
 
 import com.sanshuiyuan.settlement.domain.WithdrawalOrder;
 import org.springframework.data.domain.Pageable;
+import java.time.LocalDateTime;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -20,4 +21,13 @@ public interface WithdrawalOrderRepository extends JpaRepository<WithdrawalOrder
             + "WHERE w.userId = :userId AND FUNCTION('DATE', w.createdAt) = :date "
             + "AND w.status <> com.sanshuiyuan.settlement.domain.WithdrawalStatus.FAILED")
     Long sumGrossCentsByUserIdAndDate(@Param("userId") Long userId, @Param("date") LocalDate date);
+
+    /** 单日已申请笔数（不含 FAILED），用于单日次数限额校验。
+     *  用时间范围 [startOfDay, nextDay) 替代 FUNCTION('DATE') 以避免 DB 时区转换差异并走索引。 */
+    @Query("SELECT COUNT(w) FROM WithdrawalOrder w "
+            + "WHERE w.userId = :userId AND w.createdAt >= :startOfDay AND w.createdAt < :nextDay "
+            + "AND w.status <> com.sanshuiyuan.settlement.domain.WithdrawalStatus.FAILED")
+    long countByUserIdAndDate(@Param("userId") Long userId,
+                              @Param("startOfDay") LocalDateTime startOfDay,
+                              @Param("nextDay") LocalDateTime nextDay);
 }
