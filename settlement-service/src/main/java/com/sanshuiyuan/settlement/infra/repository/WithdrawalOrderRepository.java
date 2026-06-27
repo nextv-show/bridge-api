@@ -20,4 +20,10 @@ public interface WithdrawalOrderRepository extends JpaRepository<WithdrawalOrder
             + "WHERE w.userId = :userId AND FUNCTION('DATE', w.createdAt) = :date "
             + "AND w.status <> com.sanshuiyuan.settlement.domain.WithdrawalStatus.FAILED")
     Long sumGrossCentsByUserIdAndDate(@Param("userId") Long userId, @Param("date") LocalDate date);
+
+    /** 单日已申请笔数（不含 FAILED），用于单日次数限额校验。 */
+    @Query("SELECT COUNT(w) FROM WithdrawalOrder w "
+            + "WHERE w.userId = :userId AND FUNCTION('DATE', w.createdAt) = :date "
+            + "AND w.status <> com.sanshuiyuan.settlement.domain.WithdrawalStatus.FAILED")
+    long countByUserIdAndDate(@Param("userId") Long userId, @Param("date") LocalDate date);
 }

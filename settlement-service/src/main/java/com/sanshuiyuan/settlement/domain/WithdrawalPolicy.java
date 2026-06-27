@@ -22,15 +22,24 @@ public class WithdrawalPolicy {
     @Column(name = "daily_max_cents", nullable = false)
     private Long dailyMaxCents;
 
+    @Column(name = "daily_max_count", nullable = false)
+    private Integer dailyMaxCount;
+
+    @Column(name = "min_cents", nullable = false)
+    private Long minCents;
+
     @Column(name = "effective_from", nullable = false)
     private LocalDateTime effectiveFrom;
 
     protected WithdrawalPolicy() {}
 
-    public WithdrawalPolicy(Integer feeBp, Long singleMaxCents, Long dailyMaxCents, LocalDateTime effectiveFrom) {
+    public WithdrawalPolicy(Integer feeBp, Long singleMaxCents, Long dailyMaxCents,
+                            Integer dailyMaxCount, Long minCents, LocalDateTime effectiveFrom) {
         this.feeBp = feeBp;
         this.singleMaxCents = singleMaxCents;
         this.dailyMaxCents = dailyMaxCents;
+        this.dailyMaxCount = dailyMaxCount;
+        this.minCents = minCents;
         this.effectiveFrom = effectiveFrom;
     }
 
@@ -41,6 +50,10 @@ public class WithdrawalPolicy {
     public void setSingleMaxCents(Long singleMaxCents) { this.singleMaxCents = singleMaxCents; }
     public Long getDailyMaxCents() { return dailyMaxCents; }
     public void setDailyMaxCents(Long dailyMaxCents) { this.dailyMaxCents = dailyMaxCents; }
+    public Integer getDailyMaxCount() { return dailyMaxCount; }
+    public void setDailyMaxCount(Integer dailyMaxCount) { this.dailyMaxCount = dailyMaxCount; }
+    public Long getMinCents() { return minCents; }
+    public void setMinCents(Long minCents) { this.minCents = minCents; }
     public LocalDateTime getEffectiveFrom() { return effectiveFrom; }
     public void setEffectiveFrom(LocalDateTime effectiveFrom) { this.effectiveFrom = effectiveFrom; }
 }
