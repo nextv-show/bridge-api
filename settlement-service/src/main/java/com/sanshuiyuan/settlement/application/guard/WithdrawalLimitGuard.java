@@ -33,8 +33,10 @@ public class WithdrawalLimitGuard {
             throw new SingleLimitExceededException(userId, grossCents, policy.getSingleMaxCents());
         }
 
-        // 单日次数
-        long todayCount = orderRepository.countByUserIdAndDate(userId, LocalDate.now());
+        // 单日次数（用时间范围避免 DB 时区转换差异）
+        LocalDate today = LocalDate.now();
+        long todayCount = orderRepository.countByUserIdAndDate(userId,
+                today.atStartOfDay(), today.plusDays(1).atStartOfDay());
         if (todayCount >= policy.getDailyMaxCount()) {
             throw new DailyCountExceededException(userId, todayCount, policy.getDailyMaxCount());
         }
